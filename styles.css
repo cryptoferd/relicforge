@@ -397,3 +397,27 @@ body[data-mode="advanced"] .simple-only { display: none !important; }
   .trait-header-controls .mini-select { flex: 1 1 180px; }
   .trait-header-controls .mini-select select { width: 100%; }
 }
+
+
+/* v4: drag-and-drop layer/category ordering */
+.layer-sortable { position: relative; }
+.layer-drag-handle { flex: 0 0 auto; }
+.layer-sortable.dragging {
+  opacity: .55;
+  border-color: #6e5f3d;
+  box-shadow: 0 0 0 1px rgba(217,193,140,.18), 0 18px 35px rgba(0,0,0,.35);
+}
+.layer-sortable.drag-over-before::before,
+.layer-sortable.drag-over-after::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(217,193,140,.45), rgba(240,219,172,.95));
+  box-shadow: 0 0 0 1px rgba(217,193,140,.25);
+  z-index: 2;
+}
+.layer-sortable.drag-over-before::before { top: 2px; }
+.layer-sortable.drag-over-after::after { bottom: 2px; }

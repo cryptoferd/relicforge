@@ -34,6 +34,7 @@
     imageWidth: 1000,
     imageHeight: 1000,
     draggedTrait: null,
+    draggedLayer: null,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -379,17 +380,19 @@
       <span class="summary-pill"><strong>${traits.length}</strong> traits</span>
       <span class="summary-pill"><strong>${state.imageWidth}×${state.imageHeight}</strong> canvas</span>
       <span class="summary-pill"><strong>${mismatchCount}</strong> size mismatch${mismatchCount === 1 ? '' : 'es'}</span>
+      <span class="summary-pill"><strong>Drag & drop</strong> reorder layers</span>
     `;
     el.artworkSummary.classList.remove('hidden');
 
     el.layerList.innerHTML = state.layers.map((layer, index) => `
-      <article class="layer-card" data-layer-id="${escapeHtml(layer.id)}">
+      <article class="layer-card layer-sortable" data-layer-id="${escapeHtml(layer.id)}" draggable="true">
         <div class="layer-card-header">
           <div class="layer-title">
             <span class="layer-index">${index + 1}</span>
             <div><strong>${escapeHtml(layer.name)}</strong><small>${layer.traits.length} traits · rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small></div>
           </div>
           <div class="layer-actions">
+            <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">⠿</span>
             <button class="icon-btn move-layer" data-dir="up" title="Move layer backward" ${index === 0 ? 'disabled' : ''}>↑</button>
             <button class="icon-btn move-layer" data-dir="down" title="Move layer forward" ${index === state.layers.length - 1 ? 'disabled' : ''}>↓</button>
           </div>
@@ -427,8 +430,28 @@
     const nextIndex = dir === 'up' ? index - 1 : index + 1;
     if (nextIndex < 0 || nextIndex >= state.layers.length) return;
     [state.layers[index], state.layers[nextIndex]] = [state.layers[nextIndex], state.layers[index]];
+    refreshAfterLayerOrderChange();
+  }
+
+
+  function refreshAfterLayerOrderChange() {
     renderArtwork();
     renderTraitSetup();
+    if (state.buildMode === 'manual') renderManualBuilder();
+    if (state.compiledTokens.length) renderPreviewGrid();
+    if (state.step === 5) updateLaunchSummary();
+  }
+
+  function reorderLayer(draggedLayerId, targetLayerId, placeAfter) {
+    if (!draggedLayerId || !targetLayerId || draggedLayerId === targetLayerId) return;
+    const fromIndex = state.layers.findIndex(layer => layer.id === draggedLayerId);
+    const targetIndex = state.layers.findIndex(layer => layer.id === targetLayerId);
+    if (fromIndex < 0 || targetIndex < 0) return;
+    const [dragged] = state.layers.splice(fromIndex, 1);
+    const adjustedTargetIndex = state.layers.findIndex(layer => layer.id === targetLayerId);
+    const insertIndex = placeAfter ? adjustedTargetIndex + 1 : adjustedTargetIndex;
+    state.layers.splice(insertIndex, 0, dragged);
+    refreshAfterLayerOrderChange();
   }
 
   function renderTraitSetup() {
@@ -1473,6 +1496,40 @@
     if (!btn) return;
     const card = btn.closest('[data-layer-id]');
     moveLayer(card.dataset.layerId, btn.dataset.dir);
+  });
+
+  el.layerList.addEventListener('dragstart', e => {
+    const card = e.target.closest('.layer-sortable[draggable="true"]');
+    if (!card) return;
+    state.draggedLayer = { layerId: card.dataset.layerId };
+    card.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.layerId);
+    }
+  });
+  el.layerList.addEventListener('dragover', e => {
+    e.preventDefault();
+    const card = e.target.closest('.layer-sortable');
+    if (!card || !state.draggedLayer || card.dataset.layerId === state.draggedLayer.layerId) return;
+    const rect = card.getBoundingClientRect();
+    const placeAfter = (e.clientY - rect.top) > rect.height / 2;
+    $$('.layer-sortable.drag-over-before, .layer-sortable.drag-over-after', el.layerList).forEach(item => item.classList.remove('drag-over-before', 'drag-over-after'));
+    card.classList.add(placeAfter ? 'drag-over-after' : 'drag-over-before');
+  });
+  el.layerList.addEventListener('drop', e => {
+    e.preventDefault();
+    const card = e.target.closest('.layer-sortable');
+    if (!card || !state.draggedLayer || card.dataset.layerId === state.draggedLayer.layerId) return;
+    const rect = card.getBoundingClientRect();
+    const placeAfter = (e.clientY - rect.top) > rect.height / 2;
+    const dragged = state.draggedLayer;
+    state.draggedLayer = null;
+    reorderLayer(dragged.layerId, card.dataset.layerId, placeAfter);
+  });
+  el.layerList.addEventListener('dragend', () => {
+    state.draggedLayer = null;
+    $$('.layer-sortable.dragging, .layer-sortable.drag-over-before, .layer-sortable.drag-over-after', el.layerList).forEach(item => item.classList.remove('dragging', 'drag-over-before', 'drag-over-after'));
   });
 
   // Navigation and mode

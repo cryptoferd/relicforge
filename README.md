@@ -8,7 +8,7 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 
 - Upload an artwork folder containing layer folders.
 - Auto-detect layers and traits from folder/file names.
-- Preview uploaded artwork and change layer render order.
+- Preview uploaded artwork and change layer render order, including **drag-and-drop layer/category ordering**.
 - **Simple / Advanced** mode toggle.
 - Four collection workflows:
   - Generate for me.
@@ -42,6 +42,10 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Export final collection manifest as CSV.
 - Export a prototype launch package.
 - Launch settings mockup for Ethereum Mainnet and other EVM networks.
+
+## Layer/category ordering
+
+In Step 1, drag and drop the layer cards to change render order (background/back first → foreground/front last). The older arrow buttons are still there, but drag-and-drop is now the main workflow.
 
 ## Artwork folder structure
 
