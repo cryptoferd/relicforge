@@ -168,11 +168,12 @@
                 <button id="loadManualTokenBtn" class="ghost-btn" type="button">Load Token</button>
                 <button id="clearManualTokenBtn" class="ghost-btn" type="button">Clear Token</button>
                 <button id="saveManualTokenBtn" class="primary-btn" type="button">Save Exact Token</button>
+                <button id="downloadManualSvgBtn" class="ghost-btn" type="button">Download SVG Preview</button>
               </div>
             </div>
             <div class="manual-preview">
               <span>Live layer preview</span>
-              <canvas id="manualPreviewCanvas"></canvas>
+              <div id="manualPreviewCanvas" class="svg-preview-host" role="img" aria-label="Live SVG layer preview"></div>
               <small>Only the traits you select are shown here. Unlocked layers will be generated later.</small>
             </div>
           </div>

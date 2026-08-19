@@ -183,6 +183,8 @@
       exactCount: null,
       percentage: 0,
       image: null,
+      svgFragment: '',
+      svgStats: { rectangles: 0, colors: 0, bytes: 0 },
       isNone: true,
     };
   }
@@ -345,6 +347,8 @@
             exactCount: null,
             percentage: 0,
             image: null,
+            svgFragment: null,
+            svgStats: null,
             isNone: false,
           };
         }),
@@ -588,7 +592,7 @@
   async function renderManualPreview() {
     if (!state.layers.length || !el.manualPreviewCanvas) return;
     const token = { tokenId: Number.parseInt(el.manualTokenId.value || '1', 10), traits: currentManualSelection() };
-    await renderTokenToCanvas(token, el.manualPreviewCanvas);
+    await renderTokenToSvgHost(token, el.manualPreviewCanvas);
   }
 
   function saveManualToken() {
@@ -1294,6 +1298,137 @@
     `;
   }
 
+  function hexByte(value) {
+    return Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0');
+  }
+
+  function compactOpacity(alpha) {
+    if (alpha >= 255) return '';
+    const value = Math.round((alpha / 255) * 1000) / 1000;
+    return ` fill-opacity="${String(value).replace(/^0\./, '.') }"`;
+  }
+
+  async function traitToSvgFragment(trait) {
+    if (!trait || trait.isNone) return '';
+    if (trait.svgFragment != null) return trait.svgFragment;
+
+    const bitmap = await createImageBitmap(trait.file);
+    const width = bitmap.width;
+    const height = bitmap.height;
+    const scratch = document.createElement('canvas');
+    scratch.width = width;
+    scratch.height = height;
+    const ctx = scratch.getContext('2d', { alpha: true, willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+
+    // Build horizontal same-color runs, then merge identical runs vertically.
+    // This preserves every source pixel exactly while producing much smaller SVG
+    // geometry than emitting one <rect> per pixel.
+    const rectangles = [];
+    let active = new Map();
+
+    for (let y = 0; y < height; y++) {
+      const rowRuns = [];
+      let x = 0;
+      while (x < width) {
+        const offset = (y * width + x) * 4;
+        const r = pixels[offset];
+        const g = pixels[offset + 1];
+        const b = pixels[offset + 2];
+        const a = pixels[offset + 3];
+        if (a === 0) { x++; continue; }
+
+        let end = x + 1;
+        while (end < width) {
+          const next = (y * width + end) * 4;
+          if (pixels[next] !== r || pixels[next + 1] !== g || pixels[next + 2] !== b || pixels[next + 3] !== a) break;
+          end++;
+        }
+        rowRuns.push({ x, w: end - x, r, g, b, a });
+        x = end;
+      }
+
+      const nextActive = new Map();
+      const seen = new Set();
+      for (const run of rowRuns) {
+        const key = `${run.x}:${run.w}:${run.r}:${run.g}:${run.b}:${run.a}`;
+        seen.add(key);
+        const existing = active.get(key);
+        if (existing) {
+          existing.h += 1;
+          nextActive.set(key, existing);
+        } else {
+          nextActive.set(key, { ...run, y, h: 1 });
+        }
+      }
+      for (const [key, rect] of active.entries()) {
+        if (!seen.has(key)) rectangles.push(rect);
+      }
+      active = nextActive;
+    }
+    rectangles.push(...active.values());
+
+    const byColor = new Map();
+    for (const rect of rectangles) {
+      const key = `${rect.r}:${rect.g}:${rect.b}:${rect.a}`;
+      if (!byColor.has(key)) byColor.set(key, { ...rect, commands: [] });
+      byColor.get(key).commands.push(`M${rect.x} ${rect.y}h${rect.w}v${rect.h}h-${rect.w}Z`);
+    }
+
+    const fragments = [];
+    for (const group of byColor.values()) {
+      const fill = `#${hexByte(group.r)}${hexByte(group.g)}${hexByte(group.b)}`;
+      fragments.push(`<path fill="${fill}"${compactOpacity(group.a)} d="${group.commands.join('')}"/>`);
+    }
+    trait.svgFragment = fragments.join('');
+    trait.svgStats = {
+      rectangles: rectangles.length,
+      colors: byColor.size,
+      bytes: new Blob([trait.svgFragment]).size,
+    };
+    return trait.svgFragment;
+  }
+
+  async function tokenToSvg(token) {
+    const width = state.imageWidth || 1000;
+    const height = state.imageHeight || 1000;
+    const parts = [];
+    for (const layer of state.layers) {
+      const trait = getTrait(token.traits[layer.id]);
+      if (!trait || trait.isNone) continue;
+      try {
+        parts.push(await traitToSvgFragment(trait));
+      } catch (error) {
+        console.warn(`Could not vectorize ${trait.name}`, error);
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges" preserveAspectRatio="xMidYMid meet">${parts.join('')}</svg>`;
+  }
+
+  async function renderTokenToSvgHost(token, host) {
+    if (!host) return;
+    host.innerHTML = await tokenToSvg(token);
+    const svg = host.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '100%');
+      svg.style.display = 'block';
+    }
+  }
+
+  async function downloadManualSvg() {
+    if (!state.layers.length) return;
+    const tokenId = Number.parseInt(el.manualTokenId.value || '1', 10) || 1;
+    const token = { tokenId, traits: currentManualSelection() };
+    const svg = await tokenToSvg(token);
+    downloadText(`relic-forge-token-${tokenId}.svg`, svg, 'image/svg+xml');
+    showStatus(`SVG preview for token #${tokenId} downloaded.`, 'success');
+  }
+
   async function ensureTraitImage(trait) {
     if (trait.isNone) return null;
     if (trait.image?.complete) return trait.image;
@@ -1337,7 +1472,7 @@
     }
     el.previewGrid.innerHTML = picks.map(token => `
       <article class="preview-card" data-token-id="${token.tokenId}">
-        <div class="preview-canvas-wrap"><canvas></canvas></div>
+        <div class="preview-canvas-wrap"><div class="svg-preview-host preview-svg-host" role="img" aria-label="SVG token preview"></div></div>
         <div class="preview-card-body">
           <strong>#${token.tokenId}</strong>
           <div class="preview-traits">${state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || '—')}</span>`).join('')}</div>
@@ -1346,8 +1481,8 @@
     `).join('');
     await Promise.all(picks.map(async token => {
       const card = $(`.preview-card[data-token-id="${token.tokenId}"]`, el.previewGrid);
-      const canvas = $('canvas', card);
-      await renderTokenToCanvas(token, canvas);
+      const host = $('.preview-svg-host', card);
+      await renderTokenToSvgHost(token, host);
     }));
   }
 
@@ -1358,6 +1493,7 @@
         name: el.collectionName.value.trim() || 'Untitled Collection',
         supply: state.compiledTokens.length || getSupply(),
         seed: el.seedInput.value.trim() || 'RELIC-001',
+        renderFormat: 'compact-svg-pixel-vector',
       },
       layers: state.layers.map((layer, index) => ({
         name: layer.name,
@@ -1657,6 +1793,7 @@
   $('#loadManualTokenBtn').addEventListener('click', () => renderManualBuilder());
   $('#clearManualTokenBtn').addEventListener('click', clearManualToken);
   $('#saveManualTokenBtn').addEventListener('click', saveManualToken);
+  $('#downloadManualSvgBtn').addEventListener('click', downloadManualSvg);
   el.manualSavedList.addEventListener('click', e => {
     const btn = e.target.closest('[data-load-manual]');
     if (!btn) return;

@@ -421,3 +421,31 @@ body[data-mode="advanced"] .simple-only { display: none !important; }
 }
 .layer-sortable.drag-over-before::before { top: 2px; }
 .layer-sortable.drag-over-after::after { bottom: 2px; }
+
+/* v5: true pixel-to-SVG previews */
+.svg-preview-host {
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: #1a1a1a;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+}
+.svg-preview-host svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  shape-rendering: crispEdges;
+}
+.manual-preview .svg-preview-host {
+  width: 100%;
+  aspect-ratio: 1;
+}
+.preview-canvas-wrap .svg-preview-host {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}

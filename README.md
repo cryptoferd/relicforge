@@ -37,7 +37,8 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Rule conflict validation/repair attempts without changing locked imported choices.
 - Duplicate-combination reporting.
 - Canvas-rendered NFT previews from the uploaded layers.
-- Pixel-art previews render with crisp nearest-neighbor scaling instead of fuzzy interpolation.
+- Pixel-art previews now use **true SVG geometry** rather than an enlarged raster canvas. Uploaded pixel layers are converted into compact same-color run/rectangle paths, so the manual builder and collection previews remain crisp at any display size.
+- The manual token builder includes **Download SVG Preview** so you can inspect the actual vector output directly.
 - Export final collection manifest as JSON.
 - Export final collection manifest as CSV.
 - Export a prototype launch package.
@@ -183,6 +184,17 @@ The production architecture will eventually need backend/storage services for th
 - ERC-20 integration later
 
 That is where Railway or another worker/backend service can become useful.
+
+
+## SVG rendering model
+
+For pixel-art collections, Relic Forge does **not** simply embed the uploaded PNG inside an SVG wrapper. The browser reads the source pixels, ignores transparent pixels, combines contiguous same-color pixels into rectangles, merges matching runs vertically, and groups them into compact SVG `<path>` geometry.
+
+That means a 48×48 pixel layer remains visually pixel-perfect but is represented as vector geometry with a `viewBox` and `shape-rendering="crispEdges"`. It can scale to any display resolution without the fuzzy interpolation seen when a small canvas is enlarged.
+
+The production onchain renderer should store each unique layer once and compose token SVGs from those reusable layer fragments rather than permanently storing a full duplicate SVG for every token. Additional byte-level/Solidity storage optimization will be a later contract/storage step.
+
+For photographic or heavily anti-aliased artwork, automatic pixel-to-SVG conversion may be larger than the source raster; this SVG path is intended primarily for pixel-art/onchain collections.
 
 ## Prototype limitations
 
