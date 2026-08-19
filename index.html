@@ -3,430 +3,84 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0a0a0a" />
-  <title>Relic Forge — Onchain NFT Studio</title>
-  <meta name="description" content="Relic Forge makes it simple to build, curate, and prepare layered NFT collections for EVM launch." />
+  <meta name="theme-color" content="#090909" />
+  <title>Relic Forge — Onchain NFT Collection Studio</title>
+  <meta name="description" content="Build, curate, and launch layered NFT collections without writing code." />
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
-  <section id="landingPage" class="landing-page">
-    <header class="landing-nav">
-      <a class="landing-brand" href="#" aria-label="Relic Forge home">
-        <img src="./relic-forge-logo.svg" alt="Relic Forge" />
-        <span>RELIC FORGE</span>
-      </a>
-      <button id="enterStudioTopBtn" class="landing-nav-btn" type="button">Open Studio</button>
-    </header>
+<body class="site-page-body">
+  <header class="site-nav">
+    <a class="site-brand" href="./index.html" aria-label="Relic Forge home">
+      <img src="./relic-forge-logo.svg" alt="" aria-hidden="true" />
+      <span>RELIC FORGE</span>
+    </a>
+    <nav class="site-nav-links" aria-label="Main navigation">
+      <a href="#workflow">How it works</a>
+      <a class="site-studio-link" href="./studio.html">Open Studio</a>
+    </nav>
+  </header>
 
-    <main class="landing-main">
-      <section class="landing-hero">
-        <div class="landing-copy">
-          <div class="landing-kicker">ONCHAIN COLLECTION CREATION, WITHOUT THE FRICTION</div>
-          <h1>Forge your NFT collection.<br />Keep control of every detail.</h1>
-          <p>Upload your finished layers, set rarity in plain language or exact percentages, create trait rules, curate exact token IDs, and prepare a collection for launch across EVM networks.</p>
-          <div class="landing-actions">
-            <button id="enterStudioBtn" class="landing-primary" type="button">Enter Relic Forge Studio</button>
-            <span>Artwork ready? The goal is launch-ready in 20 minutes or less.</span>
-          </div>
+  <main class="site-main">
+    <section class="site-hero">
+      <div class="site-hero-copy">
+        <p class="site-eyebrow">ONCHAIN NFT COLLECTION STUDIO</p>
+        <h1>Your artwork.<br />Your collection.<br />No code.</h1>
+        <p class="site-lead">Upload your finished layers, control rarity and trait rules, curate exact tokens, and prepare your collection for an EVM launch—all from one straightforward workflow.</p>
+        <div class="site-hero-actions">
+          <a class="site-primary-link" href="./studio.html">Open Relic Forge Studio</a>
+          <a class="site-text-link" href="#workflow">See how it works ↓</a>
         </div>
-        <div class="landing-mark" aria-hidden="true">
-          <img class="landing-mark-image" src="./relic-forge-hero.png" alt="" />
-        </div>
-      </section>
-
-      <section class="landing-proof" aria-label="Relic Forge highlights">
-        <div><strong>Layer based</strong><span>Your artwork stays the source of truth.</span></div>
-        <div><strong>Curated or generated</strong><span>Randomize everything or define exact tokens.</span></div>
-        <div><strong>Rules that explain themselves</strong><span>See conflicts before you generate.</span></div>
-        <div><strong>Built for EVM</strong><span>Ethereum mainnet and EVM-compatible networks.</span></div>
-      </section>
-
-      <section class="landing-section">
-        <div class="landing-section-heading">
-          <span>THE STUDIO</span>
-          <h2>Powerful underneath. Simple on the surface.</h2>
-          <p>Relic Forge is designed so a first-time creator never needs to understand metadata schemas, smart-contract internals, or generation scripts just to publish a collection.</p>
-        </div>
-        <div class="landing-feature-grid">
-          <article><span>01</span><h3>Upload</h3><p>Drop in folders of transparent artwork layers. Rename and reorder categories or traits directly in the Studio.</p></article>
-          <article><span>02</span><h3>Shape rarity</h3><p>Use rarity tiers, exact percentages, equal distribution, exact quantities, or a premade collection recipe.</p></article>
-          <article><span>03</span><h3>Set rules</h3><p>Link traits across multiple layers with plain-English rules and see sample outcomes before compiling.</p></article>
-          <article><span>04</span><h3>Curate</h3><p>Lock exact token IDs, import CSV/JSON recipes, add 1/1s, or let the generator fill everything else.</p></article>
-        </div>
-      </section>
-
-      <section class="landing-cta">
-        <img src="./relic-forge-logo.svg" alt="" aria-hidden="true" />
-        <div><span>READY TO FORGE?</span><h2>Bring the art. Relic Forge handles the collection.</h2></div>
-        <button id="enterStudioBottomBtn" class="landing-primary" type="button">Open Studio</button>
-      </section>
-    </main>
-  </section>
-
-  <div id="studioApp" class="app-shell hidden">
-    <header class="topbar">
-      <button id="studioHomeBtn" class="brand studio-brand-button" type="button" aria-label="Return to Relic Forge home">
-        <img class="brand-logo" src="./relic-forge-logo.svg" alt="" />
-        <div>
-          <strong>RELIC FORGE</strong>
-          <span>Studio</span>
-        </div>
-      </button>
-
-      <div class="topbar-actions">
-        <button id="exportProjectBtn" class="ghost-btn" type="button">Export Project</button>
+        <p class="site-note">Artwork ready? The Studio is designed to get a straightforward collection launch-ready in about 20 minutes.</p>
       </div>
-    </header>
+      <div class="site-hero-mark" aria-label="Relic Forge mark">
+        <img src="./relic-forge-logo.svg" alt="Relic Forge RF mark" />
+      </div>
+    </section>
 
-    <main>
-      <section class="hero-panel studio-hero-panel">
-        <div>
-          <div class="eyebrow">RELIC FORGE STUDIO</div>
-          <h1>Build the collection you actually want.</h1>
-          <p>Your layers stay in control. Generate automatically, set exact quantities, curate individual tokens, or import a complete recipe.</p>
-        </div>
-        <div class="goal-card studio-mark-card">
-          <img src="./relic-forge-logo.svg" alt="" aria-hidden="true" />
-          <div><span>Local-first prototype</span><strong>Your artwork stays in your browser</strong></div>
-        </div>
-      </section>
+    <section class="site-value-strip" aria-label="Relic Forge highlights">
+      <div><strong>Layer based</strong><span>Your source artwork stays in control.</span></div>
+      <div><strong>Exact or generated</strong><span>Set percentages, counts, or exact token recipes.</span></div>
+      <div><strong>Rules before surprises</strong><span>Check trait compatibility before generation.</span></div>
+      <div><strong>EVM ready</strong><span>Built toward Ethereum and EVM-compatible launches.</span></div>
+    </section>
 
-      <nav class="stepper" aria-label="Collection builder steps">
-        <button class="step active" data-step="1"><span>1</span><b>Artwork</b></button>
-        <div class="step-line"></div>
-        <button class="step" data-step="2"><span>2</span><b>Build</b></button>
-        <div class="step-line"></div>
-        <button class="step" data-step="3"><span>3</span><b>Rules</b></button>
-        <div class="step-line"></div>
-        <button class="step" data-step="4"><span>4</span><b>Preview</b></button>
-        <div class="step-line"></div>
-        <button class="step" data-step="5"><span>5</span><b>Launch</b></button>
-      </nav>
+    <section id="workflow" class="site-workflow">
+      <header class="site-section-heading">
+        <p class="site-eyebrow">THE WORKFLOW</p>
+        <h2>From layer folders to a finished collection.</h2>
+        <p>The Studio keeps the technical machinery behind the interface. You make the creative decisions; Relic Forge turns them into a deterministic collection recipe.</p>
+      </header>
+      <div class="site-steps">
+        <article><span>01</span><h3>Upload</h3><p>Drop in your layer folders. Rename and reorder categories and traits visually.</p></article>
+        <article><span>02</span><h3>Set rarity</h3><p>Use tiers, percentages, equal splits, exact counts, or an imported recipe.</p></article>
+        <article><span>03</span><h3>Add rules</h3><p>Define which traits can or cannot appear together and review conflicts early.</p></article>
+        <article><span>04</span><h3>Curate & preview</h3><p>Lock exact token IDs, preview crisp SVG output, then finalize the collection.</p></article>
+      </div>
+    </section>
 
-      <section id="statusBanner" class="status-banner hidden" role="status"></section>
+    <section class="site-control-section">
+      <div>
+        <p class="site-eyebrow">CONTROL WITHOUT THE CLUTTER</p>
+        <h2>Simple when you want it. Precise when you need it.</h2>
+      </div>
+      <div class="site-control-list">
+        <p><strong>Generate it.</strong> Let Relic Forge distribute traits from the rarity settings you choose.</p>
+        <p><strong>Specify it.</strong> Ask for exactly 250 green shirts or an even split across a category.</p>
+        <p><strong>Curate it.</strong> Define specific token IDs manually or import a CSV/JSON collection recipe.</p>
+        <p><strong>Keep it onchain-friendly.</strong> Pixel layers can be represented as compact scalable SVG geometry.</p>
+      </div>
+    </section>
 
-      <!-- STEP 1 -->
-      <section class="panel step-panel active" data-panel="1">
-        <div class="panel-heading">
-          <div>
-            <div class="eyebrow">STEP 1</div>
-            <h2>Upload your artwork</h2>
-            <p>Choose the folder containing your layer folders. We’ll organize the artwork automatically. Rename categories or traits below whenever the filenames are not presentation-ready.</p>
-          </div>
-          <div class="mini-help">
-            <b>Example folder</b>
-            <code>Artwork / Background / Blue.png</code>
-            <code>Artwork / Body / Female.png</code>
-            <code>Artwork / Hat / Crown.png</code>
-          </div>
-        </div>
+    <section class="site-final-cta">
+      <img src="./relic-forge-logo.svg" alt="" aria-hidden="true" />
+      <div><p class="site-eyebrow">READY TO FORGE?</p><h2>Bring the layers. Build the collection.</h2></div>
+      <a class="site-primary-link" href="./studio.html">Open Studio</a>
+    </section>
+  </main>
 
-        <label id="uploadZone" class="upload-zone" for="folderInput">
-          <div class="upload-icon">＋</div>
-          <strong>Choose your artwork folder</strong>
-          <span>PNG, WEBP, JPG · transparent PNG recommended</span>
-          <input id="folderInput" type="file" webkitdirectory directory multiple accept="image/png,image/webp,image/jpeg" />
-        </label>
-
-        <div id="artworkSummary" class="summary-strip hidden"></div>
-        <div id="layerList" class="layer-list"></div>
-
-        <div class="panel-footer">
-          <span id="step1Hint" class="footer-hint">Upload artwork to continue.</span>
-          <button class="primary-btn next-btn" data-next="2" type="button" disabled>Continue to Build</button>
-        </div>
-      </section>
-
-      <!-- STEP 2 -->
-      <section class="panel step-panel" data-panel="2">
-        <div class="panel-heading">
-          <div>
-            <div class="eyebrow">STEP 2</div>
-            <h2>Build your collection</h2>
-            <p>Start simple. You can always fine-tune individual traits later.</p>
-          </div>
-        </div>
-
-        <div class="settings-grid">
-          <label class="field">
-            <span>Collection name</span>
-            <input id="collectionName" type="text" value="My Relic Collection" maxlength="80" />
-          </label>
-          <label class="field">
-            <span>Collection size</span>
-            <input id="collectionSize" type="number" min="1" max="25000" value="1000" />
-          </label>
-        </div>
-
-        <h3 class="section-title">How do you want to build it?</h3>
-        <div class="build-modes">
-          <button class="build-card selected" data-build-mode="auto" type="button">
-            <span class="build-icon">✦</span>
-            <strong>Generate for me</strong>
-            <small>Choose rough rarities and let Relic Forge handle the combinations.</small>
-          </button>
-          <button class="build-card" data-build-mode="exact" type="button">
-            <span class="build-icon">#</span>
-            <strong>Choose exact amounts</strong>
-            <small>Set exact counts for traits that matter. The rest is generated automatically.</small>
-          </button>
-          <button class="build-card" data-build-mode="manual" type="button">
-            <span class="build-icon">✎</span>
-            <strong>Build it myself</strong>
-            <small>Curate exact token IDs visually by choosing the uploaded layer used in each slot.</small>
-          </button>
-          <button class="build-card" data-build-mode="manifest" type="button">
-            <span class="build-icon">▦</span>
-            <strong>Use my collection list</strong>
-            <small>Upload CSV or JSON that tells us which uploaded layers belong to each token.</small>
-          </button>
-        </div>
-
-        <div id="manifestPanel" class="subpanel hidden">
-          <div class="subpanel-heading">
-            <div>
-              <h3>Upload your collection list</h3>
-              <p>The list references the layer and trait names you already uploaded. It does not contain finished images.</p>
-            </div>
-            <div class="inline-actions">
-              <button id="downloadCsvTemplate" class="ghost-btn" type="button">Download CSV Template</button>
-              <button id="downloadJsonTemplate" class="ghost-btn" type="button">Download JSON Template</button>
-            </div>
-          </div>
-          <label class="compact-upload" for="manifestInput">
-            <strong>Choose CSV or JSON</strong>
-            <span id="manifestFileName">No file selected</span>
-            <input id="manifestInput" type="file" accept=".csv,.json,text/csv,application/json" />
-          </label>
-          <div id="manifestResult" class="validation-box hidden"></div>
-        </div>
-
-        <div id="manualPanel" class="subpanel hidden">
-          <div class="subpanel-heading">
-            <div>
-              <h3>Curate an exact token</h3>
-              <p>Pick a token number, then choose the uploaded trait used in each layer. Leave a layer on “Generate automatically” if you only want to lock part of the NFT.</p>
-            </div>
-            <div class="manual-token-count"><strong id="manualTokenCount">0</strong><span>curated tokens</span></div>
-          </div>
-          <div class="manual-builder-layout">
-            <div>
-              <label class="field"><span>Token number</span><input id="manualTokenId" type="number" min="1" value="1" /></label>
-              <div id="manualTraitFields" class="manual-trait-fields"></div>
-              <div class="inline-actions manual-actions">
-                <button id="loadManualTokenBtn" class="ghost-btn" type="button">Load Token</button>
-                <button id="clearManualTokenBtn" class="ghost-btn" type="button">Clear Token</button>
-                <button id="saveManualTokenBtn" class="primary-btn" type="button">Save Exact Token</button>
-                <button id="downloadManualSvgBtn" class="ghost-btn" type="button">Download SVG Preview</button>
-              </div>
-            </div>
-            <div class="manual-preview">
-              <span>Live layer preview</span>
-              <div id="manualPreviewCanvas" class="svg-preview-host" role="img" aria-label="Live SVG layer preview"></div>
-              <small>Only the traits you select are shown here. Unlocked layers will be generated later.</small>
-            </div>
-          </div>
-          <div id="manualSavedList" class="manual-saved-list"></div>
-        </div>
-
-        <div id="traitSetup" class="trait-setup"></div>
-
-        <div class="panel-footer">
-          <button class="secondary-btn back-btn" data-back="1" type="button">Back</button>
-          <button class="primary-btn next-btn" data-next="3" type="button">Continue to Rules</button>
-        </div>
-      </section>
-
-      <!-- STEP 3 -->
-      <section class="panel step-panel" data-panel="3">
-        <div class="panel-heading">
-          <div>
-            <div class="eyebrow">STEP 3</div>
-            <h2>Do any traits need special rules?</h2>
-            <p>Most collections can skip this. If something should only work with—or never work with—something else, set it here in plain English.</p>
-          </div>
-        </div>
-
-        <div class="choice-row">
-          <button id="noRulesBtn" class="choice-card selected" type="button">
-            <strong>No, everything can mix</strong>
-            <small>Skip rules and move straight to preview.</small>
-          </button>
-          <button id="yesRulesBtn" class="choice-card" type="button">
-            <strong>Yes, I have some rules</strong>
-            <small>Apply one rule to one trait, many traits, or entire layers.</small>
-          </button>
-        </div>
-
-        <div id="rulesWorkspace" class="rules-workspace hidden">
-          <div class="rule-builder">
-            <div class="rule-step">
-              <div class="rule-step-number">1</div>
-              <div>
-                <h3>Choose the traits this rule applies to</h3>
-                <p>Select as many traits as you want—even across multiple layers.</p>
-                <div class="rule-toolbar">
-                  <select id="sourceLayerSelect"></select>
-                  <button id="selectSourceLayerBtn" class="ghost-btn" type="button">Select whole layer</button>
-                  <button id="clearSourceBtn" class="ghost-btn" type="button">Clear</button>
-                </div>
-                <div id="sourceTraitPicker" class="trait-picker"></div>
-              </div>
-            </div>
-
-            <div class="rule-step">
-              <div class="rule-step-number">2</div>
-              <div>
-                <h3>What should happen?</h3>
-                <div class="rule-type-grid">
-                  <button class="rule-type selected" data-rule-type="only_with" type="button"><strong>Only works with</strong><small>These traits may appear only when an allowed trait is also present.</small></button>
-                  <button class="rule-type" data-rule-type="excludes" type="button"><strong>Doesn’t work with</strong><small>Never allow these traits together.</small></button>
-                  <button class="rule-type" data-rule-type="always_with" type="button"><strong>Always pair with</strong><small>When one of these traits appears, require the selected companion trait(s).</small></button>
-                </div>
-              </div>
-            </div>
-
-            <div class="rule-step">
-              <div class="rule-step-number">3</div>
-              <div>
-                <h3>Choose the matching traits</h3>
-                <p>Pick one or more acceptable matching traits. You can use traits from multiple layers here too.</p>
-                <div class="rule-toolbar">
-                  <select id="targetLayerSelect"></select>
-                  <button id="selectTargetLayerBtn" class="ghost-btn" type="button">Select whole layer</button>
-                  <button id="clearTargetBtn" class="ghost-btn" type="button">Clear</button>
-                </div>
-                <div id="targetTraitPicker" class="trait-picker"></div>
-              </div>
-            </div>
-
-            <div class="rule-preview-card">
-              <span>Rule preview</span>
-              <strong id="ruleSentence">Choose traits above to build a rule.</strong>
-              <div id="rulePreflight" class="rule-preflight draft neutral">Choose the traits above and Relic Forge will check the rule against your current rarity/count settings before you add it.</div>
-              <button id="addRuleBtn" class="primary-btn" type="button" disabled>Add Rule</button>
-            </div>
-          </div>
-
-          <div class="saved-rules">
-            <div class="subpanel-heading">
-              <div>
-                <h3>Collection rules</h3>
-                <p>Relic Forge checks each rule against your current percentages/exact counts and renders a few example outcomes before you build the full collection.</p>
-              </div>
-            </div>
-            <div id="rulesList" class="rules-list"><div class="empty-state">No rules yet.</div></div>
-          </div>
-        </div>
-
-        <div class="panel-footer">
-          <button class="secondary-btn back-btn" data-back="2" type="button">Back</button>
-          <button class="primary-btn next-btn" data-next="4" type="button">Build Preview</button>
-        </div>
-      </section>
-
-      <!-- STEP 4 -->
-      <section class="panel step-panel" data-panel="4">
-        <div class="panel-heading">
-          <div>
-            <div class="eyebrow">STEP 4</div>
-            <h2>Preview the collection</h2>
-            <p>We’ll compile a deterministic collection recipe first, then render sample NFTs from your uploaded layers.</p>
-          </div>
-          <div class="inline-actions">
-            <label class="field seed-field">
-              <span>Generation seed</span>
-              <input id="seedInput" type="text" value="RELIC-001" />
-            </label>
-            <button id="regenerateBtn" class="secondary-btn" type="button">Regenerate</button>
-          </div>
-        </div>
-
-        <div id="compilerStatus" class="compiler-status">
-          <div class="compiler-empty">
-            <span class="big-symbol">✦</span>
-            <strong>Ready to build your preview.</strong>
-            <small>Click Build Collection below.</small>
-          </div>
-        </div>
-
-        <div id="previewControls" class="preview-controls hidden">
-          <div id="collectionStats" class="stats-grid"></div>
-          <div class="inline-actions">
-            <button id="exportManifestBtn" class="ghost-btn" type="button">Export Final Manifest</button>
-            <button id="exportCsvBtn" class="ghost-btn" type="button">Export CSV</button>
-          </div>
-        </div>
-
-        <div id="previewGrid" class="preview-grid"></div>
-
-        <div class="panel-footer">
-          <button class="secondary-btn back-btn" data-back="3" type="button">Back</button>
-          <button id="compileBtn" class="secondary-btn" type="button">Build Collection</button>
-          <button id="toLaunchBtn" class="primary-btn" type="button" disabled>Looks Good — Continue</button>
-        </div>
-      </section>
-
-      <!-- STEP 5 -->
-      <section class="panel step-panel" data-panel="5">
-        <div class="panel-heading">
-          <div>
-            <div class="eyebrow">STEP 5</div>
-            <h2>Prepare to launch</h2>
-            <p>This prototype stops before smart-contract deployment. The goal of this build is to validate the artwork → rules → exact collection workflow with your real layers.</p>
-          </div>
-        </div>
-
-        <div class="launch-layout">
-          <div class="launch-card">
-            <h3>Collection</h3>
-            <label class="field"><span>Name</span><input id="launchName" type="text" /></label>
-            <label class="field"><span>Symbol</span><input id="launchSymbol" type="text" maxlength="12" value="RELIC" /></label>
-            <label class="field"><span>Mint price</span><div class="input-suffix"><input id="mintPrice" type="number" min="0" step="0.001" value="0.01" /><span>ETH</span></div></label>
-            <label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" type="number" min="0" max="10" step="0.5" value="5" /><span>%</span></div></label>
-          </div>
-
-          <div class="launch-card">
-            <h3>Network</h3>
-            <label class="field"><span>Chain</span>
-              <select id="chainSelect">
-                <option>Ethereum Mainnet</option>
-                <option>Base</option>
-                <option>Arbitrum One</option>
-                <option>Optimism</option>
-                <option>Polygon</option>
-                <option>Avalanche C-Chain</option>
-                <option>Robinhood Chain</option>
-                <option>Custom EVM</option>
-              </select>
-            </label>
-            <div class="prototype-note">
-              <strong>Deployment module comes next.</strong>
-              <p>The production version will deploy a tested ERC-721 template through a chain-agnostic factory, with the creator wallet retaining ownership.</p>
-            </div>
-          </div>
-
-          <div class="launch-summary">
-            <span>Ready for deployment integration</span>
-            <strong id="launchSummaryTitle">Your collection</strong>
-            <div id="launchSummaryDetails"></div>
-            <button class="primary-btn" type="button" disabled>Deploy Collection — Next Build</button>
-          </div>
-        </div>
-
-        <div class="panel-footer">
-          <button class="secondary-btn back-btn" data-back="4" type="button">Back</button>
-          <button id="exportLaunchPackageBtn" class="primary-btn" type="button">Export Launch Package</button>
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <span>Relic Forge prototype · local-first collection compiler</span>
-      <span>No artwork leaves your browser in this build.</span>
-    </footer>
-  </div>
-
-  <script src="./app.js" defer></script>
+  <footer class="site-footer">
+    <a class="site-brand site-brand-small" href="./index.html"><img src="./relic-forge-logo.svg" alt="" /><span>RELIC FORGE</span></a>
+    <span>Collection builder prototype</span>
+  </footer>
 </body>
 </html>

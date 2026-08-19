@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Relic Forge Studio — Build Your NFT Collection</title>
+  <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="studio-page-body">
+<div class="app-shell" id="studioApp">
+<header class="topbar">
+<a aria-label="Return to Relic Forge home" class="brand studio-brand-button" href="./index.html">
+<img alt="" class="brand-logo" src="./relic-forge-logo.svg"/>
+<div>
+<strong>RELIC FORGE</strong>
+<span>Studio</span>
+</div>
+</a>
+<div class="topbar-actions">
+<button class="ghost-btn" id="exportProjectBtn" type="button">Export Project</button>
+</div>
+</header>
+<main>
+<section class="hero-panel studio-hero-panel">
+<div>
+<div class="eyebrow">RELIC FORGE STUDIO</div>
+<h1>Build the collection you actually want.</h1>
+<p>Your layers stay in control. Generate automatically, set exact quantities, curate individual tokens, or import a complete recipe.</p>
+</div>
+<div class="goal-card studio-mark-card">
+<img alt="" aria-hidden="true" src="./relic-forge-logo.svg"/>
+<div><span>Local-first prototype</span><strong>Your artwork stays in your browser</strong></div>
+</div>
+</section>
+<nav aria-label="Collection builder steps" class="stepper">
+<button class="step active" data-step="1"><span>1</span><b>Artwork</b></button>
+<div class="step-line"></div>
+<button class="step" data-step="2"><span>2</span><b>Build</b></button>
+<div class="step-line"></div>
+<button class="step" data-step="3"><span>3</span><b>Rules</b></button>
+<div class="step-line"></div>
+<button class="step" data-step="4"><span>4</span><b>Preview</b></button>
+<div class="step-line"></div>
+<button class="step" data-step="5"><span>5</span><b>Launch</b></button>
+</nav>
+<section class="status-banner hidden" id="statusBanner" role="status"></section>
+<!-- STEP 1 -->
+<section class="panel step-panel active" data-panel="1">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">STEP 1</div>
+<h2>Upload your artwork</h2>
+<p>Choose the folder containing your layer folders. We’ll organize the artwork automatically. Rename categories or traits below whenever the filenames are not presentation-ready.</p>
+</div>
+<div class="mini-help">
+<b>Example folder</b>
+<code>Artwork / Background / Blue.png</code>
+<code>Artwork / Body / Female.png</code>
+<code>Artwork / Hat / Crown.png</code>
+</div>
+</div>
+<label class="upload-zone" for="folderInput" id="uploadZone">
+<div class="upload-icon">＋</div>
+<strong>Choose your artwork folder</strong>
+<span>PNG, WEBP, JPG · transparent PNG recommended</span>
+<input accept="image/png,image/webp,image/jpeg" directory="" id="folderInput" multiple="" type="file" webkitdirectory=""/>
+</label>
+<div class="summary-strip hidden" id="artworkSummary"></div>
+<div class="layer-list" id="layerList"></div>
+<div class="panel-footer">
+<span class="footer-hint" id="step1Hint">Upload artwork to continue.</span>
+<button class="primary-btn next-btn" data-next="2" disabled="" type="button">Continue to Build</button>
+</div>
+</section>
+<!-- STEP 2 -->
+<section class="panel step-panel" data-panel="2">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">STEP 2</div>
+<h2>Build your collection</h2>
+<p>Start simple. You can always fine-tune individual traits later.</p>
+</div>
+</div>
+<div class="settings-grid">
+<label class="field">
+<span>Collection name</span>
+<input id="collectionName" maxlength="80" type="text" value="My Relic Collection"/>
+</label>
+<label class="field">
+<span>Collection size</span>
+<input id="collectionSize" max="25000" min="1" type="number" value="1000"/>
+</label>
+</div>
+<h3 class="section-title">How do you want to build it?</h3>
+<div class="build-modes">
+<button class="build-card selected" data-build-mode="auto" type="button">
+<span class="build-icon">✦</span>
+<strong>Generate for me</strong>
+<small>Choose rough rarities and let Relic Forge handle the combinations.</small>
+</button>
+<button class="build-card" data-build-mode="exact" type="button">
+<span class="build-icon">#</span>
+<strong>Choose exact amounts</strong>
+<small>Set exact counts for traits that matter. The rest is generated automatically.</small>
+</button>
+<button class="build-card" data-build-mode="manual" type="button">
+<span class="build-icon">✎</span>
+<strong>Build it myself</strong>
+<small>Curate exact token IDs visually by choosing the uploaded layer used in each slot.</small>
+</button>
+<button class="build-card" data-build-mode="manifest" type="button">
+<span class="build-icon">▦</span>
+<strong>Use my collection list</strong>
+<small>Upload CSV or JSON that tells us which uploaded layers belong to each token.</small>
+</button>
+</div>
+<div class="subpanel hidden" id="manifestPanel">
+<div class="subpanel-heading">
+<div>
+<h3>Upload your collection list</h3>
+<p>The list references the layer and trait names you already uploaded. It does not contain finished images.</p>
+</div>
+<div class="inline-actions">
+<button class="ghost-btn" id="downloadCsvTemplate" type="button">Download CSV Template</button>
+<button class="ghost-btn" id="downloadJsonTemplate" type="button">Download JSON Template</button>
+</div>
+</div>
+<label class="compact-upload" for="manifestInput">
+<strong>Choose CSV or JSON</strong>
+<span id="manifestFileName">No file selected</span>
+<input accept=".csv,.json,text/csv,application/json" id="manifestInput" type="file"/>
+</label>
+<div class="validation-box hidden" id="manifestResult"></div>
+</div>
+<div class="subpanel hidden" id="manualPanel">
+<div class="subpanel-heading">
+<div>
+<h3>Curate an exact token</h3>
+<p>Pick a token number, then choose the uploaded trait used in each layer. Leave a layer on “Generate automatically” if you only want to lock part of the NFT.</p>
+</div>
+<div class="manual-token-count"><strong id="manualTokenCount">0</strong><span>curated tokens</span></div>
+</div>
+<div class="manual-builder-layout">
+<div>
+<label class="field"><span>Token number</span><input id="manualTokenId" min="1" type="number" value="1"/></label>
+<div class="manual-trait-fields" id="manualTraitFields"></div>
+<div class="inline-actions manual-actions">
+<button class="ghost-btn" id="loadManualTokenBtn" type="button">Load Token</button>
+<button class="ghost-btn" id="clearManualTokenBtn" type="button">Clear Token</button>
+<button class="primary-btn" id="saveManualTokenBtn" type="button">Save Exact Token</button>
+<button class="ghost-btn" id="downloadManualSvgBtn" type="button">Download SVG Preview</button>
+</div>
+</div>
+<div class="manual-preview">
+<span>Live layer preview</span>
+<div aria-label="Live SVG layer preview" class="svg-preview-host" id="manualPreviewCanvas" role="img"></div>
+<small>Only the traits you select are shown here. Unlocked layers will be generated later.</small>
+</div>
+</div>
+<div class="manual-saved-list" id="manualSavedList"></div>
+</div>
+<div class="trait-setup" id="traitSetup"></div>
+<div class="panel-footer">
+<button class="secondary-btn back-btn" data-back="1" type="button">Back</button>
+<button class="primary-btn next-btn" data-next="3" type="button">Continue to Rules</button>
+</div>
+</section>
+<!-- STEP 3 -->
+<section class="panel step-panel" data-panel="3">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">STEP 3</div>
+<h2>Do any traits need special rules?</h2>
+<p>Most collections can skip this. If something should only work with—or never work with—something else, set it here in plain English.</p>
+</div>
+</div>
+<div class="choice-row">
+<button class="choice-card selected" id="noRulesBtn" type="button">
+<strong>No, everything can mix</strong>
+<small>Skip rules and move straight to preview.</small>
+</button>
+<button class="choice-card" id="yesRulesBtn" type="button">
+<strong>Yes, I have some rules</strong>
+<small>Apply one rule to one trait, many traits, or entire layers.</small>
+</button>
+</div>
+<div class="rules-workspace hidden" id="rulesWorkspace">
+<div class="rule-builder">
+<div class="rule-step">
+<div class="rule-step-number">1</div>
+<div>
+<h3>Choose the traits this rule applies to</h3>
+<p>Select as many traits as you want—even across multiple layers.</p>
+<div class="rule-toolbar">
+<select id="sourceLayerSelect"></select>
+<button class="ghost-btn" id="selectSourceLayerBtn" type="button">Select whole layer</button>
+<button class="ghost-btn" id="clearSourceBtn" type="button">Clear</button>
+</div>
+<div class="trait-picker" id="sourceTraitPicker"></div>
+</div>
+</div>
+<div class="rule-step">
+<div class="rule-step-number">2</div>
+<div>
+<h3>What should happen?</h3>
+<div class="rule-type-grid">
+<button class="rule-type selected" data-rule-type="only_with" type="button"><strong>Only works with</strong><small>These traits may appear only when an allowed trait is also present.</small></button>
+<button class="rule-type" data-rule-type="excludes" type="button"><strong>Doesn’t work with</strong><small>Never allow these traits together.</small></button>
+<button class="rule-type" data-rule-type="always_with" type="button"><strong>Always pair with</strong><small>When one of these traits appears, require the selected companion trait(s).</small></button>
+</div>
+</div>
+</div>
+<div class="rule-step">
+<div class="rule-step-number">3</div>
+<div>
+<h3>Choose the matching traits</h3>
+<p>Pick one or more acceptable matching traits. You can use traits from multiple layers here too.</p>
+<div class="rule-toolbar">
+<select id="targetLayerSelect"></select>
+<button class="ghost-btn" id="selectTargetLayerBtn" type="button">Select whole layer</button>
+<button class="ghost-btn" id="clearTargetBtn" type="button">Clear</button>
+</div>
+<div class="trait-picker" id="targetTraitPicker"></div>
+</div>
+</div>
+<div class="rule-preview-card">
+<span>Rule preview</span>
+<strong id="ruleSentence">Choose traits above to build a rule.</strong>
+<div class="rule-preflight draft neutral" id="rulePreflight">Choose the traits above and Relic Forge will check the rule against your current rarity/count settings before you add it.</div>
+<button class="primary-btn" disabled="" id="addRuleBtn" type="button">Add Rule</button>
+</div>
+</div>
+<div class="saved-rules">
+<div class="subpanel-heading">
+<div>
+<h3>Collection rules</h3>
+<p>Relic Forge checks each rule against your current percentages/exact counts and renders a few example outcomes before you build the full collection.</p>
+</div>
+</div>
+<div class="rules-list" id="rulesList"><div class="empty-state">No rules yet.</div></div>
+</div>
+</div>
+<div class="panel-footer">
+<button class="secondary-btn back-btn" data-back="2" type="button">Back</button>
+<button class="primary-btn next-btn" data-next="4" type="button">Build Preview</button>
+</div>
+</section>
+<!-- STEP 4 -->
+<section class="panel step-panel" data-panel="4">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">STEP 4</div>
+<h2>Preview the collection</h2>
+<p>We’ll compile a deterministic collection recipe first, then render sample NFTs from your uploaded layers.</p>
+</div>
+<div class="inline-actions">
+<label class="field seed-field">
+<span>Generation seed</span>
+<input id="seedInput" type="text" value="RELIC-001"/>
+</label>
+<button class="secondary-btn" id="regenerateBtn" type="button">Regenerate</button>
+</div>
+</div>
+<div class="compiler-status" id="compilerStatus">
+<div class="compiler-empty">
+<span class="big-symbol">✦</span>
+<strong>Ready to build your preview.</strong>
+<small>Click Build Collection below.</small>
+</div>
+</div>
+<div class="preview-controls hidden" id="previewControls">
+<div class="stats-grid" id="collectionStats"></div>
+<div class="inline-actions">
+<button class="ghost-btn" id="exportManifestBtn" type="button">Export Final Manifest</button>
+<button class="ghost-btn" id="exportCsvBtn" type="button">Export CSV</button>
+</div>
+</div>
+<div class="preview-grid" id="previewGrid"></div>
+<div class="panel-footer">
+<button class="secondary-btn back-btn" data-back="3" type="button">Back</button>
+<button class="secondary-btn" id="compileBtn" type="button">Build Collection</button>
+<button class="primary-btn" disabled="" id="toLaunchBtn" type="button">Looks Good — Continue</button>
+</div>
+</section>
+<!-- STEP 5 -->
+<section class="panel step-panel" data-panel="5">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">STEP 5</div>
+<h2>Prepare to launch</h2>
+<p>This prototype stops before smart-contract deployment. The goal of this build is to validate the artwork → rules → exact collection workflow with your real layers.</p>
+</div>
+</div>
+<div class="launch-layout">
+<div class="launch-card">
+<h3>Collection</h3>
+<label class="field"><span>Name</span><input id="launchName" type="text"/></label>
+<label class="field"><span>Symbol</span><input id="launchSymbol" maxlength="12" type="text" value="RELIC"/></label>
+<label class="field"><span>Mint price</span><div class="input-suffix"><input id="mintPrice" min="0" step="0.001" type="number" value="0.01"/><span>ETH</span></div></label>
+<label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" max="10" min="0" step="0.5" type="number" value="5"/><span>%</span></div></label>
+</div>
+<div class="launch-card">
+<h3>Network</h3>
+<label class="field"><span>Chain</span>
+<select id="chainSelect">
+<option>Ethereum Mainnet</option>
+<option>Base</option>
+<option>Arbitrum One</option>
+<option>Optimism</option>
+<option>Polygon</option>
+<option>Avalanche C-Chain</option>
+<option>Robinhood Chain</option>
+<option>Custom EVM</option>
+</select>
+</label>
+<div class="prototype-note">
+<strong>Deployment module comes next.</strong>
+<p>The production version will deploy a tested ERC-721 template through a chain-agnostic factory, with the creator wallet retaining ownership.</p>
+</div>
+</div>
+<div class="launch-summary">
+<span>Ready for deployment integration</span>
+<strong id="launchSummaryTitle">Your collection</strong>
+<div id="launchSummaryDetails"></div>
+<button class="primary-btn" disabled="" type="button">Deploy Collection — Next Build</button>
+</div>
+</div>
+<div class="panel-footer">
+<button class="secondary-btn back-btn" data-back="4" type="button">Back</button>
+<button class="primary-btn" id="exportLaunchPackageBtn" type="button">Export Launch Package</button>
+</div>
+</section>
+</main>
+<footer>
+<span>Relic Forge prototype · local-first collection compiler</span>
+<span>No artwork leaves your browser in this build.</span>
+</footer>
+</div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
