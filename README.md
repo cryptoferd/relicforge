@@ -34,7 +34,9 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Deterministic generation seed.
 - Browser-side collection compiler.
 - Exact-count validation.
-- Rule conflict validation/repair attempts without changing locked imported choices.
+- Rule constraints are enforced with count-preserving repair passes before the collection is accepted.
+- **Rule Fixer** shows the exact failed rule, affected token examples, locked-token involvement, and likely mathematical capacity problems.
+- One-click fixes can jump back to rarity/count settings, edit the rule, edit a locked token, or prioritize the rule by adjusting only unlocked/non-exact traits.
 - Duplicate-combination reporting.
 - Canvas-rendered NFT previews from the uploaded layers.
 - Pixel-art previews now use **true SVG geometry** rather than an enlarged raster canvas. Uploaded pixel layers are converted into compact same-color run/rectangle paths, so the manual builder and collection previews remain crisp at any display size.

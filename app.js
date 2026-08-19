@@ -1071,7 +1071,7 @@
     const map = new Map();
     for (const traitId of rule.targets) {
       const trait = getTrait(traitId);
-      if (!trait || trait.isNone) continue;
+      if (!trait) continue;
       if (!map.has(trait.layerId)) map.set(trait.layerId, []);
       map.get(trait.layerId).push(traitId);
     }
@@ -1102,6 +1102,155 @@
       });
     });
     return details;
+  }
+
+
+  function lockedMasksForSupply(supply) {
+    const masks = {};
+    for (const layer of state.layers) masks[layer.id] = new Array(supply).fill(false);
+    for (const [tokenId, recipe] of state.manifestTokens.entries()) {
+      if (tokenId < 1 || tokenId > supply) continue;
+      for (const layerId of Object.keys(recipe)) {
+        if (masks[layerId]) masks[layerId][tokenId - 1] = true;
+      }
+    }
+    return masks;
+  }
+
+  function ruleConflictAnalysis(tokens, details) {
+    const grouped = new Map();
+    for (const item of details) {
+      if (!grouped.has(item.rule.id)) grouped.set(item.rule.id, { rule: item.rule, items: [], conflicts: 0 });
+      const group = grouped.get(item.rule.id);
+      group.items.push(item);
+      group.conflicts += item.count;
+    }
+    const supply = tokens.length;
+    const lockedMasks = lockedMasksForSupply(supply);
+
+    return [...grouped.values()].map(group => {
+      const rule = group.rule;
+      const sourceTokens = tokens.filter(token => tokenHas(token, rule.sources)).length;
+      const capacityNotes = [];
+      let mathematicallyImpossible = false;
+
+      if (rule.type === 'excludes') {
+        for (const [layerId, forbidden] of targetsByLayer(rule)) {
+          const forbiddenCount = tokens.filter(token => forbidden.includes(token.traits[layerId])).length;
+          const minimumOverlap = Math.max(0, sourceTokens + forbiddenCount - supply);
+          if (minimumOverlap > 0) {
+            mathematicallyImpossible = true;
+            capacityNotes.push(`At least ${minimumOverlap} conflict(s) are unavoidable with the current counts because ${sourceTokens} token(s) use the source group and ${forbiddenCount} token(s) use the excluded ${getLayer(layerId)?.name || 'target'} trait group.`);
+          }
+        }
+      } else {
+        for (const [layerId, allowed] of targetsByLayer(rule)) {
+          const allowedCount = tokens.filter(token => allowed.includes(token.traits[layerId])).length;
+          if (allowedCount < sourceTokens) {
+            mathematicallyImpossible = true;
+            capacityNotes.push(`This rule needs ${sourceTokens} compatible ${getLayer(layerId)?.name || 'target'} slot(s), but only ${allowedCount} currently exist. Increase the compatible trait rarity/count or reduce the source trait rarity/count.`);
+          }
+        }
+      }
+
+      const lockedTokenIds = [];
+      for (const item of group.items) {
+        const token = tokens[item.tokenIndex];
+        let locked = false;
+        if (rule.type === 'excludes') {
+          for (const targetId of rule.targets) {
+            const target = getTrait(targetId);
+            if (target && token.traits[target.layerId] === targetId && lockedMasks[target.layerId]?.[item.tokenIndex]) locked = true;
+          }
+        } else {
+          for (const [layerId, allowed] of targetsByLayer(rule)) {
+            if (!allowed.includes(token.traits[layerId]) && lockedMasks[layerId]?.[item.tokenIndex]) locked = true;
+          }
+        }
+        for (const sourceId of rule.sources) {
+          const source = getTrait(sourceId);
+          if (source && token.traits[source.layerId] === sourceId && lockedMasks[source.layerId]?.[item.tokenIndex]) locked = true;
+        }
+        if (locked) lockedTokenIds.push(token.tokenId);
+      }
+
+      return {
+        rule,
+        conflicts: group.conflicts,
+        affectedTokenIds: group.items.map(item => tokens[item.tokenIndex].tokenId),
+        lockedTokenIds: [...new Set(lockedTokenIds)],
+        sourceTokens,
+        mathematicallyImpossible,
+        capacityNotes,
+      };
+    });
+  }
+
+  function bestSwapForLayer(tokens, lockedMasks, layerId, tokenIndex, candidateFilter) {
+    if (lockedMasks[layerId]?.[tokenIndex]) return false;
+    let bestIndex = -1;
+    let bestPairScore = Infinity;
+    for (let j = 0; j < tokens.length; j++) {
+      if (j === tokenIndex || lockedMasks[layerId]?.[j]) continue;
+      if (candidateFilter && !candidateFilter(tokens[j], j)) continue;
+      const pairBefore = localViolation(tokens, [tokenIndex, j]);
+      const temp = tokens[tokenIndex].traits[layerId];
+      tokens[tokenIndex].traits[layerId] = tokens[j].traits[layerId];
+      tokens[j].traits[layerId] = temp;
+      const pairAfter = localViolation(tokens, [tokenIndex, j]);
+      tokens[j].traits[layerId] = tokens[tokenIndex].traits[layerId];
+      tokens[tokenIndex].traits[layerId] = temp;
+      if (pairAfter < pairBefore && pairAfter < bestPairScore) {
+        bestIndex = j;
+        bestPairScore = pairAfter;
+        if (pairAfter === 0) break;
+      }
+    }
+    if (bestIndex < 0) return false;
+    const temp = tokens[tokenIndex].traits[layerId];
+    tokens[tokenIndex].traits[layerId] = tokens[bestIndex].traits[layerId];
+    tokens[bestIndex].traits[layerId] = temp;
+    return true;
+  }
+
+  function deepRepairRules(tokens, lockedMasks) {
+    if (!state.rulesEnabled || !state.rules.length) return { remaining: 0, passes: 0 };
+    let passes = 0;
+    const maxPasses = 40;
+    let details = getViolationDetails(tokens);
+
+    while (details.length && passes < maxPasses) {
+      passes++;
+      let changes = 0;
+      for (const violation of details) {
+        const i = violation.tokenIndex;
+        const rule = violation.rule;
+        if (!tokenHas(tokens[i], rule.sources)) continue;
+
+        if (rule.type === 'excludes') {
+          const offendingTargets = rule.targets.filter(id => Object.values(tokens[i].traits).includes(id));
+          for (const targetId of offendingTargets) {
+            const target = getTrait(targetId);
+            if (!target) continue;
+            const fixed = bestSwapForLayer(tokens, lockedMasks, target.layerId, i, candidate => !rule.targets.includes(candidate.traits[target.layerId]));
+            if (fixed) changes++;
+          }
+        } else {
+          for (const [targetLayerId, allowed] of targetsByLayer(rule)) {
+            if (allowed.includes(tokens[i].traits[targetLayerId])) continue;
+            const fixed = bestSwapForLayer(tokens, lockedMasks, targetLayerId, i, candidate => allowed.includes(candidate.traits[targetLayerId]));
+            if (fixed) changes++;
+          }
+        }
+      }
+      const next = getViolationDetails(tokens);
+      if (!changes || next.length >= details.length) {
+        details = next;
+        break;
+      }
+      details = next;
+    }
+    return { remaining: details.reduce((sum, item) => sum + item.count, 0), passes };
   }
 
   function localViolation(tokens, indices) {
@@ -1230,7 +1379,9 @@
     }
 
     const repair = repairRules(tokens, lockedMasks, rng);
-    const ruleViolations = getViolationDetails(tokens);
+    const deepRepair = deepRepairRules(tokens, lockedMasks);
+    const ruleViolationDetails = getViolationDetails(tokens);
+    const ruleConflictGroups = ruleConflictAnalysis(tokens, ruleViolationDetails);
     const exactIssues = exactCountValidation(tokens);
     const duplicates = duplicateCount(tokens);
 
@@ -1241,10 +1392,12 @@
         seed,
         manualTokens: lockedByToken.size,
         rules: state.rulesEnabled ? state.rules.length : 0,
-        ruleViolations: ruleViolations.reduce((sum, item) => sum + item.count, 0),
+        ruleViolations: ruleViolationDetails.reduce((sum, item) => sum + item.count, 0),
+        ruleViolationDetails,
+        ruleConflictGroups,
         exactIssues,
         duplicates,
-        repairPasses: repair.passes,
+        repairPasses: repair.passes + deepRepair.passes,
       }
     };
   }
@@ -1287,7 +1440,44 @@
       r.exactIssues.length ? `${r.exactIssues.length} exact-count issue(s) remain` : 'All exact trait counts are satisfied',
       r.duplicates ? `${r.duplicates} duplicate combination(s) found — regenerate or adjust artwork/rarities if uniqueness is required` : 'No duplicate combinations found',
     ];
-    el.compilerStatus.innerHTML = `<div class="compiler-box ${hardProblems ? 'error' : 'success'}"><strong>${hardProblems ? 'A few things still need attention.' : 'Collection recipe is valid.'}</strong><ul>${messages.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>`;
+
+    const conflictUi = r.ruleConflictGroups?.length ? `
+      <div class="rule-fixer">
+        <div class="rule-fixer-heading">
+          <div>
+            <strong>Rule Fixer</strong>
+            <span>Relic Forge preserved your locked tokens and trait totals. These are the conflicts it could not safely rearrange.</span>
+          </div>
+          <button type="button" class="secondary-btn" data-fix-action="adjust-counts">Adjust Rarities / Counts</button>
+        </div>
+        ${r.ruleConflictGroups.map((group, index) => {
+          const examples = group.affectedTokenIds.slice(0, 8).map(id => `#${id}`).join(', ');
+          const locked = group.lockedTokenIds.length ? `Locked token${group.lockedTokenIds.length === 1 ? '' : 's'} involved: ${group.lockedTokenIds.slice(0, 8).map(id => `#${id}`).join(', ')}${group.lockedTokenIds.length > 8 ? '…' : ''}` : '';
+          const diagnosis = group.capacityNotes.length
+            ? group.capacityNotes.join(' ')
+            : group.lockedTokenIds.length
+              ? 'At least one affected combination is manually/import locked, so Relic Forge will not silently change it.'
+              : 'The current count-preserving arrangement could not satisfy this rule. You can let Relic Forge relax the affected rarity targets, or edit the rule.';
+          return `
+            <article class="rule-fix-card">
+              <div class="rule-fix-topline">
+                <span class="rule-conflict-count">${group.conflicts} conflict${group.conflicts === 1 ? '' : 's'}</span>
+                <strong>${escapeHtml(ruleSentence(group.rule))}</strong>
+              </div>
+              <p>${escapeHtml(diagnosis)}</p>
+              <div class="rule-fix-meta"><span>Affected examples: ${escapeHtml(examples || '—')}</span>${locked ? `<span class="locked-warning">${escapeHtml(locked)}</span>` : ''}</div>
+              <div class="rule-fix-actions">
+                <button type="button" class="ghost-btn" data-fix-action="adjust-counts">Adjust Rarities / Counts</button>
+                <button type="button" class="ghost-btn" data-fix-action="edit-rule" data-rule-id="${escapeHtml(group.rule.id)}">Edit This Rule</button>
+                ${group.lockedTokenIds.length ? `<button type="button" class="ghost-btn" data-fix-action="edit-token" data-token-id="${group.lockedTokenIds[0]}">Edit Locked Token #${group.lockedTokenIds[0]}</button>` : ''}
+                <button type="button" class="primary-btn" data-fix-action="relax" data-rule-id="${escapeHtml(group.rule.id)}">Auto Fix — Prioritize Rule</button>
+              </div>
+              <small class="rule-fix-note">“Prioritize Rule” may slightly change non-exact rarity percentages for unlocked traits, but it will never alter exact-count traits or manually locked token choices.</small>
+            </article>`;
+        }).join('')}
+      </div>` : '';
+
+    el.compilerStatus.innerHTML = `<div class="compiler-box ${hardProblems ? 'error' : 'success'}"><strong>${hardProblems ? 'A few things still need attention.' : 'Collection recipe is valid.'}</strong><ul>${messages.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>${conflictUi}`;
 
     el.collectionStats.innerHTML = `
       <div class="stat"><span>Supply</span><strong>${r.supply.toLocaleString()}</strong></div>
@@ -1296,6 +1486,58 @@
       <div class="stat"><span>Manual</span><strong>${r.manualTokens}</strong></div>
       <div class="stat"><span>Duplicates</span><strong>${r.duplicates}</strong></div>
     `;
+  }
+
+  function relevantRuleLayers(rule) {
+    return new Set([...rule.sources, ...rule.targets].map(id => getTrait(id)?.layerId).filter(Boolean));
+  }
+
+  function relaxRuleConflicts(ruleId) {
+    if (!state.compiledTokens.length) return;
+    const rule = state.rules.find(item => item.id === ruleId);
+    if (!rule) return;
+    const lockedMasks = lockedMasksForSupply(state.compiledTokens.length);
+    let changed = 0;
+
+    // Rule-priority mode is allowed to replace an unlocked, non-exact trait rather than preserve its percentage target.
+    for (let pass = 0; pass < 20; pass++) {
+      let passChanges = 0;
+      for (let i = 0; i < state.compiledTokens.length; i++) {
+        const token = state.compiledTokens[i];
+        if (!ruleViolationCount(token, rule)) continue;
+
+        if (rule.type === 'excludes') {
+          for (const targetId of rule.targets) {
+            const target = getTrait(targetId);
+            if (!target || token.traits[target.layerId] !== targetId || lockedMasks[target.layerId]?.[i] || target.distribution === 'exact') continue;
+            const layer = getLayer(target.layerId);
+            const replacement = layer?.traits.find(trait => !rule.targets.includes(trait.id) && trait.distribution !== 'exact' && !trait.isNone)
+              || layer?.traits.find(trait => !rule.targets.includes(trait.id) && trait.distribution !== 'exact');
+            if (replacement) { token.traits[target.layerId] = replacement.id; passChanges++; changed++; }
+          }
+        } else {
+          for (const [layerId, allowed] of targetsByLayer(rule)) {
+            if (allowed.includes(token.traits[layerId]) || lockedMasks[layerId]?.[i]) continue;
+            const currentTrait = getTrait(token.traits[layerId]);
+            if (currentTrait?.distribution === 'exact') continue;
+            const replacementId = allowed.find(id => getTrait(id)?.distribution !== 'exact');
+            if (replacementId) { token.traits[layerId] = replacementId; passChanges++; changed++; }
+          }
+        }
+      }
+      if (!passChanges) break;
+    }
+
+    const details = getViolationDetails(state.compiledTokens);
+    state.compilerReport.ruleViolationDetails = details;
+    state.compilerReport.ruleViolations = details.reduce((sum, item) => sum + item.count, 0);
+    state.compilerReport.ruleConflictGroups = ruleConflictAnalysis(state.compiledTokens, details);
+    state.compilerReport.exactIssues = exactCountValidation(state.compiledTokens);
+    state.compilerReport.duplicates = duplicateCount(state.compiledTokens);
+    renderCompilerReport();
+    renderPreviewGrid();
+    el.toLaunchBtn.disabled = state.compilerReport.ruleViolations > 0 || state.compilerReport.exactIssues.length > 0;
+    showStatus(changed ? `Applied ${changed} rule-priority adjustment(s).` : 'No safe automatic adjustment was available for this rule.', changed ? 'success' : 'warn');
   }
 
   function hexByte(value) {
@@ -1838,6 +2080,35 @@
   });
 
   // Compiler / preview
+  el.compilerStatus.addEventListener('click', e => {
+    const btn = e.target.closest('[data-fix-action]');
+    if (!btn) return;
+    const action = btn.dataset.fixAction;
+    if (action === 'adjust-counts') {
+      gotoStep(2);
+      el.traitSetup?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showStatus('Adjust the rarity/percentage or exact count for the traits involved, then rebuild the preview.');
+      return;
+    }
+    if (action === 'edit-rule') {
+      gotoStep(3);
+      const ruleEl = $(`[data-rule-id="${btn.dataset.ruleId}"]`, el.rulesList)?.closest('.saved-rule');
+      ruleEl?.classList.add('attention-pulse');
+      ruleEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (action === 'edit-token') {
+      setBuildMode('manual');
+      gotoStep(2);
+      el.manualTokenId.value = btn.dataset.tokenId;
+      renderManualBuilder(Number(btn.dataset.tokenId));
+      el.manualPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (action === 'relax') {
+      relaxRuleConflicts(btn.dataset.ruleId);
+    }
+  });
   $('#compileBtn').addEventListener('click', buildCollection);
   $('#regenerateBtn').addEventListener('click', buildCollection);
   el.toLaunchBtn.addEventListener('click', () => gotoStep(5));
