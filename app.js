@@ -165,6 +165,122 @@
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   }
 
+
+  function createNoneTrait(layer) {
+    return {
+      id: `${layer.id}::trait-none`,
+      layerId: layer.id,
+      name: 'None',
+      filename: '__NONE__',
+      file: null,
+      url: '',
+      width: state.imageWidth,
+      height: state.imageHeight,
+      rarity: 'common',
+      distribution: 'weighted',
+      exactCount: null,
+      percentage: 0,
+      image: null,
+      isNone: true,
+    };
+  }
+
+  function traitPreviewMarkup(trait) {
+    if (trait.isNone) {
+      return '<div class="thumb-box thumb-box-none"><span>None</span></div>';
+    }
+    return `<div class="thumb-box"><img src="${trait.url}" alt="${escapeHtml(trait.name)}" /></div>`;
+  }
+
+  function syncNoneTrait(layer) {
+    const existingIndex = layer.traits.findIndex(t => t.isNone);
+    if (layer.allowNone && existingIndex === -1) {
+      layer.traits.push(createNoneTrait(layer));
+    }
+    if (!layer.allowNone && existingIndex >= 0) {
+      const noneTraitId = layer.traits[existingIndex].id;
+      layer.traits.splice(existingIndex, 1);
+      for (const recipe of state.manifestTokens.values()) {
+        if (recipe[layer.id] === noneTraitId) delete recipe[layer.id];
+      }
+      state.sourceSelected.delete(noneTraitId);
+      state.targetSelected.delete(noneTraitId);
+      state.rules = state.rules
+        .map(rule => ({ ...rule, sources: rule.sources.filter(id => id !== noneTraitId), targets: rule.targets.filter(id => id !== noneTraitId) }))
+        .filter(rule => rule.sources.length && rule.targets.length);
+    }
+  }
+
+  function formatPercent(value) {
+    const num = Number.parseFloat(value || '0') || 0;
+    return Number.isInteger(num) ? `${num}` : `${num.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}`;
+  }
+
+  function percentTotal(layer) {
+    return layer.traits.reduce((sum, trait) => sum + (Number.parseFloat(trait.percentage || '0') || 0), 0);
+  }
+
+  function autoFillLayerPercentages(layerId) {
+    const layer = getLayer(layerId);
+    if (!layer) return;
+    const powers = {
+      balanced: 1,
+      gradual: 1.35,
+      steep: 1.9,
+      very_steep: 2.6,
+    };
+    const power = powers[layer.autoFillStyle] || 1.35;
+    const weights = layer.traits.map((_, index) => Math.pow(layer.traits.length - index, power));
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+    const raw = layer.traits.map((trait, index) => ({ id: trait.id, value: (weights[index] / totalWeight) * 100 }));
+    const floors = raw.map(item => ({ ...item, floor: Math.floor(item.value * 100) / 100, remainder: item.value - Math.floor(item.value * 100) / 100 }));
+    let allocated = floors.reduce((sum, item) => sum + item.floor, 0);
+    floors.sort((a, b) => b.remainder - a.remainder);
+    let i = 0;
+    while (allocated < 99.999) {
+      floors[i % floors.length].floor = Number((floors[i % floors.length].floor + 0.01).toFixed(2));
+      allocated = Number((allocated + 0.01).toFixed(2));
+      i++;
+    }
+    if (allocated > 100) {
+      let j = floors.length - 1;
+      while (allocated > 100 && floors.length) {
+        if (floors[j].floor >= 0.01) {
+          floors[j].floor = Number((floors[j].floor - 0.01).toFixed(2));
+          allocated = Number((allocated - 0.01).toFixed(2));
+        }
+        j = (j - 1 + floors.length) % floors.length;
+      }
+    }
+    const pctMap = new Map(floors.map(item => [item.id, item.floor]));
+    layer.traits.forEach(trait => { trait.percentage = pctMap.get(trait.id) || 0; });
+    renderTraitSetup();
+  }
+
+  function validatePercentageLayers() {
+    const errors = [];
+    if (state.buildMode !== 'auto') return errors;
+    for (const layer of state.layers) {
+      if (layer.rarityMode !== 'percentage') continue;
+      const total = percentTotal(layer);
+      if (Math.abs(total - 100) > 0.01) {
+        errors.push(`${layer.name}: percentages must add up to 100% (currently ${formatPercent(total)}%).`);
+      }
+    }
+    return errors;
+  }
+
+  function moveTrait(layerId, traitId, dir) {
+    const layer = getLayer(layerId);
+    if (!layer) return;
+    const index = layer.traits.findIndex(trait => trait.id === traitId);
+    if (index < 0) return;
+    const nextIndex = dir === 'up' ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= layer.traits.length) return;
+    [layer.traits[index], layer.traits[nextIndex]] = [layer.traits[nextIndex], layer.traits[index]];
+    renderTraitSetup();
+  }
+
   async function loadArtwork(files) {
     const imageFiles = [...files].filter(file => /^image\/(png|webp|jpeg)$/i.test(file.type) || /\.(png|webp|jpe?g)$/i.test(file.name));
     if (!imageFiles.length) {
@@ -199,6 +315,9 @@
       return {
         id: layerId,
         name: layerName,
+        allowNone: false,
+        rarityMode: 'tier',
+        autoFillStyle: 'gradual',
         traits: layerFiles.map((file, traitIndex) => {
           const meta = metaMap.get(file) || { width: 0, height: 0 };
           return {
@@ -213,7 +332,9 @@
             rarity: 'common',
             distribution: 'weighted',
             exactCount: null,
+            percentage: 0,
             image: null,
+            isNone: false,
           };
         }),
       };
@@ -266,7 +387,7 @@
         <div class="trait-thumbs">
           ${layer.traits.slice(0, 24).map(trait => `
             <div class="trait-thumb">
-              <div class="thumb-box"><img src="${trait.url}" alt="${escapeHtml(trait.name)}" /></div>
+              ${traitPreviewMarkup(trait)}
               <span title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</span>
             </div>
           `).join('')}
@@ -306,32 +427,74 @@
       return;
     }
 
-    const showExact = state.buildMode === 'exact' || state.mode === 'advanced';
+    const showExact = state.buildMode === 'exact';
     const showTraitControls = state.buildMode !== 'manifest' || state.mode === 'advanced';
+    const autoMode = state.buildMode === 'auto';
     if (!showTraitControls) {
       el.traitSetup.innerHTML = `
         <div class="validation-box">
-          Your uploaded collection list will choose the layers for defined token IDs. Any missing traits or token IDs will be filled using the default rarity weights.
+          Your uploaded collection list will choose the layers for defined token IDs. Any missing traits or token IDs will be filled using the current rarity settings.
         </div>`;
       return;
     }
 
-    el.traitSetup.innerHTML = state.layers.map(layer => `
-      <section class="trait-config-layer">
-        <div class="trait-config-header">
-          <strong>${escapeHtml(layer.name)}</strong>
-          <span>${layer.traits.length} traits</span>
+    el.traitSetup.innerHTML = state.layers.map(layer => {
+      const pctTotal = percentTotal(layer);
+      const pctDiff = Number((pctTotal - 100).toFixed(2));
+      const pctValid = Math.abs(pctDiff) <= 0.01;
+      const pctClass = pctValid ? 'valid' : (pctTotal > 100 ? 'over' : 'under');
+      return `
+      <section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
+        <div class="trait-config-header trait-config-header-rich">
+          <div>
+            <strong>${escapeHtml(layer.name)}</strong>
+            <span>${layer.traits.length} traits${layer.allowNone ? ' · None enabled' : ''}</span>
+          </div>
+          <div class="trait-header-controls">
+            <label class="inline-check"><input class="none-layer-toggle" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.allowNone ? 'checked' : ''} /> Allow None</label>
+            ${autoMode ? `
+              <label class="mini-select">Rarity input
+                <select class="layer-rarity-mode" data-layer-id="${escapeHtml(layer.id)}">
+                  <option value="tier" ${layer.rarityMode === 'tier' ? 'selected' : ''}>Rarity tiers</option>
+                  <option value="percentage" ${layer.rarityMode === 'percentage' ? 'selected' : ''}>Percentages</option>
+                </select>
+              </label>
+            ` : ''}
+            ${autoMode && layer.rarityMode === 'percentage' ? `
+              <label class="mini-select">Auto fill
+                <select class="layer-autofill-style" data-layer-id="${escapeHtml(layer.id)}">
+                  <option value="balanced" ${layer.autoFillStyle === 'balanced' ? 'selected' : ''}>Balanced</option>
+                  <option value="gradual" ${layer.autoFillStyle === 'gradual' ? 'selected' : ''}>Gradual</option>
+                  <option value="steep" ${layer.autoFillStyle === 'steep' ? 'selected' : ''}>Steep</option>
+                  <option value="very_steep" ${layer.autoFillStyle === 'very_steep' ? 'selected' : ''}>Very steep</option>
+                </select>
+              </label>
+              <button type="button" class="ghost-btn small-btn autofill-btn" data-layer-id="${escapeHtml(layer.id)}">Auto Fill</button>
+              <div class="percent-total ${pctClass}">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>
+            ` : ''}
+          </div>
         </div>
         <div class="trait-config-grid">
-          ${layer.traits.map(trait => `
+          ${layer.traits.map((trait, traitIndex) => `
             <div class="trait-config" data-trait-id="${escapeHtml(trait.id)}">
-              <img src="${trait.url}" alt="${escapeHtml(trait.name)}" />
+              ${trait.isNone
+                ? '<div class="trait-config-placeholder">None</div>'
+                : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
               <div>
-                <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
-                <div class="trait-config-controls">
-                  <select class="rarity-select" aria-label="Rarity for ${escapeHtml(trait.name)}" ${trait.distribution === 'exact' ? 'disabled' : ''}>
-                    ${Object.entries(rarityLabels).map(([key, label]) => `<option value="${key}" ${trait.rarity === key ? 'selected' : ''}>${label}</option>`).join('')}
-                  </select>
+                <div class="trait-config-topline">
+                  <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
+                  ${autoMode && layer.rarityMode === 'percentage' ? `
+                    <div class="order-controls">
+                      <button type="button" class="icon-btn move-trait" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" data-dir="up" ${traitIndex === 0 ? 'disabled' : ''}>↑</button>
+                      <button type="button" class="icon-btn move-trait" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" data-dir="down" ${traitIndex === layer.traits.length - 1 ? 'disabled' : ''}>↓</button>
+                    </div>` : ''}
+                </div>
+                <div class="trait-config-controls ${autoMode && layer.rarityMode === 'percentage' ? 'percent-mode' : ''}">
+                  ${autoMode && layer.rarityMode === 'percentage'
+                    ? `<input class="percent-input" type="number" min="0" max="100" step="0.01" value="${formatPercent(trait.percentage)}" aria-label="Percentage for ${escapeHtml(trait.name)}" /><span class="input-tag">%</span>`
+                    : `<select class="rarity-select" aria-label="Rarity for ${escapeHtml(trait.name)}" ${trait.distribution === 'exact' ? 'disabled' : ''}>
+                        ${Object.entries(rarityLabels).map(([key, label]) => `<option value="${key}" ${trait.rarity === key ? 'selected' : ''}>${label}</option>`).join('')}
+                      </select>`}
                   ${showExact ? `<input class="exact-count" type="number" min="0" max="${getSupply()}" placeholder="Exact #" value="${trait.distribution === 'exact' && trait.exactCount != null ? trait.exactCount : ''}" ${trait.distribution !== 'exact' ? 'disabled' : ''} />` : `<span></span>`}
                 </div>
                 ${showExact ? `<label class="exact-toggle"><input class="exact-check" type="checkbox" ${trait.distribution === 'exact' ? 'checked' : ''} /> Use exact amount</label>` : ''}
@@ -339,8 +502,8 @@
             </div>
           `).join('')}
         </div>
-      </section>
-    `).join('');
+      </section>`;
+    }).join('');
   }
 
   function setBuildMode(mode) {
@@ -541,8 +704,13 @@
           errors.push(`Token #${recipe.tokenId}: layer “${layerName}” was not found.`);
           continue;
         }
-        const trait = layer.traits.find(t => normalizeName(t.name) === normalizeName(traitName) || normalizeName(t.filename) === normalizeName(traitName));
+        const wantedName = normalizeName(traitName);
+        const trait = layer.traits.find(t => normalizeName(t.name) === wantedName || normalizeName(t.filename) === wantedName);
         if (!trait) {
+          if (wantedName === 'none') {
+            errors.push(`Token #${recipe.tokenId}: ${layer.name} is set to “None”, but None is not enabled for that layer yet.`);
+            continue;
+          }
           const possibilities = layer.traits.slice(0, 4).map(t => t.name).join(', ');
           errors.push(`Token #${recipe.tokenId}: “${traitName}” was not found in ${layer.name}${possibilities ? ` (examples: ${possibilities})` : ''}.`);
           continue;
@@ -637,7 +805,7 @@
     picker.innerHTML = traits.map(trait => {
       const layer = getLayer(trait.layerId);
       return `<button class="pick-trait ${selected.has(trait.id) ? 'selected' : ''}" data-kind="${kind}" data-trait-id="${escapeHtml(trait.id)}" type="button">
-        <img src="${trait.url}" alt="${escapeHtml(trait.name)}" />
+        ${trait.isNone ? '<div class="pick-trait-none">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
         <strong>${escapeHtml(trait.name)}</strong>
         <small>${escapeHtml(layer?.name || '')}</small>
       </button>`;
@@ -786,6 +954,7 @@
     let exactTargetSum = 0;
     const targetCounts = new Map();
     const weighted = [];
+    const percentageTraits = [];
     let lockedWeightedCount = 0;
 
     for (const trait of layer.traits) {
@@ -795,6 +964,9 @@
         if (exact < locked) throw new Error(`${layer.name} → ${trait.name}: exact amount ${exact} is lower than ${locked} manually assigned token(s).`);
         targetCounts.set(trait.id, exact);
         exactTargetSum += exact;
+      } else if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+        const pct = Number.parseFloat(trait.percentage || '0') || 0;
+        percentageTraits.push({ id: trait.id, weight: pct });
       } else {
         weighted.push({ id: trait.id, weight: rarityWeights[trait.rarity] || 1 });
         lockedWeightedCount += locked;
@@ -805,14 +977,31 @@
       throw new Error(`${layer.name}: exact amounts plus manually assigned traits exceed the collection size.`);
     }
 
-    const weightedRemaining = supply - exactTargetSum - lockedWeightedCount;
-    if (weightedRemaining > 0 && !weighted.length) {
-      throw new Error(`${layer.name}: exact amounts only account for ${exactTargetSum + lockedWeightedCount}/${supply} tokens and there are no weighted traits left to fill the layer.`);
-    }
-    const weightedAlloc = largestRemainder(weightedRemaining, weighted);
-    for (const trait of layer.traits) {
-      if (trait.distribution !== 'exact') {
-        targetCounts.set(trait.id, (lockedCounts.get(trait.id) || 0) + (weightedAlloc.get(trait.id) || 0));
+    if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+      const totalPct = percentageTraits.reduce((sum, item) => sum + item.weight, 0);
+      if (Math.abs(totalPct - 100) > 0.01) {
+        throw new Error(`${layer.name}: percentages must add up to 100% before generating.`);
+      }
+      const pctAlloc = largestRemainder(supply - exactTargetSum, percentageTraits);
+      for (const trait of layer.traits) {
+        if (trait.distribution === 'exact') continue;
+        const allocated = pctAlloc.get(trait.id) || 0;
+        const locked = lockedCounts.get(trait.id) || 0;
+        if (allocated < locked) {
+          throw new Error(`${layer.name} → ${trait.name}: ${formatPercent(trait.percentage)}% is too low for the manual/imported tokens already locked to this trait.`);
+        }
+        targetCounts.set(trait.id, allocated);
+      }
+    } else {
+      const weightedRemaining = supply - exactTargetSum - lockedWeightedCount;
+      if (weightedRemaining > 0 && !weighted.length) {
+        throw new Error(`${layer.name}: exact amounts only account for ${exactTargetSum + lockedWeightedCount}/${supply} tokens and there are no weighted traits left to fill the layer.`);
+      }
+      const weightedAlloc = largestRemainder(weightedRemaining, weighted);
+      for (const trait of layer.traits) {
+        if (trait.distribution !== 'exact') {
+          targetCounts.set(trait.id, (lockedCounts.get(trait.id) || 0) + (weightedAlloc.get(trait.id) || 0));
+        }
       }
     }
 
@@ -842,7 +1031,7 @@
     const map = new Map();
     for (const traitId of rule.targets) {
       const trait = getTrait(traitId);
-      if (!trait) continue;
+      if (!trait || trait.isNone) continue;
       if (!map.has(trait.layerId)) map.set(trait.layerId, []);
       map.get(trait.layerId).push(traitId);
     }
@@ -1028,6 +1217,8 @@
 
     await new Promise(resolve => setTimeout(resolve, 35));
     try {
+      const percentErrors = validatePercentageLayers();
+      if (percentErrors.length) throw new Error(percentErrors[0]);
       const result = compileCollection();
       state.compiledTokens = result.tokens;
       state.compilerReport = result.report;
@@ -1068,6 +1259,7 @@
   }
 
   async function ensureTraitImage(trait) {
+    if (trait.isNone) return null;
     if (trait.image?.complete) return trait.image;
     trait.image = await new Promise((resolve, reject) => {
       const img = new Image();
@@ -1084,10 +1276,11 @@
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha: true });
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, width, height);
     for (const layer of state.layers) {
       const trait = getTrait(token.traits[layer.id]);
-      if (!trait) continue;
+      if (!trait || trait.isNone) continue;
       try {
         const img = await ensureTraitImage(trait);
         ctx.drawImage(img, 0, 0, width, height);
@@ -1133,10 +1326,13 @@
       layers: state.layers.map((layer, index) => ({
         name: layer.name,
         order: index,
+        allowNone: layer.allowNone,
+        rarityMode: layer.rarityMode,
         traits: layer.traits.map(trait => ({
           name: trait.name,
           file: trait.filename,
           rarity: trait.rarity,
+          percentage: layer.rarityMode === 'percentage' ? Number(trait.percentage || 0) : null,
           distribution: trait.distribution,
           exactCount: trait.distribution === 'exact' ? Number(trait.exactCount || 0) : null,
         })),
@@ -1166,10 +1362,14 @@
       artwork: state.layers.map((layer, order) => ({
         name: layer.name,
         order,
+        allowNone: layer.allowNone,
+        rarityMode: layer.rarityMode,
+        autoFillStyle: layer.autoFillStyle,
         traits: layer.traits.map(trait => ({
           name: trait.name,
           file: trait.filename,
           rarity: trait.rarity,
+          percentage: trait.percentage,
           distribution: trait.distribution,
           exactCount: trait.exactCount,
         }))
@@ -1273,17 +1473,66 @@
   // Build mode + trait controls
   $$('.build-card').forEach(card => card.addEventListener('click', () => setBuildMode(card.dataset.buildMode)));
   el.traitSetup.addEventListener('change', e => {
+    const layerId = e.target.dataset.layerId || e.target.closest('[data-layer-id]')?.dataset.layerId;
+    if (e.target.classList.contains('none-layer-toggle')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      if (!layer) return;
+      layer.allowNone = e.target.checked;
+      syncNoneTrait(layer);
+      if (layer.allowNone && layer.rarityMode === 'percentage' && !layer.traits.some(t => Number.parseFloat(t.percentage || '0') > 0)) autoFillLayerPercentages(layer.id);
+      renderArtwork();
+      renderTraitSetup();
+      renderManualBuilder();
+      renderRulePickers();
+      renderRulesList();
+      return;
+    }
+    if (e.target.classList.contains('layer-rarity-mode')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      if (!layer) return;
+      layer.rarityMode = e.target.value;
+      if (layer.rarityMode === 'percentage') autoFillLayerPercentages(layer.id);
+      else renderTraitSetup();
+      return;
+    }
+    if (e.target.classList.contains('layer-autofill-style')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      if (!layer) return;
+      layer.autoFillStyle = e.target.value;
+      return;
+    }
+
     const config = e.target.closest('[data-trait-id]');
     if (!config) return;
     const trait = getTrait(config.dataset.traitId);
     if (!trait) return;
     if (e.target.classList.contains('rarity-select')) trait.rarity = e.target.value;
+    if (e.target.classList.contains('percent-input')) trait.percentage = Math.max(0, Math.min(100, Number.parseFloat(e.target.value || '0') || 0));
     if (e.target.classList.contains('exact-check')) {
       trait.distribution = e.target.checked ? 'exact' : 'weighted';
       if (e.target.checked && trait.exactCount == null) trait.exactCount = 0;
       renderTraitSetup();
     }
     if (e.target.classList.contains('exact-count')) trait.exactCount = Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0);
+    if (e.target.classList.contains('percent-input')) {
+      const layer = getLayer(layerId);
+      if (layer && state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+        const total = percentTotal(layer);
+        const section = e.target.closest('.trait-config-layer');
+      }
+    }
+  });
+  el.traitSetup.addEventListener('click', e => {
+    const autoFillBtn = e.target.closest('.autofill-btn');
+    if (autoFillBtn) {
+      autoFillLayerPercentages(autoFillBtn.dataset.layerId);
+      return;
+    }
+    const moveBtn = e.target.closest('.move-trait');
+    if (moveBtn) {
+      moveTrait(moveBtn.dataset.layerId, moveBtn.dataset.traitId, moveBtn.dataset.dir);
+      return;
+    }
   });
 
   // Manifest imports / templates

@@ -15,8 +15,11 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
   - Choose exact trait amounts.
   - Build exact token IDs visually from the uploaded layers.
   - Upload a premade CSV/JSON collection list.
+- **Generate for me** now supports either **rarity tiers** or **exact percentages** per layer.
+- Percentage mode validates each layer against **100% total** and includes **Auto Fill** from most-common to least-common order.
 - Common / Uncommon / Rare / Very Rare / Legendary weighting.
 - Hard **exact-count** traits such as “exactly 250 Green Shirts.”
+- Optional **None** trait per layer, with toggleable enable/disable and rarity/percentage support.
 - Imported token recipes are rendered from the uploaded layers; the import does **not** contain finished NFT images.
 - Full or partial token recipes. A partial recipe locks only the specified layers and lets the generator fill the rest.
 - Visual manual curator for exact token numbers, using the same uploaded-layer recipe system as CSV/JSON import.
@@ -32,6 +35,7 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Rule conflict validation/repair attempts without changing locked imported choices.
 - Duplicate-combination reporting.
 - Canvas-rendered NFT previews from the uploaded layers.
+- Pixel-art previews render with crisp nearest-neighbor scaling instead of fuzzy interpolation.
 - Export final collection manifest as JSON.
 - Export final collection manifest as CSV.
 - Export a prototype launch package.
