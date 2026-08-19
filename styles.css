@@ -333,3 +333,67 @@ body[data-mode="advanced"] .simple-only { display: none !important; }
   .trait-config-header-rich { flex-direction: column; align-items: stretch; }
   .trait-header-controls { justify-content: flex-start; }
 }
+
+/* v3: drag-and-drop trait rarity ordering */
+.rarity-order-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(217,193,140,.035);
+  color: var(--muted);
+  font-size: 10px;
+}
+.drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  background: #151515;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  font-size: 17px;
+  line-height: 1;
+}
+.drag-handle:hover { color: var(--accent); border-color: #65583c; }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle.mini {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  pointer-events: none;
+}
+.trait-sortable {
+  position: relative;
+  transition: opacity .12s ease, background-color .12s ease, box-shadow .12s ease;
+}
+.trait-sortable.dragging {
+  opacity: .38;
+  background: rgba(217,193,140,.06);
+}
+.trait-sortable.drag-over-before::before,
+.trait-sortable.drag-over-after::after {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  left: 5px;
+  right: 5px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.trait-sortable.drag-over-before::before { top: 2px; }
+.trait-sortable.drag-over-after::after { bottom: 2px; }
+.sortable-grid { position: relative; }
+
+@media (max-width: 700px) {
+  .trait-header-controls { width: 100%; }
+  .trait-header-controls .mini-select { flex: 1 1 180px; }
+  .trait-header-controls .mini-select select { width: 100%; }
+}

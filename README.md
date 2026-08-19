@@ -16,7 +16,9 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
   - Build exact token IDs visually from the uploaded layers.
   - Upload a premade CSV/JSON collection list.
 - **Generate for me** now supports either **rarity tiers** or **exact percentages** per layer.
-- Percentage mode validates each layer against **100% total** and includes **Auto Fill** from most-common to least-common order.
+- Percentage mode validates each layer against **100% total** and includes **Auto Fill** based on the creator’s trait order.
+- Percentage rarity order is **drag-and-drop** — grab the handle on a trait card and move it into place.
+- Each layer can choose **Descending — common first** or **Ascending — rarest first** before Auto Fill.
 - Common / Uncommon / Rare / Very Rare / Legendary weighting.
 - Hard **exact-count** traits such as “exactly 250 Green Shirts.”
 - Optional **None** trait per layer, with toggleable enable/disable and rarity/percentage support.

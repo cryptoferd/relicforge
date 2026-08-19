@@ -33,6 +33,7 @@
     compilerReport: null,
     imageWidth: 1000,
     imageHeight: 1000,
+    draggedTrait: null,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -230,7 +231,11 @@
       very_steep: 2.6,
     };
     const power = powers[layer.autoFillStyle] || 1.35;
-    const weights = layer.traits.map((_, index) => Math.pow(layer.traits.length - index, power));
+    const mostCommonFirst = layer.rarityOrder !== 'least_to_most';
+    const weights = layer.traits.map((_, index) => {
+      const rank = mostCommonFirst ? (layer.traits.length - index) : (index + 1);
+      return Math.pow(rank, power);
+    });
     const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
     const raw = layer.traits.map((trait, index) => ({ id: trait.id, value: (weights[index] / totalWeight) * 100 }));
     const floors = raw.map(item => ({ ...item, floor: Math.floor(item.value * 100) / 100, remainder: item.value - Math.floor(item.value * 100) / 100 }));
@@ -270,16 +275,20 @@
     return errors;
   }
 
-  function moveTrait(layerId, traitId, dir) {
+  function reorderTrait(layerId, traitId, targetTraitId, placeAfter = false) {
     const layer = getLayer(layerId);
-    if (!layer) return;
-    const index = layer.traits.findIndex(trait => trait.id === traitId);
-    if (index < 0) return;
-    const nextIndex = dir === 'up' ? index - 1 : index + 1;
-    if (nextIndex < 0 || nextIndex >= layer.traits.length) return;
-    [layer.traits[index], layer.traits[nextIndex]] = [layer.traits[nextIndex], layer.traits[index]];
+    if (!layer || traitId === targetTraitId) return;
+    const fromIndex = layer.traits.findIndex(trait => trait.id === traitId);
+    const targetIndexBeforeRemoval = layer.traits.findIndex(trait => trait.id === targetTraitId);
+    if (fromIndex < 0 || targetIndexBeforeRemoval < 0) return;
+    const [moved] = layer.traits.splice(fromIndex, 1);
+    let targetIndex = layer.traits.findIndex(trait => trait.id === targetTraitId);
+    if (targetIndex < 0) targetIndex = layer.traits.length;
+    if (placeAfter) targetIndex += 1;
+    layer.traits.splice(targetIndex, 0, moved);
     renderTraitSetup();
   }
+
 
   async function loadArtwork(files) {
     const imageFiles = [...files].filter(file => /^image\/(png|webp|jpeg)$/i.test(file.type) || /\.(png|webp|jpe?g)$/i.test(file.name));
@@ -318,6 +327,7 @@
         allowNone: false,
         rarityMode: 'tier',
         autoFillStyle: 'gradual',
+        rarityOrder: 'most_to_least',
         traits: layerFiles.map((file, traitIndex) => {
           const meta = metaMap.get(file) || { width: 0, height: 0 };
           return {
@@ -469,25 +479,28 @@
                   <option value="very_steep" ${layer.autoFillStyle === 'very_steep' ? 'selected' : ''}>Very steep</option>
                 </select>
               </label>
+              <label class="mini-select">Rarity order
+                <select class="layer-rarity-order" data-layer-id="${escapeHtml(layer.id)}">
+                  <option value="most_to_least" ${layer.rarityOrder !== 'least_to_most' ? 'selected' : ''}>Descending — common first</option>
+                  <option value="least_to_most" ${layer.rarityOrder === 'least_to_most' ? 'selected' : ''}>Ascending — rarest first</option>
+                </select>
+              </label>
               <button type="button" class="ghost-btn small-btn autofill-btn" data-layer-id="${escapeHtml(layer.id)}">Auto Fill</button>
               <div class="percent-total ${pctClass}">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>
             ` : ''}
           </div>
         </div>
-        <div class="trait-config-grid">
+        ${autoMode && layer.rarityMode === 'percentage' ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Drag traits into rarity order. Auto Fill follows the selected ascending/descending direction.</div>` : ''}
+        <div class="trait-config-grid ${autoMode && layer.rarityMode === 'percentage' ? 'sortable-grid' : ''}">
           ${layer.traits.map((trait, traitIndex) => `
-            <div class="trait-config" data-trait-id="${escapeHtml(trait.id)}">
+            <div class="trait-config ${autoMode && layer.rarityMode === 'percentage' ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
               ${trait.isNone
                 ? '<div class="trait-config-placeholder">None</div>'
                 : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
               <div>
                 <div class="trait-config-topline">
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
-                  ${autoMode && layer.rarityMode === 'percentage' ? `
-                    <div class="order-controls">
-                      <button type="button" class="icon-btn move-trait" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" data-dir="up" ${traitIndex === 0 ? 'disabled' : ''}>↑</button>
-                      <button type="button" class="icon-btn move-trait" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" data-dir="down" ${traitIndex === layer.traits.length - 1 ? 'disabled' : ''}>↓</button>
-                    </div>` : ''}
+                  ${autoMode && layer.rarityMode === 'percentage' ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
                 </div>
                 <div class="trait-config-controls ${autoMode && layer.rarityMode === 'percentage' ? 'percent-mode' : ''}">
                   ${autoMode && layer.rarityMode === 'percentage'
@@ -1365,6 +1378,7 @@
         allowNone: layer.allowNone,
         rarityMode: layer.rarityMode,
         autoFillStyle: layer.autoFillStyle,
+        rarityOrder: layer.rarityOrder,
         traits: layer.traits.map(trait => ({
           name: trait.name,
           file: trait.filename,
@@ -1501,6 +1515,12 @@
       layer.autoFillStyle = e.target.value;
       return;
     }
+    if (e.target.classList.contains('layer-rarity-order')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      if (!layer) return;
+      layer.rarityOrder = e.target.value;
+      return;
+    }
 
     const config = e.target.closest('[data-trait-id]');
     if (!config) return;
@@ -1526,13 +1546,47 @@
     const autoFillBtn = e.target.closest('.autofill-btn');
     if (autoFillBtn) {
       autoFillLayerPercentages(autoFillBtn.dataset.layerId);
-      return;
     }
-    const moveBtn = e.target.closest('.move-trait');
-    if (moveBtn) {
-      moveTrait(moveBtn.dataset.layerId, moveBtn.dataset.traitId, moveBtn.dataset.dir);
-      return;
+  });
+
+  // Drag-and-drop rarity ordering in Generate For Me percentage mode.
+  el.traitSetup.addEventListener('dragstart', e => {
+    const handle = e.target.closest('.drag-handle[draggable="true"]');
+    if (!handle) return;
+    const card = handle.closest('.trait-sortable');
+    if (!card) return;
+    state.draggedTrait = { layerId: card.dataset.layerId, traitId: card.dataset.traitId };
+    card.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.traitId);
     }
+  });
+  el.traitSetup.addEventListener('dragover', e => {
+    const card = e.target.closest('.trait-sortable');
+    if (!card || !state.draggedTrait || card.dataset.layerId !== state.draggedTrait.layerId || card.dataset.traitId === state.draggedTrait.traitId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    $$('.trait-sortable.drag-over-before, .trait-sortable.drag-over-after', el.traitSetup).forEach(item => item.classList.remove('drag-over-before', 'drag-over-after'));
+    const rect = card.getBoundingClientRect();
+    const horizontal = rect.width > rect.height * 1.35;
+    const placeAfter = horizontal ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
+    card.classList.add(placeAfter ? 'drag-over-after' : 'drag-over-before');
+  });
+  el.traitSetup.addEventListener('drop', e => {
+    const card = e.target.closest('.trait-sortable');
+    if (!card || !state.draggedTrait || card.dataset.layerId !== state.draggedTrait.layerId) return;
+    e.preventDefault();
+    const rect = card.getBoundingClientRect();
+    const horizontal = rect.width > rect.height * 1.35;
+    const placeAfter = horizontal ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
+    const dragged = state.draggedTrait;
+    state.draggedTrait = null;
+    reorderTrait(dragged.layerId, dragged.traitId, card.dataset.traitId, placeAfter);
+  });
+  el.traitSetup.addEventListener('dragend', () => {
+    state.draggedTrait = null;
+    $$('.trait-sortable.dragging, .trait-sortable.drag-over-before, .trait-sortable.drag-over-after', el.traitSetup).forEach(item => item.classList.remove('dragging', 'drag-over-before', 'drag-over-after'));
   });
 
   // Manifest imports / templates
