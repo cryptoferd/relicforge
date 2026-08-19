@@ -1,6 +1,26 @@
-# Relic Forge — Collection Builder Prototype
+# Relic Forge — Landing Page + Studio Prototype (v8)
+
+This revision adds a public-facing Relic Forge landing page and consolidates the builder into one clear Studio experience. The attached RF artwork is included locally in the package.
+
+## v8 additions
+
+- New **Relic Forge landing page** before entering the Studio.
+- Greyscale / machined-steel visual direction using the supplied RF mark and hero artwork.
+- Removed the Simple / Advanced mode switch; all useful controls now live in one Studio.
+- Rename **trait categories/layers** directly in Artwork.
+- Rename individual **traits** directly in Artwork.
+- Percentage totals now update **live while typing** and clearly show under/over/valid status.
+- New **Equal Split** action distributes 100% across all traits in a category as evenly as hundredths allow.
+- Existing Auto Fill, ascending/descending rarity order, drag/drop trait order, drag/drop layer order, None traits, rule preflight, rule examples, SVG previews, exact tokens, and CSV/JSON imports are preserved.
 
 A local-first test build for the Relic Forge generative NFT launchpad concept.
+
+## v7 additions
+
+- Live rule feasibility checking on the Rules page.
+- Warnings based on current percentages, exact counts, collection supply, exclusions, and locked/imported token recipes.
+- Small SVG example generations for each saved rule.
+- Quick **Adjust Percentages / Counts** action from a tight/impossible rule.
 
 This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with no backend, database, wallet dependency, or build step. Artwork stays in the browser while you test the collection-building workflow.
 
@@ -9,7 +29,7 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Upload an artwork folder containing layer folders.
 - Auto-detect layers and traits from folder/file names.
 - Preview uploaded artwork and change layer render order, including **drag-and-drop layer/category ordering**.
-- **Simple / Advanced** mode toggle.
+- One unified Studio interface with progressively revealed controls.
 - Four collection workflows:
   - Generate for me.
   - Choose exact trait amounts.
@@ -26,6 +46,10 @@ This prototype is intentionally **static**: HTML + CSS + vanilla JavaScript with
 - Full or partial token recipes. A partial recipe locks only the specified layers and lets the generator fill the rest.
 - Visual manual curator for exact token numbers, using the same uploaded-layer recipe system as CSV/JSON import.
 - Shared trait rules that can apply to **many traits across multiple layers at once**.
+- **Rules-page preflight checks** compare every rule against the current percentages, rarity-derived counts, exact counts, supply, and locked token recipes before full collection generation.
+- Rule health badges show **Looks good**, **Tight**, or **Needs changes**, with plain-English capacity/overlap explanations.
+- Each saved rule renders up to **3 small SVG example NFTs** showing valid outcomes under that rule and the current collection settings.
+- Draft rules are checked live before you click **Add Rule**.
 - Rule types:
   - Only works with
   - Doesn't work with

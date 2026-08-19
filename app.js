@@ -18,7 +18,6 @@
   };
 
   const state = {
-    mode: 'simple',
     step: 1,
     buildMode: 'auto',
     layers: [],
@@ -41,6 +40,8 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
   const el = {
+    landingPage: $('#landingPage'),
+    studioApp: $('#studioApp'),
     folderInput: $('#folderInput'),
     uploadZone: $('#uploadZone'),
     layerList: $('#layerList'),
@@ -68,6 +69,7 @@
     sourceTraitPicker: $('#sourceTraitPicker'),
     targetTraitPicker: $('#targetTraitPicker'),
     ruleSentence: $('#ruleSentence'),
+    rulePreflight: $('#rulePreflight'),
     addRuleBtn: $('#addRuleBtn'),
     rulesList: $('#rulesList'),
     seedInput: $('#seedInput'),
@@ -224,6 +226,36 @@
     return layer.traits.reduce((sum, trait) => sum + (Number.parseFloat(trait.percentage || '0') || 0), 0);
   }
 
+
+  function updatePercentTotalUI(layerId) {
+    const layer = getLayer(layerId);
+    if (!layer) return;
+    const total = percentTotal(layer);
+    const diff = Number((total - 100).toFixed(2));
+    const valid = Math.abs(diff) <= 0.01;
+    const node = $(`.trait-config-layer[data-layer-id="${CSS.escape(layerId)}"] .percent-total`, el.traitSetup);
+    if (!node) return;
+    node.classList.remove('valid', 'over', 'under');
+    node.classList.add(valid ? 'valid' : total > 100 ? 'over' : 'under');
+    node.textContent = `Total ${formatPercent(total)}% ${valid ? '✓' : total > 100 ? `· Over by ${formatPercent(Math.abs(diff))}%` : `· Add ${formatPercent(Math.abs(diff))}%`}`;
+  }
+
+  function equalizeLayerPercentages(layerId) {
+    const layer = getLayer(layerId);
+    if (!layer || !layer.traits.length) return;
+    const totalHundredths = 10000;
+    const base = Math.floor(totalHundredths / layer.traits.length);
+    let remainder = totalHundredths - (base * layer.traits.length);
+    layer.traits.forEach(trait => {
+      const hundredths = base + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder--;
+      trait.percentage = hundredths / 100;
+    });
+    renderTraitSetup();
+    if (state.step === 3) { updateRuleSentence(); renderRulesList(); }
+    showStatus(`${layer.name} split as evenly as possible across ${layer.traits.length} traits.`, 'success');
+  }
+
   function autoFillLayerPercentages(layerId) {
     const layer = getLayer(layerId);
     if (!layer) return;
@@ -276,6 +308,15 @@
       }
     }
     return errors;
+  }
+
+
+  function updateBuildContinueState() {
+    const button = $('.next-btn[data-next="3"]');
+    if (!button) return;
+    const errors = validatePercentageLayers();
+    button.disabled = errors.length > 0;
+    button.title = errors.length ? errors[0] : '';
   }
 
   function reorderTrait(layerId, traitId, targetTraitId, placeAfter = false) {
@@ -393,7 +434,10 @@
         <div class="layer-card-header">
           <div class="layer-title">
             <span class="layer-index">${index + 1}</span>
-            <div><strong>${escapeHtml(layer.name)}</strong><small>${layer.traits.length} traits · rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small></div>
+            <div class="layer-title-edit">
+              <label>Trait category<input class="layer-name-input" data-layer-id="${escapeHtml(layer.id)}" type="text" value="${escapeHtml(layer.name)}" maxlength="80" aria-label="Rename trait category ${escapeHtml(layer.name)}" /></label>
+              <small>${layer.traits.length} traits · rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small>
+            </div>
           </div>
           <div class="layer-actions">
             <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">⠿</span>
@@ -403,9 +447,9 @@
         </div>
         <div class="trait-thumbs">
           ${layer.traits.slice(0, 24).map(trait => `
-            <div class="trait-thumb">
+            <div class="trait-thumb" data-trait-id="${escapeHtml(trait.id)}">
               ${traitPreviewMarkup(trait)}
-              <span title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</span>
+              <input class="trait-name-input" data-trait-id="${escapeHtml(trait.id)}" type="text" value="${escapeHtml(trait.name)}" maxlength="80" aria-label="Rename trait ${escapeHtml(trait.name)}" ${trait.isNone ? 'disabled title="None is a system trait"' : ''} />
             </div>
           `).join('')}
           ${layer.traits.length > 24 ? `<div class="trait-thumb"><div class="thumb-box">+${layer.traits.length - 24}</div><span>more traits</span></div>` : ''}
@@ -465,13 +509,14 @@
     }
 
     const showExact = state.buildMode === 'exact';
-    const showTraitControls = state.buildMode !== 'manifest' || state.mode === 'advanced';
+    const showTraitControls = state.buildMode !== 'manifest';
     const autoMode = state.buildMode === 'auto';
     if (!showTraitControls) {
       el.traitSetup.innerHTML = `
         <div class="validation-box">
           Your uploaded collection list will choose the layers for defined token IDs. Any missing traits or token IDs will be filled using the current rarity settings.
         </div>`;
+      updateBuildContinueState();
       return;
     }
 
@@ -513,7 +558,8 @@
                 </select>
               </label>
               <button type="button" class="ghost-btn small-btn autofill-btn" data-layer-id="${escapeHtml(layer.id)}">Auto Fill</button>
-              <div class="percent-total ${pctClass}">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>
+              <button type="button" class="ghost-btn small-btn equalize-btn" data-layer-id="${escapeHtml(layer.id)}">Equal Split</button>
+              <div class="percent-total ${pctClass}" aria-live="polite">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>
             ` : ''}
           </div>
         </div>
@@ -544,6 +590,7 @@
         </div>
       </section>`;
     }).join('');
+    updateBuildContinueState();
   }
 
   function setBuildMode(mode) {
@@ -637,14 +684,6 @@
     }).join('') + (entries.length > 100 ? `<div class="empty-state">+ ${entries.length - 100} more curated tokens</div>` : '');
   }
 
-  function setMode(mode) {
-    state.mode = mode;
-    document.body.dataset.mode = mode;
-    $$('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
-    renderTraitSetup();
-    showStatus(mode === 'simple' ? 'Simple Mode: only the controls you need.' : 'Advanced Mode: exact counts and deeper controls are now visible.');
-  }
-
   function gotoStep(step) {
     state.step = step;
     $$('.step-panel').forEach(panel => panel.classList.toggle('active', Number(panel.dataset.panel) === step));
@@ -654,7 +693,7 @@
       btn.classList.toggle('complete', n < step);
     });
     if (step === 2) renderTraitSetup();
-    if (step === 3) renderRulePickers();
+    if (step === 3) { renderRulePickers(); renderRulesList(); updateRuleSentence(); }
     if (step === 4 && !state.compiledTokens.length) buildCollection();
     if (step === 5) updateLaunchSummary();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -873,6 +912,7 @@
     }
     el.ruleSentence.textContent = sentence;
     el.addRuleBtn.disabled = !(sources.length && targets.length);
+    renderDraftRulePreflight();
   }
 
   function humanList(items, max = 5) {
@@ -881,6 +921,323 @@
     if (clipped.length === 1) return clipped[0] + suffix;
     if (clipped.length === 2) return `${clipped[0]} and ${clipped[1]}${suffix}`;
     return `${clipped.slice(0, -1).join(', ')}, and ${clipped.at(-1)}${suffix}`;
+  }
+
+
+  function groupTraitIdsByLayer(traitIds) {
+    const groups = new Map();
+    for (const traitId of traitIds) {
+      const trait = getTrait(traitId);
+      if (!trait) continue;
+      if (!groups.has(trait.layerId)) groups.set(trait.layerId, []);
+      groups.get(trait.layerId).push(traitId);
+    }
+    return groups;
+  }
+
+  function estimatedLayerCounts(layer) {
+    const supply = getSupply();
+    const counts = new Map(layer.traits.map(trait => [trait.id, 0]));
+    const notes = [];
+
+    if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+      const total = percentTotal(layer);
+      if (Math.abs(total - 100) > 0.01) notes.push(`${layer.name} percentages currently total ${formatPercent(total)}%, not 100%.`);
+      for (const trait of layer.traits) {
+        counts.set(trait.id, Math.max(0, Math.round(supply * (Number.parseFloat(trait.percentage || '0') || 0) / 100)));
+      }
+      return { counts, notes, precise: Math.abs(total - 100) <= 0.01 };
+    }
+
+    let exactTotal = 0;
+    const weighted = [];
+    for (const trait of layer.traits) {
+      if (trait.distribution === 'exact') {
+        const count = Math.max(0, Number.parseInt(trait.exactCount || '0', 10) || 0);
+        counts.set(trait.id, count);
+        exactTotal += count;
+      } else {
+        weighted.push({ id: trait.id, weight: rarityWeights[trait.rarity] || 1 });
+      }
+    }
+
+    const remaining = Math.max(0, supply - exactTotal);
+    if (exactTotal > supply) notes.push(`${layer.name} exact counts exceed the ${supply.toLocaleString()} token supply.`);
+    if (weighted.length && remaining > 0) {
+      const alloc = largestRemainder(remaining, weighted);
+      for (const item of weighted) counts.set(item.id, alloc.get(item.id) || 0);
+    }
+    return { counts, notes, precise: state.buildMode === 'exact' };
+  }
+
+  function currentCountEstimates() {
+    return new Map(state.layers.map(layer => [layer.id, estimatedLayerCounts(layer)]));
+  }
+
+  function traitCountFromEstimates(traitId, estimates) {
+    const trait = getTrait(traitId);
+    if (!trait) return 0;
+    return estimates.get(trait.layerId)?.counts.get(traitId) || 0;
+  }
+
+  function selectedCountInLayer(traitIds, layerId, estimates) {
+    return traitIds.reduce((sum, traitId) => {
+      const trait = getTrait(traitId);
+      return sum + (trait?.layerId === layerId ? traitCountFromEstimates(traitId, estimates) : 0);
+    }, 0);
+  }
+
+  function lockedRuleConflicts(rule) {
+    const conflicts = [];
+    const targetGroups = targetsByLayer(rule);
+    for (const [tokenId, recipe] of state.manifestTokens.entries()) {
+      if (tokenId < 1 || tokenId > getSupply()) continue;
+      const selected = Object.values(recipe);
+      if (!rule.sources.some(id => selected.includes(id))) continue;
+      let conflict = false;
+      if (rule.type === 'excludes') {
+        conflict = rule.targets.some(id => selected.includes(id));
+      } else {
+        for (const [layerId, allowed] of targetGroups) {
+          if (recipe[layerId] && !allowed.includes(recipe[layerId])) {
+            conflict = true;
+            break;
+          }
+        }
+      }
+      if (conflict) conflicts.push(tokenId);
+    }
+    return conflicts;
+  }
+
+  function rulePreflightAnalysis(rule) {
+    const supply = getSupply();
+    const estimates = currentCountEstimates();
+    const sourceGroups = groupTraitIdsByLayer(rule.sources);
+    const targetGroups = groupTraitIdsByLayer(rule.targets);
+    const sourceLayerCounts = [...sourceGroups.entries()].map(([layerId, ids]) => ({
+      layerId,
+      count: ids.reduce((sum, id) => sum + traitCountFromEstimates(id, estimates), 0),
+    }));
+    const sourceMin = sourceLayerCounts.length ? Math.max(...sourceLayerCounts.map(item => item.count)) : 0;
+    const sourceMax = Math.min(supply, sourceLayerCounts.reduce((sum, item) => sum + item.count, 0));
+    const messages = [];
+    const hardReasons = [];
+    const warningReasons = [];
+    const relevantLayers = new Set([...sourceGroups.keys(), ...targetGroups.keys()]);
+
+    for (const layerId of relevantLayers) {
+      const layerNotes = estimates.get(layerId)?.notes || [];
+      warningReasons.push(...layerNotes);
+    }
+
+    const lockedConflicts = lockedRuleConflicts(rule);
+    if (lockedConflicts.length) {
+      hardReasons.push(`${lockedConflicts.length} manually/imported token${lockedConflicts.length === 1 ? '' : 's'} already lock an invalid combination (${lockedConflicts.slice(0, 5).map(id => `#${id}`).join(', ')}${lockedConflicts.length > 5 ? '…' : ''}).`);
+    }
+
+    if (rule.type === 'excludes') {
+      const overlapIds = rule.sources.filter(id => rule.targets.includes(id));
+      const overlapCount = overlapIds.reduce((sum, id) => sum + traitCountFromEstimates(id, estimates), 0);
+      if (overlapCount > 0) {
+        hardReasons.push(`${humanList(overlapIds.map(traitLabel), 3)} is on both sides of this exclusion, so those occurrences would always violate the rule.`);
+      }
+
+      for (const [sourceLayerId, sourceIds] of sourceGroups) {
+        const sourceCount = selectedCountInLayer(sourceIds, sourceLayerId, estimates);
+        for (const [targetLayerId, targetIds] of targetGroups) {
+          if (sourceLayerId === targetLayerId) continue;
+          const targetCount = selectedCountInLayer(targetIds, targetLayerId, estimates);
+          const unavoidable = Math.max(0, sourceCount + targetCount - supply);
+          if (unavoidable > 0) {
+            hardReasons.push(`Current counts force at least ${unavoidable.toLocaleString()} overlap${unavoidable === 1 ? '' : 's'} between ${getLayer(sourceLayerId)?.name || 'the source layer'} and ${getLayer(targetLayerId)?.name || 'the excluded layer'}.`);
+          } else if (sourceCount + targetCount > supply * 0.9) {
+            warningReasons.push(`${getLayer(sourceLayerId)?.name || 'Source'} + ${getLayer(targetLayerId)?.name || 'excluded traits'} use about ${Math.round((sourceCount + targetCount) / supply * 100)}% of available slots, so the generator has little room to keep them apart.`);
+          }
+        }
+      }
+      messages.push(`Estimated source coverage: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}–${sourceMax.toLocaleString()}`} of ${supply.toLocaleString()} NFTs.`);
+    } else {
+      for (const [targetLayerId, allowedIds] of targetGroups) {
+        const sameLayerBadSources = (sourceGroups.get(targetLayerId) || []).filter(id => !allowedIds.includes(id) && traitCountFromEstimates(id, estimates) > 0);
+        if (sameLayerBadSources.length) {
+          hardReasons.push(`${humanList(sameLayerBadSources.map(traitLabel), 3)} cannot require a different ${getLayer(targetLayerId)?.name || 'trait'} at the same time because an NFT can only use one trait from that layer.`);
+        }
+
+        const capacity = allowedIds.reduce((sum, id) => sum + traitCountFromEstimates(id, estimates), 0);
+        const targetName = getLayer(targetLayerId)?.name || 'matching layer';
+        messages.push(`${targetName} provides about ${capacity.toLocaleString()} compatible slot${capacity === 1 ? '' : 's'}.`);
+        if (capacity < sourceMin) {
+          hardReasons.push(`This rule needs at least ${sourceMin.toLocaleString()} compatible ${targetName} slots, but your current rarity/count settings provide only about ${capacity.toLocaleString()}.`);
+        } else if (capacity < sourceMax) {
+          warningReasons.push(`This can work only if source traits overlap efficiently. The source may cover up to ${sourceMax.toLocaleString()} NFTs, while ${targetName} has about ${capacity.toLocaleString()} compatible slots.`);
+        } else if (capacity - sourceMax < Math.max(5, Math.round(supply * 0.02))) {
+          warningReasons.push(`${targetName} has very little headroom above the estimated source demand. Small manual changes could make the rule impossible.`);
+        }
+      }
+      messages.unshift(`Estimated source demand: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}–${sourceMax.toLocaleString()}`} NFT${sourceMax === 1 ? '' : 's'}.`);
+    }
+
+    let status = 'good';
+    let title = 'Looks compatible';
+    if (hardReasons.length) {
+      status = 'danger';
+      title = 'Conflict likely with current settings';
+    } else if (warningReasons.length) {
+      status = 'warning';
+      title = 'Possible, but this rule is tight';
+    }
+
+    return {
+      status,
+      title,
+      messages,
+      hardReasons,
+      warningReasons,
+      sourceMin,
+      sourceMax,
+      lockedConflicts,
+    };
+  }
+
+  function preflightMarkup(analysis, compact = false) {
+    const detail = [...analysis.hardReasons, ...analysis.warningReasons, ...analysis.messages];
+    const icon = analysis.status === 'good' ? '✓' : analysis.status === 'warning' ? '!' : '×';
+    return `<div class="preflight-status-row"><span class="preflight-icon">${icon}</span><strong>${escapeHtml(analysis.title)}</strong></div>${detail.length ? `<div class="preflight-details">${detail.slice(0, compact ? 2 : 5).map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}`;
+  }
+
+  function renderDraftRulePreflight() {
+    if (!el.rulePreflight) return;
+    if (!state.sourceSelected.size || !state.targetSelected.size) {
+      el.rulePreflight.className = 'rule-preflight draft neutral';
+      el.rulePreflight.textContent = 'Choose the traits above and Relic Forge will check the rule against your current rarity/count settings before you add it.';
+      return;
+    }
+    const draft = { id: 'draft-rule', type: state.ruleType, sources: [...state.sourceSelected], targets: [...state.targetSelected] };
+    const analysis = rulePreflightAnalysis(draft);
+    el.rulePreflight.className = `rule-preflight draft ${analysis.status}`;
+    el.rulePreflight.innerHTML = preflightMarkup(analysis, true);
+  }
+
+  function estimateWeightForTrait(trait, estimates) {
+    const count = traitCountFromEstimates(trait.id, estimates);
+    return Math.max(0.001, count || (rarityWeights[trait.rarity] || 1));
+  }
+
+  function weightedExamplePick(candidates, estimates, rng) {
+    if (!candidates.length) return null;
+    const weighted = candidates.map(trait => ({ trait, weight: estimateWeightForTrait(trait, estimates) }));
+    const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+    let cursor = rng() * total;
+    for (const item of weighted) {
+      cursor -= item.weight;
+      if (cursor <= 0) return item.trait;
+    }
+    return weighted[weighted.length - 1].trait;
+  }
+
+  function forceRuleForExample(token, rule, estimates, rng) {
+    if (!tokenHas(token, rule.sources)) return true;
+    if (rule.type === 'excludes') {
+      for (const [layerId, forbiddenIds] of groupTraitIdsByLayer(rule.targets)) {
+        if (!forbiddenIds.includes(token.traits[layerId])) continue;
+        const currentIsSource = rule.sources.includes(token.traits[layerId]);
+        if (currentIsSource) return false;
+        const layer = getLayer(layerId);
+        const candidates = (layer?.traits || []).filter(trait => !forbiddenIds.includes(trait.id));
+        const replacement = weightedExamplePick(candidates, estimates, rng);
+        if (!replacement) return false;
+        token.traits[layerId] = replacement.id;
+      }
+      return !ruleViolationCount(token, rule);
+    }
+
+    for (const [layerId, allowedIds] of groupTraitIdsByLayer(rule.targets)) {
+      if (allowedIds.includes(token.traits[layerId])) continue;
+      const currentIsSource = rule.sources.includes(token.traits[layerId]);
+      if (currentIsSource) return false;
+      const allowedTraits = allowedIds.map(getTrait).filter(Boolean);
+      const replacement = weightedExamplePick(allowedTraits, estimates, rng);
+      if (!replacement) return false;
+      token.traits[layerId] = replacement.id;
+    }
+    return !ruleViolationCount(token, rule);
+  }
+
+  function buildRuleExampleTokens(rule, desired = 3) {
+    const estimates = currentCountEstimates();
+    const rng = createRng(`RULE-EXAMPLE-${rule.id}-${getSupply()}`);
+    const examples = [];
+    const directImpossibleSources = new Set();
+    const targetGroups = groupTraitIdsByLayer(rule.targets);
+    for (const sourceId of rule.sources) {
+      const source = getTrait(sourceId);
+      if (!source) continue;
+      const targetSameLayer = targetGroups.get(source.layerId);
+      if (rule.type !== 'excludes' && targetSameLayer && !targetSameLayer.includes(sourceId)) directImpossibleSources.add(sourceId);
+      if (rule.type === 'excludes' && rule.targets.includes(sourceId)) directImpossibleSources.add(sourceId);
+    }
+    const usableSources = rule.sources.filter(id => !directImpossibleSources.has(id) && getTrait(id));
+    if (!usableSources.length) return [];
+
+    for (let attempt = 0; attempt < 40 && examples.length < desired; attempt++) {
+      const token = { tokenId: `rule-${examples.length + 1}`, traits: {} };
+      for (const layer of state.layers) {
+        const candidate = weightedExamplePick(layer.traits, estimates, rng);
+        if (candidate) token.traits[layer.id] = candidate.id;
+      }
+      const sourceId = usableSources[attempt % usableSources.length];
+      const source = getTrait(sourceId);
+      token.traits[source.layerId] = sourceId;
+      if (!forceRuleForExample(token, rule, estimates, rng)) continue;
+
+      // Try to make the sample compatible with the rest of the saved rule set too,
+      // so an example does not visually demonstrate one rule while obviously breaking another.
+      let valid = true;
+      for (let pass = 0; pass < 5; pass++) {
+        let changed = false;
+        for (const otherRule of state.rules) {
+          if (!tokenHas(token, otherRule.sources) || !ruleViolationCount(token, otherRule)) continue;
+          const before = JSON.stringify(token.traits);
+          if (!forceRuleForExample(token, otherRule, estimates, rng)) { valid = false; break; }
+          if (JSON.stringify(token.traits) !== before) changed = true;
+        }
+        if (!valid || !changed) break;
+      }
+      if (!valid || !tokenHas(token, rule.sources) || ruleViolationCount(token, rule)) continue;
+      if (state.rules.some(otherRule => ruleViolationCount(token, otherRule))) continue;
+
+      const sourceTrait = getTrait(sourceId);
+      const emphasized = [sourceTrait?.name];
+      if (rule.type !== 'excludes') {
+        for (const [layerId, allowed] of targetGroups) {
+          const chosen = getTrait(token.traits[layerId]);
+          if (chosen && allowed.includes(chosen.id) && chosen.id !== sourceId) emphasized.push(chosen.name);
+        }
+      }
+      token.exampleLabel = emphasized.filter(Boolean).join(' + ');
+      examples.push(token);
+    }
+    return examples;
+  }
+
+  async function renderRuleExamples(rule) {
+    const container = $(`[data-rule-examples="${rule.id}"]`, el.rulesList);
+    if (!container) return;
+    const examples = buildRuleExampleTokens(rule, 3);
+    if (!examples.length) {
+      container.innerHTML = '<div class="rule-example-empty">No valid example can be built from this rule as currently written.</div>';
+      return;
+    }
+    container.innerHTML = examples.map((token, index) => `
+      <div class="rule-example-card" data-rule-example-index="${index}">
+        <div class="rule-example-svg svg-preview-host" role="img" aria-label="Example NFT generated under this rule"></div>
+        <span>${escapeHtml(token.exampleLabel || 'Valid example')}</span>
+      </div>`).join('');
+    await Promise.all(examples.map(async (token, index) => {
+      const host = $(`[data-rule-example-index="${index}"] .rule-example-svg`, container);
+      await renderTokenToSvgHost(token, host);
+    }));
   }
 
   function addRule() {
@@ -915,11 +1272,24 @@
     }
     el.rulesList.innerHTML = state.rules.map(rule => {
       const layerCount = new Set(rule.sources.map(id => getTrait(id)?.layerId).filter(Boolean)).size;
-      return `<div class="saved-rule">
-        <div><strong>${escapeHtml(ruleSentence(rule))}</strong><small>${rule.sources.length} source trait(s) across ${layerCount} layer(s)</small></div>
-        <button class="rule-remove" data-rule-id="${escapeHtml(rule.id)}" type="button">Remove</button>
-      </div>`;
+      const analysis = rulePreflightAnalysis(rule);
+      const badgeText = analysis.status === 'good' ? 'Looks good' : analysis.status === 'warning' ? 'Tight' : 'Needs changes';
+      return `<article class="saved-rule saved-rule-expanded ${analysis.status}" data-rule-card="${escapeHtml(rule.id)}">
+        <div class="saved-rule-main">
+          <div class="saved-rule-copy">
+            <div class="saved-rule-title-row"><span class="rule-health-badge ${analysis.status}">${badgeText}</span><strong>${escapeHtml(ruleSentence(rule))}</strong></div>
+            <small>${rule.sources.length} source trait(s) across ${layerCount} layer(s)</small>
+          </div>
+          <button class="rule-remove" data-rule-id="${escapeHtml(rule.id)}" type="button">Remove</button>
+        </div>
+        <div class="rule-preflight ${analysis.status}">${preflightMarkup(analysis)}${analysis.status !== 'good' ? `<div class="rule-preflight-actions"><button type="button" class="ghost-btn rule-adjust-settings">Adjust Percentages / Counts</button></div>` : ''}</div>
+        <div class="rule-examples-section">
+          <div class="rule-examples-heading"><strong>Example outcomes</strong><span>Small samples using your current rarity/count settings and this rule.</span></div>
+          <div class="rule-examples-grid" data-rule-examples="${escapeHtml(rule.id)}"><div class="rule-example-loading">Rendering examples…</div></div>
+        </div>
+      </article>`;
     }).join('');
+    state.rules.forEach(rule => { renderRuleExamples(rule); });
   }
 
   function selectedLayerTraits(kind) {
@@ -1859,6 +2229,24 @@
     return files;
   }
 
+  function openStudio() {
+    el.landingPage?.classList.add('hidden');
+    el.studioApp?.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  function openLanding() {
+    el.studioApp?.classList.add('hidden');
+    el.landingPage?.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
+    const button = $(`#${id}`);
+    if (button) button.addEventListener('click', openStudio);
+  });
+  $('#studioHomeBtn')?.addEventListener('click', openLanding);
+
   // Artwork upload
   el.folderInput.addEventListener('change', e => loadArtwork(e.target.files));
   el.uploadZone.addEventListener('dragover', e => { e.preventDefault(); el.uploadZone.classList.add('dragover'); });
@@ -1910,8 +2298,33 @@
     $$('.layer-sortable.dragging, .layer-sortable.drag-over-before, .layer-sortable.drag-over-after', el.layerList).forEach(item => item.classList.remove('dragging', 'drag-over-before', 'drag-over-after'));
   });
 
+  el.layerList.addEventListener('change', e => {
+    if (e.target.classList.contains('layer-name-input')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      const nextName = e.target.value.trim();
+      if (!layer || !nextName) { if (layer) e.target.value = layer.name; return; }
+      layer.name = nextName;
+      renderTraitSetup();
+      renderManualBuilder();
+      renderRulePickers();
+      renderRulesList();
+      showStatus(`Category renamed to ${nextName}.`, 'success');
+      return;
+    }
+    if (e.target.classList.contains('trait-name-input')) {
+      const trait = getTrait(e.target.dataset.traitId);
+      const nextName = e.target.value.trim();
+      if (!trait || trait.isNone || !nextName) { if (trait) e.target.value = trait.name; return; }
+      trait.name = nextName;
+      renderTraitSetup();
+      renderManualBuilder();
+      renderRulePickers();
+      renderRulesList();
+      showStatus(`Trait renamed to ${nextName}.`, 'success');
+    }
+  });
+
   // Navigation and mode
-  $$('.mode-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
   $$('.step').forEach(btn => btn.addEventListener('click', () => {
     const target = Number(btn.dataset.step);
     if (target === 1 || state.layers.length) gotoStep(target);
@@ -1921,6 +2334,18 @@
 
   // Build mode + trait controls
   $$('.build-card').forEach(card => card.addEventListener('click', () => setBuildMode(card.dataset.buildMode)));
+  el.traitSetup.addEventListener('input', e => {
+    if (!e.target.classList.contains('percent-input')) return;
+    const config = e.target.closest('[data-trait-id]');
+    if (!config) return;
+    const trait = getTrait(config.dataset.traitId);
+    const layerId = config.dataset.layerId;
+    if (!trait || !layerId) return;
+    trait.percentage = Math.max(0, Math.min(100, Number.parseFloat(e.target.value || '0') || 0));
+    updatePercentTotalUI(layerId);
+    updateBuildContinueState();
+    if (state.step === 3) { updateRuleSentence(); renderRulesList(); }
+  });
   el.traitSetup.addEventListener('change', e => {
     const layerId = e.target.dataset.layerId || e.target.closest('[data-layer-id]')?.dataset.layerId;
     if (e.target.classList.contains('none-layer-toggle')) {
@@ -1969,18 +2394,17 @@
       renderTraitSetup();
     }
     if (e.target.classList.contains('exact-count')) trait.exactCount = Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0);
-    if (e.target.classList.contains('percent-input')) {
-      const layer = getLayer(layerId);
-      if (layer && state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
-        const total = percentTotal(layer);
-        const section = e.target.closest('.trait-config-layer');
-      }
-    }
+    if (e.target.classList.contains('percent-input')) { updatePercentTotalUI(layerId); updateBuildContinueState(); }
   });
   el.traitSetup.addEventListener('click', e => {
     const autoFillBtn = e.target.closest('.autofill-btn');
     if (autoFillBtn) {
       autoFillLayerPercentages(autoFillBtn.dataset.layerId);
+      return;
+    }
+    const equalizeBtn = e.target.closest('.equalize-btn');
+    if (equalizeBtn) {
+      equalizeLayerPercentages(equalizeBtn.dataset.layerId);
     }
   });
 
@@ -2073,6 +2497,13 @@
   }));
   el.addRuleBtn.addEventListener('click', addRule);
   el.rulesList.addEventListener('click', e => {
+    const adjustBtn = e.target.closest('.rule-adjust-settings');
+    if (adjustBtn) {
+      gotoStep(2);
+      el.traitSetup?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showStatus('Adjust the percentages, rarity tiers, or exact counts, then return to Rules. The rule check will refresh automatically.');
+      return;
+    }
     const btn = e.target.closest('.rule-remove');
     if (!btn) return;
     state.rules = state.rules.filter(rule => rule.id !== btn.dataset.ruleId);
@@ -2129,7 +2560,6 @@
   el.collectionSize.addEventListener('change', () => { renderTraitSetup(); if (state.buildMode === 'manual') renderManualBuilder(); });
 
   // Initial state
-  document.body.dataset.mode = state.mode;
   setBuildMode('auto');
   setRulesEnabled(false);
 })();

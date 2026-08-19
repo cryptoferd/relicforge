@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 620" role="img" aria-labelledby="title desc">
+  <title id="title">Relic Forge RF mark</title>
+  <desc id="desc">Standalone interlocked RF emblem with a clean machined-steel bevel.</desc>
+  <defs>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="82%" y2="100%">
+      <stop offset="0" stop-color="#e4e1d9"/>
+      <stop offset=".08" stop-color="#aaa9a3"/>
+      <stop offset=".28" stop-color="#858681"/>
+      <stop offset=".52" stop-color="#666865"/>
+      <stop offset=".76" stop-color="#464846"/>
+      <stop offset=".94" stop-color="#303230"/>
+      <stop offset="1" stop-color="#4d4f4c"/>
+    </linearGradient>
+    <linearGradient id="bevel" x1="10%" y1="4%" x2="88%" y2="96%">
+      <stop offset="0" stop-color="#f4f1e8"/>
+      <stop offset=".23" stop-color="#c4c3bc"/>
+      <stop offset=".5" stop-color="#858783"/>
+      <stop offset=".74" stop-color="#4b4e4b"/>
+      <stop offset="1" stop-color="#202321"/>
+    </linearGradient>
+    <path id="face" d="M50 42H650L592 124H440V220L354 307L410 392V307L474 232H600L544 308H495V474L382 596V486L215 232H336L365 203V153L336 124H180V334L325 553L102 371V108Z"/>
+  </defs>
+  <g>
+    <!-- A 4.5-unit visible machined bevel: continuous, shadow-free, and free of overlay seams. -->
+    <use href="#face" fill="none" stroke="#1c1f1d" stroke-width="9" stroke-linejoin="miter"/>
+    <use href="#face" fill="url(#steel)" stroke="url(#bevel)" stroke-width="4.5" stroke-linejoin="miter"/>
+  </g>
+</svg>
