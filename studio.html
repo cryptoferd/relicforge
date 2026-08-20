@@ -64,8 +64,8 @@
 <label class="upload-zone" for="folderInput" id="uploadZone">
 <div class="upload-icon">＋</div>
 <strong>Choose your artwork folder</strong>
-<span>PNG, WEBP, JPG · transparent PNG recommended</span>
-<input accept="image/png,image/webp,image/jpeg" directory="" id="folderInput" multiple="" type="file" webkitdirectory=""/>
+<span>PNG, WEBP, JPG, SVG · transparent PNG recommended</span>
+<input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" directory="" id="folderInput" multiple="" type="file" webkitdirectory=""/>
 </label>
 <div class="summary-strip hidden" id="artworkSummary"></div>
 <div class="layer-list" id="layerList"></div>
@@ -286,58 +286,142 @@
 </section>
 <!-- STEP 5 -->
 <section class="panel step-panel" data-panel="5">
-<div class="panel-heading">
-<div>
-<div class="eyebrow">STEP 5</div>
-<h2>Prepare to launch</h2>
-<p>This prototype stops before smart-contract deployment. The goal of this build is to validate the artwork → rules → exact collection workflow with your real layers.</p>
-</div>
-</div>
-<div class="launch-layout">
-<div class="launch-card">
-<h3>Collection</h3>
-<label class="field"><span>Name</span><input id="launchName" type="text"/></label>
-<label class="field"><span>Symbol</span><input id="launchSymbol" maxlength="12" type="text" value="RELIC"/></label>
-<label class="field"><span>Mint price</span><div class="input-suffix"><input id="mintPrice" min="0" step="0.001" type="number" value="0.01"/><span>ETH</span></div></label>
-<label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" max="10" min="0" step="0.5" type="number" value="5"/><span>%</span></div></label>
-</div>
-<div class="launch-card">
-<h3>Network</h3>
-<label class="field"><span>Chain</span>
-<select id="chainSelect">
-<option>Ethereum Mainnet</option>
-<option>Base</option>
-<option>Arbitrum One</option>
-<option>Optimism</option>
-<option>Polygon</option>
-<option>Avalanche C-Chain</option>
-<option>Robinhood Chain</option>
-<option>Custom EVM</option>
-</select>
-</label>
-<div class="prototype-note">
-<strong>Deployment module comes next.</strong>
-<p>The production version will deploy a tested ERC-721 template through a chain-agnostic factory, with the creator wallet retaining ownership.</p>
-</div>
-</div>
-<div class="launch-summary">
-<span>Ready for deployment integration</span>
-<strong id="launchSummaryTitle">Your collection</strong>
-<div id="launchSummaryDetails"></div>
-<button class="primary-btn" disabled="" type="button">Deploy Collection — Next Build</button>
-</div>
-</div>
-<div class="panel-footer">
-<button class="secondary-btn back-btn" data-back="4" type="button">Back</button>
-<button class="primary-btn" id="exportLaunchPackageBtn" type="button">Export Launch Package</button>
-</div>
+  <div class="panel-heading">
+    <div>
+      <div class="eyebrow">STEP 5</div>
+      <h2>Forge on Ethereum Sepolia</h2>
+      <p>Compile the finished Studio collection into onchain artwork + recipe DNA, estimate deployment cost, then deploy a real ERC-721 test collection through your connected wallet.</p>
+    </div>
+    <div class="forge-test-badge">SEPOLIA TEST MODE</div>
+  </div>
+
+  <div class="launch-layout forge-launch-layout">
+    <div class="launch-card">
+      <h3>Collection</h3>
+      <label class="field"><span>Name</span><input id="launchName" type="text"/></label>
+      <label class="field"><span>Symbol</span><input id="launchSymbol" maxlength="12" type="text" value="RELIC"/></label>
+      <label class="field"><span>Description</span><textarea id="launchDescription" rows="4">A fully onchain collection forged with Relic Forge.</textarea></label>
+      <label class="field"><span>Mint price</span><div class="input-suffix"><input id="mintPrice" min="0" step="0.001" type="number" value="0.001"/><span>ETH</span></div></label>
+      <label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" max="10" min="0" step="0.5" type="number" value="5"/><span>%</span></div></label>
+      <label class="field"><span>Royalty wallet</span><input id="royaltyWallet" placeholder="Connected wallet by default" type="text"/></label>
+    </div>
+
+    <div class="launch-card">
+      <h3>Reveal</h3>
+      <label class="reveal-choice selected" data-reveal-card="0">
+        <input checked name="revealMode" type="radio" value="0"/>
+        <span><strong>Forge Reveal</strong><small>Each mint shows Relic Forge's forging placeholder until secure randomness assigns one remaining recipe.</small></span>
+      </label>
+      <label class="reveal-choice" data-reveal-card="1">
+        <input name="revealMode" type="radio" value="1"/>
+        <span><strong>Creator Reveal</strong><small>All mints show your uploaded placeholder until you trigger the collection reveal.</small></span>
+      </label>
+      <label class="compact-upload forge-placeholder-upload hidden" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
+        <strong>Upload reveal placeholder</strong>
+        <span id="creatorPlaceholderName">PNG, WEBP, JPG, or SVG</span>
+        <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="creatorPlaceholderInput" type="file"/>
+      </label>
+      <div class="prototype-note">
+        <strong>Fair assignment</strong>
+        <p>The Sepolia build uses a clearly labeled test randomness contract so we can verify the reveal state machine. Production will replace it with verifiable randomness.</p>
+      </div>
+    </div>
+
+    <div class="launch-card">
+      <h3>Network + wallet</h3>
+      <label class="field"><span>Chain</span>
+        <select id="chainSelect" disabled><option>Ethereum Sepolia</option></select>
+      </label>
+      <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Wallet</button>
+      <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
+      <div class="forge-advanced">
+        <strong>Shared test infrastructure</strong>
+        <small>Deploy this once, then reuse the saved Factory for future Sepolia collections.</small>
+        <label class="field"><span>Factory</span><input id="factoryAddress" placeholder="Deploy below or paste existing factory" type="text"/></label>
+        <label class="field"><span>Randomness mock</span><input id="randomnessAddress" placeholder="Filled when test infrastructure is deployed" type="text"/></label>
+        <div class="inline-actions">
+          <button class="ghost-btn" id="compileForgeContractsBtn" type="button">Compile Contracts</button>
+          <button class="ghost-btn" id="deployForgeInfraBtn" type="button">Deploy Test Infrastructure</button>
+        </div>
+        <pre class="forge-log" id="forgeInfraStatus">Not compiled.</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="forge-workbench-grid">
+    <article class="forge-workbench-card forge-compiler-card">
+      <div class="forge-card-heading">
+        <div><span>ONCHAIN COMPILER</span><h3>Optimize + pack the finished collection</h3></div>
+        <button class="primary-btn" id="compileOnchainBtn" type="button">Compile for Onchain</button>
+      </div>
+      <div class="forge-progress"><div id="forgeCompileProgressBar"></div></div>
+      <div class="forge-inline-status" id="forgeCompileStatus">Build the collection in Step 4 first.</div>
+      <div class="forge-metrics" id="forgeCompileMetrics">
+        <div><span>Source art</span><strong>—</strong></div>
+        <div><span>Compiled art</span><strong>—</strong></div>
+        <div><span>DNA</span><strong>—</strong></div>
+        <div><span>Art shards</span><strong>—</strong></div>
+        <div><span>DNA shards</span><strong>—</strong></div>
+        <div><span>Reduction</span><strong>—</strong></div>
+      </div>
+      <div class="forge-two-col">
+        <div><h4>Validation</h4><div class="forge-check-list" id="forgeValidationList"></div></div>
+        <div><h4>Largest traits</h4><div class="forge-rows" id="forgeLargestTraits"></div></div>
+      </div>
+      <div class="forge-provenance" id="forgeProvenance">Provenance will be generated after compilation.</div>
+    </article>
+
+    <article class="forge-workbench-card">
+      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated Sepolia deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
+      <div class="forge-cost-total"><strong id="forgeEstimatedCost">—</strong><span id="forgeEstimatedGas">Compile first</span></div>
+      <div class="forge-rows" id="forgeCostBreakdown"></div>
+      <small class="forge-footnote">Live ETH cost uses the connected wallet provider's current Sepolia fee data. Final wallet gas estimation remains authoritative.</small>
+    </article>
+
+    <article class="forge-workbench-card forge-deploy-card">
+      <div class="forge-card-heading"><div><span>FORGE</span><h3>Deploy this collection</h3></div></div>
+      <div class="launch-summary">
+        <span>Current Studio collection</span>
+        <strong id="launchSummaryTitle">Your collection</strong>
+        <div id="launchSummaryDetails"></div>
+      </div>
+      <div class="forge-summary" id="forgeCompiledSummary">Compile for onchain before deployment.</div>
+      <button class="primary-btn forge-main-action" disabled id="forgeCollectionBtn" type="button">Forge Collection on Sepolia</button>
+      <div class="forge-deploy-list" id="forgeProgressList"></div>
+      <div class="forge-result hidden" id="forgeResult">
+        <span>Collection deployed</span>
+        <strong id="forgedCollectionAddress"></strong>
+        <a id="forgedEtherscanLink" rel="noreferrer" target="_blank">View on Sepolia Etherscan</a>
+      </div>
+    </article>
+
+    <article class="forge-workbench-card">
+      <div class="forge-card-heading"><div><span>TEST THE RESULT</span><h3>Mint + reveal + inspect</h3></div></div>
+      <div class="inline-actions forge-test-actions">
+        <button class="ghost-btn" disabled id="forgeMintTestBtn" type="button">Mint Test NFT</button>
+        <button class="ghost-btn" disabled id="forgeFulfillBtn" type="button">Fulfill Test Randomness</button>
+        <button class="ghost-btn" disabled id="forgeCreatorRevealBtn" type="button">Trigger Creator Reveal</button>
+      </div>
+      <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
+      <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
+      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable test controls.</pre>
+      <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
+    </article>
+  </div>
+
+  <div class="panel-footer">
+    <button class="secondary-btn back-btn" data-back="4" type="button">Back</button>
+    <button class="primary-btn" id="exportLaunchPackageBtn" type="button">Export Launch Package</button>
+  </div>
 </section>
 </main>
 <footer>
-<span>Relic Forge prototype · local-first collection compiler</span>
+<span>Relic Forge Studio · local-first collection compiler + Sepolia Forge test</span>
 <span>No artwork leaves your browser in this build.</span>
 </footer>
 </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./app.js" defer></script>
+  <script src="./forge.js" defer></script>
 </body>
 </html>

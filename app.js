@@ -2170,34 +2170,41 @@
 
   function updateLaunchSummary() {
     const name = el.collectionName.value.trim() || 'Untitled Collection';
-    el.launchName.value = name;
-    el.launchSummaryTitle.textContent = name;
-    const chain = $('#chainSelect').value;
-    const price = $('#mintPrice').value || '0';
-    const royalty = $('#royalty').value || '0';
+    if (el.launchName && document.activeElement !== el.launchName) el.launchName.value = name;
+    el.launchSummaryTitle.textContent = el.launchName?.value?.trim() || name;
+    const chain = $('#chainSelect')?.value || 'Ethereum Sepolia';
+    const price = $('#mintPrice')?.value || '0';
+    const royalty = $('#royalty')?.value || '0';
+    const reveal = $('input[name="revealMode"]:checked')?.value === '1' ? 'Creator Reveal' : 'Forge Reveal';
     const report = state.compilerReport;
     el.launchSummaryDetails.innerHTML = `
       <div class="launch-summary-details">
         <div class="launch-summary-row"><span>Supply</span><strong>${(report?.supply || getSupply()).toLocaleString()}</strong></div>
         <div class="launch-summary-row"><span>Network</span><strong>${escapeHtml(chain)}</strong></div>
+        <div class="launch-summary-row"><span>Reveal</span><strong>${escapeHtml(reveal)}</strong></div>
         <div class="launch-summary-row"><span>Mint price</span><strong>${escapeHtml(price)} ETH</strong></div>
         <div class="launch-summary-row"><span>Royalty</span><strong>${escapeHtml(royalty)}%</strong></div>
-        <div class="launch-summary-row"><span>Compiler</span><strong>${report && !report.ruleViolations && !report.exactIssues.length ? 'Valid ✓' : 'Needs review'}</strong></div>
+        <div class="launch-summary-row"><span>Studio compiler</span><strong>${report && !report.ruleViolations && !report.exactIssues.length ? 'Valid ✓' : 'Needs review'}</strong></div>
       </div>`;
   }
 
   function exportLaunchPackage() {
     const packageData = {
-      schema: 'relic-forge/launch-package@0.1',
+      schema: 'relic-forge/launch-package@0.2',
       launch: {
         name: el.launchName.value,
         symbol: $('#launchSymbol').value,
+        description: $('#launchDescription')?.value || '',
         chain: $('#chainSelect').value,
+        chainId: 11155111,
         mintPrice: $('#mintPrice').value,
         royaltyPercent: $('#royalty').value,
+        royaltyWallet: $('#royaltyWallet')?.value || '',
+        revealMode: $('input[name="revealMode"]:checked')?.value === '1' ? 'creator' : 'forge',
       },
       manifest: manifestObject(),
-      note: 'Prototype package. Smart-contract deployment is intentionally not included in this build.',
+      onchainCompile: window.RelicForgeForge?.getCompiledSummary?.() || null,
+      note: 'GitHub-ready Sepolia test package. Creator wallet deploys/owns the collection. Test randomness is not production VRF.',
     };
     downloadText(`${slug(el.launchName.value || 'relic-collection')}-launch-package.json`, JSON.stringify(packageData, null, 2));
   }
@@ -2555,9 +2562,24 @@
   // Project + launch exports
   $('#exportProjectBtn').addEventListener('click', () => downloadText(`${slug(el.collectionName.value)}-project.json`, JSON.stringify(projectConfig(), null, 2)));
   $('#exportLaunchPackageBtn').addEventListener('click', exportLaunchPackage);
-  ['chainSelect', 'mintPrice', 'royalty', 'launchName'].forEach(id => $(`#${id}`).addEventListener('input', updateLaunchSummary));
+  ['chainSelect', 'mintPrice', 'royalty', 'launchName'].forEach(id => $(`#${id}`)?.addEventListener('input', updateLaunchSummary));
+  $$('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateLaunchSummary));
   el.collectionName.addEventListener('input', () => { if (state.step === 5) updateLaunchSummary(); });
   el.collectionSize.addEventListener('change', () => { renderTraitSetup(); if (state.buildMode === 'manual') renderManualBuilder(); });
+
+  // Bridge used by the Sepolia Forge module. The Studio remains the source of truth;
+  // forge.js only reads the already-compiled collection and the original browser File objects.
+  window.RelicForgeStudioBridge = {
+    getState: () => state,
+    getManifest: manifestObject,
+    getProjectConfig: projectConfig,
+    getSupply,
+    getTrait,
+    getLayer,
+    traitToSvgFragment,
+    updateLaunchSummary,
+    showStatus,
+  };
 
   // Initial state
   setBuildMode('auto');
