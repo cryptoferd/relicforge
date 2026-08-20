@@ -18,10 +18,14 @@
 <span>Studio</span>
 </div>
 </a>
-<div class="topbar-actions">
+<div class="topbar-actions studio-project-actions">
+<button class="ghost-btn project-wallet-btn" id="projectWalletBtn" type="button">Connect Wallet</button>
+<button class="ghost-btn" disabled id="saveProjectBtn" type="button">Save Project</button>
+<button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
 <button class="ghost-btn" id="exportProjectBtn" type="button">Export Project</button>
 </div>
 </header>
+<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save editable projects in this browser.</div>
 <main>
 <section class="hero-panel studio-hero-panel">
 <div>
@@ -420,8 +424,38 @@
 <span>No artwork leaves your browser in this build.</span>
 </footer>
 </div>
+
+<div class="project-modal hidden" id="projectManagerModal" role="dialog" aria-modal="true" aria-labelledby="projectManagerTitle">
+  <div class="project-modal-backdrop" id="projectManagerBackdrop"></div>
+  <section class="project-modal-panel">
+    <div class="project-modal-heading">
+      <div>
+        <div class="eyebrow">WALLET PROJECTS</div>
+        <h2 id="projectManagerTitle">My Projects</h2>
+        <p>Full editable Studio saves are stored locally in this browser and scoped to the connected wallet.</p>
+      </div>
+      <button class="icon-btn" id="projectManagerCloseBtn" type="button" aria-label="Close project manager">×</button>
+    </div>
+    <div class="project-wallet-strip">
+      <span>Connected wallet</span>
+      <strong id="projectManagerWallet">No wallet connected</strong>
+    </div>
+    <div class="project-local-note">
+      <strong>Local-first save</strong>
+      <span>Artwork, layer settings, rules, compiled recipes, and launch settings stay in this browser. Use Export Project for a settings backup and keep your original artwork folder. Wallet saves are not cloud-synced yet.</span>
+    </div>
+    <div class="saved-project-list" id="projectList"></div>
+    <div class="project-storage-estimate" id="projectStorageEstimate"></div>
+    <div class="project-modal-actions">
+      <button class="ghost-btn" id="projectManagerSaveAsBtn" type="button">Save As New</button>
+      <button class="primary-btn" id="projectManagerSaveBtn" type="button">Save Current Project</button>
+    </div>
+  </section>
+</div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./app.js" defer></script>
   <script src="./forge.js" defer></script>
+  <script src="./project-storage.js" defer></script>
 </body>
 </html>

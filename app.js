@@ -2168,6 +2168,128 @@
     };
   }
 
+  function studioProjectSnapshot() {
+    return {
+      schema: 'relic-forge/studio-save@1',
+      savedAt: new Date().toISOString(),
+      ui: {
+        step: state.step,
+        collectionName: el.collectionName.value,
+        collectionSize: getSupply(),
+        seed: el.seedInput.value,
+      },
+      state: {
+        buildMode: state.buildMode,
+        rulesEnabled: state.rulesEnabled,
+        ruleType: state.ruleType,
+        imageWidth: state.imageWidth,
+        imageHeight: state.imageHeight,
+        manifestSourceName: state.manifestSourceName,
+        layers: state.layers.map(layer => ({
+          id: layer.id,
+          name: layer.name,
+          allowNone: layer.allowNone,
+          rarityMode: layer.rarityMode,
+          autoFillStyle: layer.autoFillStyle,
+          rarityOrder: layer.rarityOrder,
+          traits: layer.traits.map(trait => ({
+            id: trait.id,
+            layerId: trait.layerId,
+            name: trait.name,
+            filename: trait.filename,
+            file: trait.file || null,
+            width: trait.width,
+            height: trait.height,
+            rarity: trait.rarity,
+            distribution: trait.distribution,
+            exactCount: trait.exactCount,
+            percentage: trait.percentage,
+            isNone: !!trait.isNone,
+          })),
+        })),
+        rules: state.rules.map(rule => ({
+          id: rule.id,
+          type: rule.type,
+          sources: [...rule.sources],
+          targets: [...rule.targets],
+        })),
+        sourceSelected: [...state.sourceSelected],
+        targetSelected: [...state.targetSelected],
+        manifestTokens: [...state.manifestTokens.entries()].map(([tokenId, recipe]) => [tokenId, { ...recipe }]),
+        compiledTokens: state.compiledTokens.map(token => ({ tokenId: token.tokenId, traits: { ...token.traits } })),
+        compilerReport: state.compilerReport ? JSON.parse(JSON.stringify(state.compilerReport)) : null,
+      },
+    };
+  }
+
+  async function restoreStudioProjectSnapshot(snapshot) {
+    if (!snapshot || snapshot.schema !== 'relic-forge/studio-save@1' || !snapshot.state) {
+      throw new Error('This is not a supported Relic Forge Studio save.');
+    }
+
+    revokeArtworkUrls();
+    const saved = snapshot.state;
+    state.layers = (saved.layers || []).map(layer => ({
+      id: layer.id,
+      name: layer.name,
+      allowNone: !!layer.allowNone,
+      rarityMode: layer.rarityMode || 'tier',
+      autoFillStyle: layer.autoFillStyle || 'gradual',
+      rarityOrder: layer.rarityOrder || 'most_to_least',
+      traits: (layer.traits || []).map(trait => {
+        const file = trait.file || null;
+        return {
+          id: trait.id,
+          layerId: trait.layerId || layer.id,
+          name: trait.name,
+          filename: trait.filename,
+          file,
+          url: file ? URL.createObjectURL(file) : '',
+          width: Number(trait.width || saved.imageWidth || 0),
+          height: Number(trait.height || saved.imageHeight || 0),
+          rarity: trait.rarity || 'common',
+          distribution: trait.distribution || 'weighted',
+          exactCount: trait.exactCount ?? null,
+          percentage: Number(trait.percentage || 0),
+          image: null,
+          svgFragment: trait.isNone ? '' : null,
+          svgStats: trait.isNone ? { rectangles: 0, colors: 0, bytes: 0 } : null,
+          isNone: !!trait.isNone,
+        };
+      }),
+    }));
+    state.rulesEnabled = !!saved.rulesEnabled;
+    state.rules = (saved.rules || []).map(rule => ({ id: rule.id, type: rule.type, sources: [...(rule.sources || [])], targets: [...(rule.targets || [])] }));
+    state.ruleType = saved.ruleType || 'only_with';
+    state.sourceSelected = new Set(saved.sourceSelected || []);
+    state.targetSelected = new Set(saved.targetSelected || []);
+    state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
+    state.manifestSourceName = saved.manifestSourceName || '';
+    state.compiledTokens = (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) } }));
+    state.compilerReport = saved.compilerReport || null;
+    state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
+    state.imageHeight = Number(saved.imageHeight || state.layers[0]?.traits[0]?.height || 1000);
+
+    const ui = snapshot.ui || {};
+    el.collectionName.value = ui.collectionName || 'Untitled Collection';
+    el.collectionSize.value = Number(ui.collectionSize || Math.max(1, state.compiledTokens.length) || 1);
+    el.seedInput.value = ui.seed || 'RELIC-001';
+
+    renderArtwork();
+    setBuildMode(saved.buildMode || 'auto');
+    setRulesEnabled(!!saved.rulesEnabled);
+    renderTraitSetup();
+    renderManualBuilder();
+    renderRulePickers();
+    renderRulesList();
+    updateStep1State();
+    if (state.compilerReport) renderCompilerReport();
+    if (state.compiledTokens.length) await renderPreviewGrid();
+    gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
+    updateLaunchSummary();
+    showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
+  }
+
   function updateLaunchSummary() {
     const name = el.collectionName.value.trim() || 'Untitled Collection';
     if (el.launchName && document.activeElement !== el.launchName) el.launchName.value = name;
@@ -2573,6 +2695,8 @@
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
+    getStudioProjectSnapshot: studioProjectSnapshot,
+    restoreStudioProjectSnapshot,
     getSupply,
     getTrait,
     getLayer,

@@ -137,7 +137,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     address public randomnessProvider;
 
     bool public dataFinalized;
-    bool public sealed;
+    bool public isSealed;
     bytes32 public provenanceHash;
 
     address[] public artShards;
@@ -168,7 +168,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     uint256 private _entered;
 
     modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
-    modifier whenMutable() { require(!sealed, "SEALED"); _; }
+    modifier whenMutable() { require(!isSealed, "SEALED"); _; }
     modifier beforeFinalized() { require(!dataFinalized, "DATA_FINALIZED"); _; }
     modifier nonReentrant() { require(_entered == 0, "REENTRANT"); _entered = 1; _; _entered = 0; }
 
@@ -312,7 +312,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
 
     function sealCollection() external onlyOwner {
         require(dataFinalized, "NOT_FINALIZED");
-        sealed = true;
+        isSealed = true;
         emit CollectionSealed();
     }
 

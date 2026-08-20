@@ -447,6 +447,7 @@
       await forgeState.provider.send('eth_requestAccounts', []);
       forgeState.signer = await forgeState.provider.getSigner();
       forgeState.wallet = await forgeState.signer.getAddress();
+      window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
       $('forgeWalletStatus').textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
       $('connectForgeWalletBtn').textContent = 'Wallet Connected';
       if (!$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
@@ -718,6 +719,44 @@
     }
   }
 
+  function getForgeProjectState() {
+    return {
+      schema: 'relic-forge/forge-settings@1',
+      launchName: $('launchName')?.value || '',
+      launchSymbol: $('launchSymbol')?.value || '',
+      launchDescription: $('launchDescription')?.value || '',
+      mintPrice: $('mintPrice')?.value || '0',
+      royalty: $('royalty')?.value || '0',
+      royaltyWallet: $('royaltyWallet')?.value || '',
+      revealMode: currentRevealMode(),
+      placeholderFile: forgeState.placeholderFile || null,
+    };
+  }
+
+  function restoreForgeProjectState(saved) {
+    if (!saved || saved.schema !== 'relic-forge/forge-settings@1') return;
+    const values = {
+      launchName: saved.launchName,
+      launchSymbol: saved.launchSymbol,
+      launchDescription: saved.launchDescription,
+      mintPrice: saved.mintPrice,
+      royalty: saved.royalty,
+      royaltyWallet: saved.royaltyWallet,
+    };
+    for (const [id, value] of Object.entries(values)) {
+      const node = $(id);
+      if (node && value != null) node.value = value;
+    }
+    const reveal = Number(saved.revealMode || 0);
+    const radio = document.querySelector(`input[name="revealMode"][value="${reveal}"]`);
+    if (radio) radio.checked = true;
+    forgeState.placeholderFile = saved.placeholderFile || null;
+    if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, or SVG';
+    forgeState.compiled = null;
+    updateRevealUi();
+    bridge().updateLaunchSummary?.();
+  }
+
   function getCompiledSummary() {
     const c = forgeState.compiled;
     if (!c) return null;
@@ -759,6 +798,6 @@
     updateRevealUi();
   }
 
-  window.RelicForgeForge = { getCompiledSummary, compileForOnchain, refreshCostEstimate };
+  window.RelicForgeForge = { getCompiledSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState };
   bind();
 })();

@@ -1,14 +1,19 @@
-# Relic Forge v10 — Sepolia Forge Test
+## V10.2 wallet project saves + Sepolia compile fix
+
+- Renamed the Solidity state variable `sealed` to `isSealed` because `sealed` is reserved by Solidity 0.8.30.
+- No Studio workflow or collection format changes.
+
+# Relic Forge v10.2 — Wallet Projects + Sepolia Forge Test
 
 This build is based directly on **Relic Forge v9** and keeps the same flat, static GitHub/Vercel structure. It adds the first integrated onchain compilation + Ethereum Sepolia deployment flow to Studio Step 5.
 
 ## Drag/drop update for an existing GitHub repo
 
 1. Unzip this package.
-2. Open the `relic-forge-test-v10` folder.
+2. Open the `relic-forge-test-v10.2` folder.
 3. Drag **all files and folders inside it** into the root of the existing Relic Forge GitHub repository.
 4. Allow GitHub to replace the existing `index.html`, `studio.html`, `styles.css`, `app.js`, `README.md`, and `vercel.json` files.
-5. Keep the new `forge.js`, `contracts/`, and `js/` paths.
+5. Keep the new `forge.js`, `project-storage.js`, `contracts/`, and `js/` paths.
 6. Commit the changes.
 
 There is no npm install and no build step. GitHub Pages and Vercel can continue serving the repo as static files.
@@ -77,3 +82,14 @@ Then open:
 - official Solidity 0.8.30 `soljson` loaded by `js/solc-worker.js`
 
 The core Steps 1–4 remain local-first and do not upload artwork to a Relic Forge backend.
+
+## Wallet-scoped project saves (V10.2)
+
+Studio can now save the full editable project in browser IndexedDB under the connected EVM wallet address. The save includes artwork File/Blob data, layer and trait settings, rules, curated/imported token recipes, compiled collection state, and launch/reveal settings (including a Creator Reveal placeholder).
+
+- `Save Project` updates the currently opened wallet project.
+- `My Projects` lists only saves belonging to the connected wallet in this browser.
+- `Save As New` creates a separate copy under the same wallet.
+- These saves are local to the current browser/device; they are not cloud-synced or encrypted.
+- `Export Project` remains a settings export; keep the original artwork folder for portable recovery.
+
