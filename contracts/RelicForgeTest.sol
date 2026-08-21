@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 /*
- * RELIC FORGE — SEPOLIA TEST CONTRACTS
+ * RELIC FORGE - SEPOLIA TEST CONTRACTS
  * -------------------------------------
  * TEST ONLY. NOT AUDITED. NOT FOR MAINNET.
  *
@@ -464,7 +464,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
             ));
         } else {
             json = string(abi.encodePacked(
-                '{"name":"', name, " #", tokenId.toString(), ' — Forging","description":"', description,
+                '{"name":"', name, " #", tokenId.toString(), ' - Forging","description":"', description,
                 '","image":"data:image/svg+xml;base64,', RFBase64.encode(bytes(svg)), '","attributes":[]}'
             ));
         }

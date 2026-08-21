@@ -142,7 +142,9 @@
   async function saveProject({ asNew = false } = {}) {
     if (!wallet) await connectWallet();
     const studioBridge = window.RelicForgeStudioBridge;
-    if (!studioBridge?.getStudioProjectSnapshot) throw new Error('Studio project bridge is unavailable.');
+    if (!studioBridge?.getStudioProjectSnapshot) {
+      throw new Error('Studio core did not finish loading. Refresh the page (Ctrl+Shift+R) and try again.');
+    }
 
     const studio = studioBridge.getStudioProjectSnapshot();
     const forge = window.RelicForgeForge?.getForgeProjectState?.() || null;
@@ -289,6 +291,12 @@
       if (del) deleteProject(del.dataset.deleteProject).catch(error => setStatus(error.message, 'error'));
     });
     document.addEventListener('keydown', event => { if (event.key === 'Escape') closeManager(); });
+    window.addEventListener('relicforge:studio-bridge-ready', () => {
+      if (window.RelicForgeStudioBridge?.getStudioProjectSnapshot) {
+        const status = $('projectSaveStatus');
+        if (status?.textContent?.includes('Studio core')) setStatus('Project saving is ready.', 'success');
+      }
+    });
     window.addEventListener('relicforge:wallet-connected', event => {
       const address = event.detail?.address;
       if (address) setWallet(address);
@@ -297,6 +305,7 @@
   }
 
   window.RelicForgeProjects = {
+    version: '10.2.2',
     connectWallet,
     saveProject,
     openManager,

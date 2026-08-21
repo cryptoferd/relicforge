@@ -2370,6 +2370,24 @@
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
+  // Public Studio bridge. Define this before UI event binding so project saves and
+  // Forge tooling remain available even if a later optional UI binding fails.
+  window.RelicForgeStudioBridge = {
+    version: '10.2.2',
+    getState: () => state,
+    getManifest: manifestObject,
+    getProjectConfig: projectConfig,
+    getStudioProjectSnapshot: studioProjectSnapshot,
+    restoreStudioProjectSnapshot,
+    getSupply,
+    getTrait,
+    getLayer,
+    traitToSvgFragment,
+    updateLaunchSummary,
+    showStatus,
+  };
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.2.2' } }));
+
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
     if (button) button.addEventListener('click', openStudio);
@@ -2688,22 +2706,6 @@
   $$('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateLaunchSummary));
   el.collectionName.addEventListener('input', () => { if (state.step === 5) updateLaunchSummary(); });
   el.collectionSize.addEventListener('change', () => { renderTraitSetup(); if (state.buildMode === 'manual') renderManualBuilder(); });
-
-  // Bridge used by the Sepolia Forge module. The Studio remains the source of truth;
-  // forge.js only reads the already-compiled collection and the original browser File objects.
-  window.RelicForgeStudioBridge = {
-    getState: () => state,
-    getManifest: manifestObject,
-    getProjectConfig: projectConfig,
-    getStudioProjectSnapshot: studioProjectSnapshot,
-    restoreStudioProjectSnapshot,
-    getSupply,
-    getTrait,
-    getLayer,
-    traitToSvgFragment,
-    updateLaunchSummary,
-    showStatus,
-  };
 
   // Initial state
   setBuildMode('auto');
