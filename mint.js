@@ -11,8 +11,15 @@
     'function mint(uint32 quantity) payable returns (uint256)','function whitelistMint(uint32 quantity,uint32 allowance,bytes32[] proof) payable returns (uint256)'
   ];
   const RPC_BY_CHAIN = {
-    11155111: 'https://ethereum-sepolia-rpc.publicnode.com',
-    1: 'https://ethereum-rpc.publicnode.com'
+    11155111: [
+      'https://ethereum-sepolia-rpc.publicnode.com',
+      'https://sepolia.drpc.org',
+      'https://rpc.sepolia.org'
+    ],
+    1: [
+      'https://ethereum-rpc.publicnode.com',
+      'https://eth.drpc.org'
+    ]
   };
   const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
   const ZERO = ethers.ZeroAddress.toLowerCase();
@@ -26,6 +33,7 @@
   const config = { ...localConfig, ...embedded, contract: requestedContract || localConfig.contract, chainId: requestedChain || localConfig.chainId || 11155111 };
 
   let browserProvider = null, publicProvider = null, signer = null, wallet = null, contract = null, contractState = null, whitelistData = null;
+  let activeReadRpc = null;
   let mintedPage = 1, mintedSearchToken = null;
   const mintedPageSize = 10;
   let holders = [], holderPage = 1, holdersLoadedForMintCount = -1;
@@ -86,21 +94,68 @@
       browserProvider=new ethers.BrowserProvider(window.ethereum);
       signer=await browserProvider.getSigner();
       wallet=await signer.getAddress();
+      // The wallet provider is authoritative after connection. Probe the exact
+      // collection address before enabling mint controls.
+      const probe=await probeCollectionProvider(browserProvider);
       contract=new ethers.Contract(config.contract,ABI,signer);
       $('connectBtn').textContent=shortAddr(wallet);
       await refresh();
     }catch(e){status(`Wallet error: ${e.shortMessage||e.message}`)}
   }
   function getReadProvider(){
-    if(!publicProvider){const rpc=RPC_BY_CHAIN[Number(config.chainId)];if(rpc)publicProvider=new ethers.JsonRpcProvider(rpc)}
-    if(publicProvider)return publicProvider;
+    // Once a wallet is connected, prefer its provider. This avoids a public RPC
+    // disagreement from overriding the exact chain the minter is connected to.
     if(browserProvider)return browserProvider;
+    if(publicProvider)return publicProvider;
+    const list=RPC_BY_CHAIN[Number(config.chainId)]||[];
+    if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}
     if(window.ethereum){browserProvider=new ethers.BrowserProvider(window.ethereum);return browserProvider}
     throw new Error('Connect a wallet to read this collection.');
   }
   async function readOnlyContract(){
     if(contract)return contract;
-    return new ethers.Contract(config.contract,ABI,getReadProvider());
+    const provider=await resolveAnonymousReadProvider();
+    return new ethers.Contract(config.contract,ABI,provider);
+  }
+  function minimalProxyImplementation(code){
+    const clean=String(code||'').toLowerCase();
+    const match=clean.match(/^0x363d3d373d3d3d363d73([0-9a-f]{40})5af43d82803e903d91602b57fd5bf3$/);
+    return match?ethers.getAddress(`0x${match[1]}`):null;
+  }
+  async function probeCollectionProvider(provider){
+    const code=await provider.getCode(config.contract);
+    if(!code||code==='0x')throw new Error(`No contract exists at ${shortAddr(config.contract)} on chain ${config.chainId}.`);
+    const implementation=minimalProxyImplementation(code);
+    if(implementation){
+      const implementationCode=await provider.getCode(implementation);
+      if(!implementationCode||implementationCode==='0x')throw new Error(`Collection clone points to implementation ${shortAddr(implementation)}, but no implementation code exists on chain ${config.chainId}.`);
+    }
+    const c=new ethers.Contract(config.contract,ABI,provider);
+    try{
+      const name=await c.name();
+      return {provider,contract:c,name,implementation};
+    }catch(error){
+      const reason=error?.shortMessage||error?.reason||error?.message||'call failed';
+      const proxyNote=implementation?` Proxy implementation: ${implementation}.`:'';
+      throw new Error(`Address ${config.contract} has contract code but name() reverted (${reason}).${proxyNote} Verify this is the collection clone, not the Factory, implementation, randomness, or storage address.`);
+    }
+  }
+  async function resolveAnonymousReadProvider(){
+    if(browserProvider)return browserProvider;
+    if(publicProvider)return publicProvider;
+    const candidates=RPC_BY_CHAIN[Number(config.chainId)]||[];
+    let lastError=null;
+    for(const rpc of candidates){
+      try{
+        const provider=new ethers.JsonRpcProvider(rpc,Number(config.chainId),{staticNetwork:true});
+        await probeCollectionProvider(provider);
+        publicProvider=provider;activeReadRpc=rpc;return provider;
+      }catch(error){lastError=error}
+    }
+    if(window.ethereum){
+      try{browserProvider=new ethers.BrowserProvider(window.ethereum);await probeCollectionProvider(browserProvider);return browserProvider}catch(error){lastError=error}
+    }
+    throw lastError||new Error('Unable to reach the collection through the available RPC providers.');
   }
   function decodeDataUri(uri){
     const comma=String(uri||'').indexOf(','); if(comma<0)return String(uri||'');
@@ -140,8 +195,14 @@
     try{
       const c=await readOnlyContract();
       const readProvider=c.runner?.provider||c.runner||getReadProvider();
-      if(!(await hasContractCode(readProvider,config.contract))){
+      const deployedCode=await readProvider.getCode(config.contract);
+      if(!deployedCode||deployedCode==='0x'){
         throw new Error(`No contract exists at ${shortAddr(config.contract)} on chain ${config.chainId}.`);
+      }
+      const proxyImplementation=minimalProxyImplementation(deployedCode);
+      if(proxyImplementation){
+        const implCode=await readProvider.getCode(proxyImplementation);
+        if(!implCode||implCode==='0x')throw new Error(`Collection proxy implementation ${proxyImplementation} is missing on chain ${config.chainId}.`);
       }
 
       // Read each field independently. A missing optional method from an older
@@ -170,7 +231,9 @@
       $('publicPrice').textContent=fmtEth(mintPrice);
       $('publicCard').classList.toggle('disabled',!pub);
       const explorer=Number(config.chainId)===11155111?'https://sepolia.etherscan.io':'https://etherscan.io';
-      $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a>`;
+      const proxyText=proxyImplementation?` · Proxy → ${shortAddr(proxyImplementation)}`:'';
+      const rpcText=wallet?' · Wallet RPC':(activeReadRpc?` · Read RPC: ${esc(new URL(activeReadRpc).hostname)}`:'');
+      $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a>${proxyText}${rpcText}`;
       const supplyRemaining=Math.max(0,Number(maxSupply)-Number(totalMinted));
 
       if(wallet){
@@ -363,7 +426,7 @@
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
     $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
-    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
+    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();try{await probeCollectionProvider(browserProvider);contract=new ethers.Contract(config.contract,ABI,signer)}catch(error){contract=null;status(`Contract error: ${error.message}`);return}}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }
   init();

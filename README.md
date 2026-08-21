@@ -1,4 +1,4 @@
-## V10.8.5 mint-page contract compatibility fix
+## V10.8.6 mint-page contract compatibility fix
 
 - UI-only update; Solidity contract source is unchanged from V10.8.4.
 - Mint page now reads collection methods independently instead of one all-or-nothing Promise.all.

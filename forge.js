@@ -145,13 +145,13 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.8.5', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.8.6', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
-    html = html.replace(/<script src="\.\/mint\.js\?v=10\.8\.2"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
+    html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
     html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
     html = html.replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
     const blob = new Blob([html], { type: 'text/html' });
@@ -830,7 +830,7 @@ ${await file.text()}`;
     try {
       const studio = bridge().getState();
       if (!studio.compiledTokens?.length) throw new Error('Build the collection in Step 4 first.');
-      if (studio.compilerReport?.compilerVersion !== '10.8.5') throw new Error('This collection was compiled with an older rarity compiler. Rebuild it in Step 4 before forging.');
+      if (studio.compilerReport?.compilerVersion !== '10.8.6') throw new Error('This collection was compiled with an older rarity compiler. Rebuild it in Step 4 before forging.');
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
@@ -1068,7 +1068,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.8.5');
+      const worker = new Worker('./js/solc-worker.js?v=10.8.6');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
