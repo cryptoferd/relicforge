@@ -80,27 +80,58 @@
     if(config.whitelistUrl){try{const res=await fetch(config.whitelistUrl,{cache:'no-store'});if(res.ok){const data=await res.json();return buildWhitelist(data.entries||data.whitelist||data)}}catch(_) {}}
     return null;
   }
+  function walletErrorMessage(error){
+    return error?.info?.error?.message || error?.error?.message || error?.data?.message || error?.shortMessage || error?.reason || error?.message || 'Unknown wallet error';
+  }
   async function ensureNetwork(){
     if(!window.ethereum)throw new Error('No EVM wallet provider detected.');
-    const hex='0x'+Number(config.chainId||11155111).toString(16);
-    const current=await ethereum.request({method:'eth_chainId'});
-    if(current.toLowerCase()!==hex.toLowerCase())await ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:hex}]});
+    const chainId=Number(config.chainId||11155111);
+    const hex='0x'+chainId.toString(16);
+    const current=String(await window.ethereum.request({method:'eth_chainId'}));
+    if(current.toLowerCase()===hex.toLowerCase())return;
+    try{
+      await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:hex}]});
+    }catch(error){
+      const code=error?.code ?? error?.info?.error?.code ?? error?.error?.code;
+      if(Number(code)===4902 && chainId===11155111){
+        await window.ethereum.request({method:'wallet_addEthereumChain',params:[{
+          chainId:hex,
+          chainName:'Ethereum Sepolia',
+          nativeCurrency:{name:'Sepolia Ether',symbol:'ETH',decimals:18},
+          rpcUrls:['https://ethereum-sepolia-rpc.publicnode.com'],
+          blockExplorerUrls:['https://sepolia.etherscan.io']
+        }]});
+        return;
+      }
+      throw new Error(`Switch to Ethereum Sepolia failed: ${walletErrorMessage(error)}`);
+    }
   }
   async function connect(){
     try{
-      ++refreshSerial; // invalidate any slower read-only page-load refresh
+      ++refreshSerial; // invalidate any slower anonymous refresh
+      if(!window.ethereum)throw new Error('No EVM wallet provider detected.');
+
+      // Wallet connection is intentionally kept independent from collection/RPC
+      // validation. A bad collection read must never make wallet connection fail.
+      await window.ethereum.request({method:'eth_requestAccounts'});
       await ensureNetwork();
-      await ethereum.request({method:'eth_requestAccounts'});
+
+      // Recreate the BrowserProvider after a possible chain switch.
       browserProvider=new ethers.BrowserProvider(window.ethereum);
       signer=await browserProvider.getSigner();
-      wallet=await signer.getAddress();
-      // The wallet provider is authoritative after connection. Probe the exact
-      // collection address before enabling mint controls.
-      const probe=await probeCollectionProvider(browserProvider);
+      wallet=ethers.getAddress(await signer.getAddress());
       contract=new ethers.Contract(config.contract,ABI,signer);
       $('connectBtn').textContent=shortAddr(wallet);
+      status(`Wallet connected: ${shortAddr(wallet)}. Loading collection…`);
+
+      // Collection validation happens separately. refresh() reports contract/RPC
+      // errors without undoing the connected wallet state.
       await refresh();
-    }catch(e){status(`Wallet error: ${e.shortMessage||e.message}`)}
+    }catch(error){
+      signer=null; wallet=null; contract=null; browserProvider=null;
+      $('connectBtn').textContent='Connect Wallet';
+      status(`Wallet error: ${walletErrorMessage(error)}`);
+    }
   }
   function getReadProvider(){
     // Once a wallet is connected, prefer its provider. This avoids a public RPC
@@ -426,7 +457,7 @@
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
     $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
-    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();try{await probeCollectionProvider(browserProvider);contract=new ethers.Contract(config.contract,ABI,signer)}catch(error){contract=null;status(`Contract error: ${error.message}`);return}}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
+    if(window.ethereum){window.ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){try{browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}catch(error){status(`Wallet error: ${walletErrorMessage(error)}`);return}}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});window.ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }
   init();

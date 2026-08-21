@@ -1,3 +1,11 @@
+## V10.8.7 wallet-connect hotfix
+
+- Removed collection/RPC probing from the wallet-connect path.
+- Wallet connection now happens independently from collection validation.
+- Uses `window.ethereum` explicitly and rebuilds the BrowserProvider after chain switching.
+- Adds clearer nested wallet error reporting and Sepolia add/switch fallback.
+- No Solidity changes. Existing V10.8.x test collections and infrastructure remain compatible.
+
 ## V10.8.6 mint-page contract compatibility fix
 
 - UI-only update; Solidity contract source is unchanged from V10.8.4.
