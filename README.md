@@ -1,3 +1,11 @@
+## V10.8.4 fresh-browser public mint fix (UI only)
+
+- Fixed a race where the initial anonymous/read-only mint-page refresh could finish after wallet connection and overwrite the Public Mint button back to disabled.
+- Public mint eligibility is now derived independently from onchain collection state + the connected wallet before any whitelist or local presentation config is loaded.
+- Whitelist proof/config loading can no longer block or disable Public Mint.
+- Added stale-refresh cancellation so slower RPC responses cannot overwrite newer connected-wallet state.
+- No Solidity changes. Existing deployed collections and infrastructure remain compatible.
+
 ## V10.8.3 curated-token rarity fix + rarity audit (Studio compiler only)
 
 ### What changed

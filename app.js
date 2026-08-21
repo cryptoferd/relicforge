@@ -1800,7 +1800,7 @@
     return {
       tokens,
       report: {
-        compilerVersion: '10.8.3',
+        compilerVersion: '10.8.4',
         supply,
         seed,
         manualTokens: lockedByToken.size,
@@ -2343,7 +2343,7 @@
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
     const savedCompilerReport = saved.compilerReport || null;
-    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.8.3';
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.8.4';
     state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) } }));
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
@@ -2366,7 +2366,7 @@
     if (state.compiledTokens.length) await renderPreviewGrid();
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
-    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.8.3 rarity compiler before forging.`, 'warn');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.8.4 rarity compiler before forging.`, 'warn');
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
@@ -2458,7 +2458,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.8.3',
+    version: '10.8.4',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2471,7 +2471,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.8.3' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.8.4' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

@@ -32,6 +32,7 @@
   const holderPageSize = 20;
   let currentTokenOwners = new Map(), myNftIds = [], myNftPage = 1;
   const myNftPageSize = 10;
+  let refreshSerial = 0;
 
   function shortAddr(v){return v && v.length>12?`${v.slice(0,6)}…${v.slice(-4)}`:(v||'—')}
   function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -78,7 +79,17 @@
     if(current.toLowerCase()!==hex.toLowerCase())await ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:hex}]});
   }
   async function connect(){
-    try{await ensureNetwork();await ethereum.request({method:'eth_requestAccounts'});browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();wallet=await signer.getAddress();contract=new ethers.Contract(config.contract,ABI,signer);$('connectBtn').textContent=shortAddr(wallet);await refresh();status('Wallet connected. Ready to mint.')}catch(e){status(`Wallet error: ${e.message}`)}
+    try{
+      ++refreshSerial; // invalidate any slower read-only page-load refresh
+      await ensureNetwork();
+      await ethereum.request({method:'eth_requestAccounts'});
+      browserProvider=new ethers.BrowserProvider(window.ethereum);
+      signer=await browserProvider.getSigner();
+      wallet=await signer.getAddress();
+      contract=new ethers.Contract(config.contract,ABI,signer);
+      $('connectBtn').textContent=shortAddr(wallet);
+      await refresh();
+    }catch(e){status(`Wallet error: ${e.shortMessage||e.message}`)}
   }
   function getReadProvider(){
     if(!publicProvider){const rpc=RPC_BY_CHAIN[Number(config.chainId)];if(rpc)publicProvider=new ethers.JsonRpcProvider(rpc)}
@@ -110,48 +121,88 @@
   }
 
   async function refresh(){
+    const serial=++refreshSerial;
     if(!config.contract||!ethers.isAddress(config.contract)){status('Mint page is missing a valid collection contract address.');return}
     try{
       const c=await readOnlyContract();
       const [name,desc,maxSupply,totalMinted,maxPerWallet,mintPrice,wlPrice,pub,wlEnabled,root,reveal]=await Promise.all([c.name(),c.description(),c.maxSupply(),c.totalMinted(),c.maxPerWallet(),c.mintPrice(),c.whitelistMintPrice(),c.publicMintEnabled(),c.whitelistMintEnabled(),c.whitelistRoot(),c.revealMode()]);
+      if(serial!==refreshSerial)return;
       contractState={name,desc,maxSupply:Number(maxSupply),totalMinted:Number(totalMinted),maxPerWallet:Number(maxPerWallet),mintPrice,wlPrice,pub,wlEnabled,root,reveal:Number(reveal)};
-      document.title=`${name} — Mint`; $('collectionName').textContent=name; $('collectionDescription').textContent=desc; $('mintedStat').textContent=`${Number(totalMinted).toLocaleString()} / ${Number(maxSupply).toLocaleString()}`; $('priceStat').textContent=fmtEth(mintPrice); $('limitStat').textContent=Number(maxPerWallet)?Number(maxPerWallet).toLocaleString():'Unlimited'; $('revealStat').textContent=Number(reveal)===0?'Forge Reveal':'Creator Reveal'; $('publicPrice').textContent=fmtEth(mintPrice); $('publicCard').classList.toggle('disabled',!pub); $('publicMintBtn').disabled=!pub||!wallet;
+      document.title=`${name} — Mint`;
+      $('collectionName').textContent=name;
+      $('collectionDescription').textContent=desc;
+      $('mintedStat').textContent=`${Number(totalMinted).toLocaleString()} / ${Number(maxSupply).toLocaleString()}`;
+      $('priceStat').textContent=fmtEth(mintPrice);
+      $('limitStat').textContent=Number(maxPerWallet)?Number(maxPerWallet).toLocaleString():'Unlimited';
+      $('revealStat').textContent=Number(reveal)===0?'Forge Reveal':'Creator Reveal';
+      $('publicPrice').textContent=fmtEth(mintPrice);
+      $('publicCard').classList.toggle('disabled',!pub);
       const explorer=Number(config.chainId)===11155111?'https://sepolia.etherscan.io':'https://etherscan.io';
       $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a>`;
-      whitelistData=await readConfigWhitelist();
       const supplyRemaining=Math.max(0,Number(maxSupply)-Number(totalMinted));
+
+      // Public mint eligibility is intentionally calculated before any offchain
+      // whitelist/config request. A fresh browser only needs contract + wallet.
       if(wallet){
-        const [m,wm]=await Promise.all([c.mintedByWallet(wallet),c.whitelistMintedByWallet(wallet)]);
-        const walletMints=Number(m),whitelistMints=Number(wm);
+        const activeWallet=wallet;
+        const m=await c.mintedByWallet(activeWallet);
+        if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
+        const walletMints=Number(m);
         const globalRemaining=Number(maxPerWallet)>0?Math.max(0,Number(maxPerWallet)-walletMints):supplyRemaining;
         const publicRemaining=Math.min(supplyRemaining,globalRemaining);
         $('walletMintsStat').textContent=Number(maxPerWallet)>0?`${walletMints} / ${Number(maxPerWallet)}`:`${walletMints} / ∞`;
         renderWalletAllotment(walletMints,Number(maxPerWallet),publicRemaining);
         setQtyLimit('publicQty',publicRemaining);
-        $('publicQtyHint').textContent=publicRemaining>0?`You can mint up to ${publicRemaining} more from your wallet allotment.`:'This wallet has no public mint allowance remaining.';
+        $('publicQtyHint').textContent=!pub?'Public mint is currently disabled by the creator.':supplyRemaining<1?'Collection is sold out.':publicRemaining>0?`You can mint up to ${publicRemaining} more from your wallet allotment.`:'This wallet has no public mint allowance remaining.';
         $('publicMintBtn').disabled=!pub||publicRemaining<1;
-        const entry=whitelistData?.by?.[wallet.toLowerCase()];
+        $('publicMintBtn').dataset.ready=(!$('publicMintBtn').disabled).toString();
+
+        // Whitelist proof data is offchain and optional. Failure here must never
+        // disable or overwrite the independently calculated public mint state.
+        whitelistData=await readConfigWhitelist();
+        if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
+        let whitelistMints=0;
+        try{whitelistMints=Number(await c.whitelistMintedByWallet(activeWallet))}catch(_){}
+        if(serial!==refreshSerial)return;
+        const entry=whitelistData?.by?.[activeWallet.toLowerCase()];
         if(wlEnabled&&entry&&(!root||root.toLowerCase()===whitelistData.root.toLowerCase())){
           const allowanceRemaining=Math.max(0,Number(entry.allowance)-whitelistMints);
           const whitelistRemaining=Math.min(supplyRemaining,globalRemaining,allowanceRemaining);
           setQtyLimit('whitelistQty',whitelistRemaining);
           $('whitelistQtyHint').textContent=whitelistRemaining>0?`You can whitelist mint up to ${whitelistRemaining} more right now.`:'No whitelist allowance remains for this wallet.';
           $('whitelistState').textContent=`Eligible · ${whitelistMints}/${entry.allowance} used · ${whitelistRemaining} remaining`;
-          $('whitelistState').className='eligible'; $('whitelistMintBtn').disabled=whitelistRemaining<1;
+          $('whitelistState').className='eligible';
+          $('whitelistMintBtn').disabled=whitelistRemaining<1;
         }else{
-          setQtyLimit('whitelistQty',0); $('whitelistQtyHint').textContent=wlEnabled?'No whitelist mint available for this wallet.':'Whitelist mint is disabled.'; $('whitelistState').textContent=wlEnabled?(whitelistData?'Not eligible':'Proof list unavailable'):'Disabled'; $('whitelistState').className='not-eligible'; $('whitelistMintBtn').disabled=true;
+          setQtyLimit('whitelistQty',0);
+          $('whitelistQtyHint').textContent=wlEnabled?'No whitelist mint available for this wallet.':'Whitelist mint is disabled.';
+          $('whitelistState').textContent=wlEnabled?(whitelistData?'Not eligible':'Proof list unavailable'):'Disabled';
+          $('whitelistState').className='not-eligible';
+          $('whitelistMintBtn').disabled=true;
         }
       }else{
-        $('walletMintsStat').textContent='Connect wallet'; $('walletAllotment')?.classList.add('hidden');
+        $('walletMintsStat').textContent='Connect wallet';
+        $('walletAllotment')?.classList.add('hidden');
         const publicMax=Number(maxPerWallet)>0?Math.min(supplyRemaining,Number(maxPerWallet)):supplyRemaining;
-        setQtyLimit('publicQty',publicMax); $('publicQtyHint').textContent=Number(maxPerWallet)>0?`Wallet limit: ${Number(maxPerWallet)}. Connect to calculate what remains for you.`:`Up to ${publicMax} remaining in the collection. Connect to mint.`; $('publicMintBtn').disabled=true;
-        setQtyLimit('whitelistQty',0); $('whitelistQtyHint').textContent=wlEnabled?'Connect wallet to calculate whitelist allowance.':'Whitelist mint is disabled.'; $('whitelistState').textContent=wlEnabled?'Connect to check':'Disabled'; $('whitelistMintBtn').disabled=true;
+        setQtyLimit('publicQty',publicMax);
+        $('publicQtyHint').textContent=!pub?'Public mint is currently disabled by the creator.':Number(maxPerWallet)>0?`Wallet limit: ${Number(maxPerWallet)}. Connect to calculate what remains for you.`:`Up to ${publicMax} remaining in the collection. Connect to mint.`;
+        $('publicMintBtn').disabled=true;
+        $('publicMintBtn').dataset.ready='false';
+        setQtyLimit('whitelistQty',0);
+        $('whitelistQtyHint').textContent=wlEnabled?'Connect wallet to calculate whitelist allowance.':'Whitelist mint is disabled.';
+        $('whitelistState').textContent=wlEnabled?'Connect to check':'Disabled';
+        $('whitelistMintBtn').disabled=true;
+        // Load proof configuration opportunistically; it is not required for public mint.
+        readConfigWhitelist().then(data=>{if(serial===refreshSerial)whitelistData=data}).catch(()=>{});
       }
-      $('whitelistCard').classList.toggle('disabled',!wlEnabled); $('mintIntro').textContent=Number(reveal)===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.'; status(wallet?'Ready to mint.':'Collection loaded. Connect a wallet to mint.');
+      if(serial!==refreshSerial)return;
+      $('whitelistCard').classList.toggle('disabled',!wlEnabled);
+      $('mintIntro').textContent=Number(reveal)===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.';
+      status(wallet?($('publicMintBtn').disabled?'Wallet connected. Check the mint availability message above.':'Wallet connected. Ready to mint.'):'Collection loaded. Connect a wallet to mint.');
       updateExplorerControls();
       loadMintedGallery().catch(()=>{});
       if(holdersLoadedForMintCount!==Number(totalMinted))loadHolders().catch(()=>{}); else {renderHolders();renderMyNfts().catch(()=>{});}
-    }catch(e){status(`Contract error: ${e.message}`)}
+    }catch(e){if(serial===refreshSerial)status(`Contract error: ${e.shortMessage||e.message}`)}
   }
 
   function captureReceiptOwnership(receipt){
@@ -278,7 +329,7 @@
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
     $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
-    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
+    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }
   init();

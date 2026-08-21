@@ -1,3 +1,12 @@
+## V10.8.4 fresh-browser mint regression
+
+1. Open the public mint URL on a browser/device that has never opened Relic Forge.
+2. Connect a fresh Sepolia wallet with zero prior mints.
+3. Confirm the page shows `0 / max` for the wallet and the remaining allotment.
+4. Confirm Public Mint becomes enabled without requiring any creator-side localStorage, whitelist file, banner, or Studio session.
+5. Confirm the quantity input clamps to the connected wallet's remaining allowance.
+6. Mint one NFT and confirm the allowance and My NFTs sections refresh.
+
 ## V10.8.3 curated-token rarity regression test
 
 1. Create a percentage layer with an obvious distribution (for example 2% trait / 98% None).
