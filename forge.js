@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_8_0';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_10_0';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
   const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
   const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
@@ -145,7 +145,7 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.8.7', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.10.0', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
@@ -799,12 +799,20 @@ ${await file.text()}`;
     const layerCount = layerDefs.length;
     const bytes = new Uint8Array(tokens.length * layerCount);
     const errors = [];
-    const byLayer = new Map(layerDefs.map(layer => [layer.id, layer]));
     tokens.forEach((token, recipeIndex) => {
       for (let li = 0; li < layerDefs.length; li++) {
         const layer = layerDefs[li];
-        const traitId = token.traits[layer.id];
-        const index = layer.traits.findIndex(t => t.id === traitId);
+        let index = -1;
+        if (layer.isOneOfOneLayer) {
+          index = token.oneOfOneId ? layer.traits.findIndex(t => t.id === token.oneOfOneId) : 0;
+        } else if (token.oneOfOneId) {
+          // Standalone 1/1 recipes do not use layered art. Use index zero as inert DNA;
+          // the contract ignores normal layers whenever the special 1/1 slot is nonzero.
+          index = 0;
+        } else {
+          const traitId = token.traits[layer.id];
+          index = layer.traits.findIndex(t => t.id === traitId);
+        }
         if (index < 0) { errors.push(`Recipe ${recipeIndex + 1} is missing a valid trait for ${layer.name}.`); continue; }
         if (index > 255) { errors.push(`${layer.name} exceeds the v1 limit of 256 traits.`); continue; }
         bytes[recipeIndex * layerCount + li] = index;
@@ -830,30 +838,51 @@ ${await file.text()}`;
     try {
       const studio = bridge().getState();
       if (!studio.compiledTokens?.length) throw new Error('Build the collection in Step 4 first.');
-      if (studio.compilerReport?.compilerVersion !== '10.8.6') throw new Error('This collection was compiled with an older rarity compiler. Rebuild it in Step 4 before forging.');
+      if (studio.compilerReport?.compilerVersion !== '10.10.0') throw new Error('This collection was compiled with an older collection compiler. Rebuild it in Step 4 before forging.');
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
       if (revealMode === 1 && !forgeState.placeholderFile) throw new Error('Creator Reveal requires a creator-uploaded placeholder.');
-      if (studio.layers.length > 255) throw new Error('The v1 DNA format supports at most 255 layers.');
+      if (studio.layers.length + (studio.oneOfOnes?.length ? 1 : 0) > 255) throw new Error('The v1 DNA format supports at most 255 layers including the optional 1/1 layer.');
       if (studio.imageWidth > 65535 || studio.imageHeight > 65535) throw new Error('Canvas dimensions exceed the v1 uint16 renderer limit.');
 
       setCompileProgress(2, 'Reading final Studio collection…');
       const layerDefs = studio.layers.map((layer, layerIndex) => {
         cleanMetadataString(layer.name, `Layer ${layerIndex + 1} name`);
+        if (!layer.traits.length) throw new Error(`${layer.name} has no trait artwork.`);
         if (layer.traits.length > 256) throw new Error(`${layer.name} has more than 256 traits.`);
         return {
           id: layer.id,
           name: layer.name,
           index: layerIndex,
+          isOneOfOneLayer: false,
+          metadataHidden: !!layer.metadataHidden,
           traits: layer.traits.map((trait, traitIndex) => ({
             id: trait.id,
             name: cleanMetadataString(trait.name, `${layer.name} trait name`),
             trait,
             traitIndex,
+            metadataHidden: !!trait.metadataHidden || (!!trait.isNone && !!studio.hideNoneMetadata),
           })),
         };
       });
+      let oneOfOneLayerIndex = -1;
+      if (studio.oneOfOnes?.length) {
+        if (studio.oneOfOnes.length > 255) throw new Error('A collection can contain at most 255 standalone 1/1 artworks in the v1 DNA format.');
+        oneOfOneLayerIndex = layerDefs.length;
+        const none = { id: '__rf_oneofone_none__', name: 'None', isNone: true, file: null };
+        layerDefs.push({
+          id: '__rf_oneofone_layer__',
+          name: '1/1 Artwork',
+          index: oneOfOneLayerIndex,
+          isOneOfOneLayer: true,
+          metadataHidden: false,
+          traits: [
+            { id: none.id, name: 'None', trait: none, traitIndex: 0, metadataHidden: true },
+            ...studio.oneOfOnes.map((item, i) => ({ id: item.id, name: cleanMetadataString(item.name, `1/1 artwork ${i + 1}`), trait: item, traitIndex: i + 1, metadataHidden: false })),
+          ],
+        });
+      }
 
       const compiledTraits = [];
       const totalTraits = layerDefs.reduce((n, layer) => n + layer.traits.length, 0);
@@ -884,6 +913,29 @@ ${await file.text()}`;
       const placeholderBytes = enc.encode(placeholder.fragment);
       if (placeholderBytes.length > MAX_TRAIT_BYTES) throw new Error(`Reveal placeholder compiles to ${fmtBytes(placeholderBytes.length)}, above the ${fmtBytes(MAX_TRAIT_BYTES)} test limit.`);
 
+      const oneOfOneMetadataInputs = [];
+      if (oneOfOneLayerIndex >= 0) {
+        for (let i = 0; i < (studio.oneOfOnes || []).length; i++) {
+          const item = studio.oneOfOnes[i];
+          const tokenName = item.tokenName?.trim() ? cleanMetadataString(item.tokenName, `1/1 ${i + 1} token name`, true) : '';
+          const tokenDescription = item.description?.trim() ? cleanMetadataString(item.description, `1/1 ${i + 1} description`, true) : '';
+          const rows = (item.metadata || []).filter(row => String(row.traitType || '').trim() && String(row.value || '').trim());
+          const attributeParts = [];
+          if (item.includeDefaultAttribute !== false) {
+            const defaultValue = cleanMetadataString(item.name, `1/1 ${i + 1} artwork label`);
+            attributeParts.push(`{"trait_type":"1/1","value":"${defaultValue}"}`);
+          }
+          rows.forEach((row, ri) => {
+            const traitType = cleanMetadataString(row.traitType, `1/1 ${i + 1} metadata trait ${ri + 1}`);
+            const value = cleanMetadataString(row.value, `1/1 ${i + 1} metadata value ${ri + 1}`);
+            attributeParts.push(`{"trait_type":"${traitType}","value":"${value}"}`);
+          });
+          // Empty string means use the contract's default 1/1 attribute. An explicit [] means hide it.
+          const attributesJson = attributeParts.length ? `[${attributeParts.join(',')}]` : (item.includeDefaultAttribute === false ? '[]' : '');
+          oneOfOneMetadataInputs.push([i + 1, tokenName, tokenDescription, attributesJson]);
+        }
+      }
+
       setCompileProgress(88, 'Generating provenance commitment…');
       const core = {
         schema: 'relic-forge/onchain-compile@0.1',
@@ -893,7 +945,10 @@ ${await file.text()}`;
         maxSupply: studio.compiledTokens.length,
         canvas: [studio.imageWidth, studio.imageHeight],
         revealMode,
-        layers: layerDefs.map(layer => ({ name: layer.name, traits: layer.traits.map(t => t.name) })),
+        oneOfOneLayerIndex,
+        hideNoneMetadata: !!studio.hideNoneMetadata,
+        layers: layerDefs.map(layer => ({ name: layer.name, metadataHidden: !!layer.metadataHidden, traits: layer.traits.map(t => ({ name: t.name, metadataHidden: !!t.metadataHidden })) })),
+        oneOfOneMetadata: oneOfOneMetadataInputs,
       };
       const provenance = await hashCompiled(core, artShards, dna.shards, placeholderBytes);
       const sourceBytes = compiledTraits.reduce((n, t) => n + t.sourceBytes, 0) + (forgeState.placeholderFile?.size || 0);
@@ -909,6 +964,8 @@ ${await file.text()}`;
         recipesPerShard: dna.recipesPerShard,
         placeholderBytes,
         placeholderEncoding: placeholder.encoding,
+        oneOfOneLayerIndex,
+        oneOfOneMetadataInputs,
         provenance,
         sourceBytes,
         artBytes,
@@ -964,9 +1021,11 @@ ${await file.text()}`;
     const clone = 360000;
     const traits = 70000 + c.traits.length * 30000;
     const layerNames = 45000 + c.layerDefs.length * 22000;
+    const metadataVisibility = 35000 + c.layerDefs.length * 5000;
+    const oneOfOneMetadata = (c.oneOfOneMetadataInputs || []).reduce((gas, row) => gas + 35000 + (String(row[1]).length + String(row[2]).length + String(row[3]).length) * 700, 0);
     const finalize = 180000;
     const mintAccess = 125000;
-    return { clone, art, dna, placeholder, traits, layerNames, finalize, mintAccess, total: clone + art + dna + placeholder + traits + layerNames + finalize + mintAccess };
+    return { clone, art, dna, placeholder, traits, layerNames, metadataVisibility, oneOfOneMetadata, finalize, mintAccess, total: clone + art + dna + placeholder + traits + layerNames + metadataVisibility + oneOfOneMetadata + finalize + mintAccess };
   }
 
   function currentGweiMode() {
@@ -1018,6 +1077,7 @@ ${await file.text()}`;
     const labels = [
       ['Collection clone + initialize', b.clone], ['Artwork shard writes', b.art],
       ['Trait index/name setup', b.traits], ['Layer names', b.layerNames],
+      ['Metadata visibility flags', b.metadataVisibility], ['1/1 custom metadata', b.oneOfOneMetadata],
       ['DNA shard writes', b.dna], ['Placeholder storage', b.placeholder],
       ['Finalize + provenance', b.finalize], ['Mint access / whitelist root', b.mintAccess],
     ];
@@ -1068,7 +1128,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.8.6');
+      const worker = new Worker('./js/solc-worker.js?v=10.10.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1177,10 +1237,14 @@ ${await file.text()}`;
       const c = forgeState.compiled;
       const factory = new window.ethers.Contract(factoryAddress, forgeState.contractArtifacts.RelicForgeFactory.abi, forgeState.signer);
       const traitBatches = Math.ceil(c.traits.length / 30);
+      const oneOfOneMetadataBatches = Math.ceil((c.oneOfOneMetadataInputs || []).length / 15);
       const steps = [
         { label: 'Create ERC-721 clone', status: 'pending' },
         ...c.artShards.map((_, i) => ({ label: `Write artwork shard ${i + 1}/${c.artShards.length}`, status: 'pending' })),
         { label: 'Register layer names', status: 'pending' },
+        { label: 'Configure metadata visibility', status: 'pending' },
+        ...(c.oneOfOneLayerIndex >= 0 ? [{ label: 'Configure standalone 1/1 layer', status: 'pending' }] : []),
+        ...Array.from({ length: oneOfOneMetadataBatches }, (_, i) => ({ label: `Store 1/1 metadata batch ${i + 1}/${oneOfOneMetadataBatches}`, status: 'pending' })),
         ...Array.from({ length: traitBatches }, (_, i) => ({ label: `Register trait batch ${i + 1}/${traitBatches}`, status: 'pending' })),
         ...c.dnaShards.map((_, i) => ({ label: `Write DNA shard ${i + 1}/${c.dnaShards.length}`, status: 'pending' })),
         { label: 'Configure DNA', status: 'pending' },
@@ -1211,9 +1275,15 @@ ${await file.text()}`;
       const collection = new window.ethers.Contract(collectionAddress, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
       for (let i = 0; i < c.artShards.length; i++, si++) await sendStep(`Write artwork shard ${i + 1}/${c.artShards.length}`, () => collection.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si);
       await sendStep('Register layer names', () => collection.setLayerNames(c.layerDefs.map(layer => layer.name)), steps, si++);
+      await sendStep('Configure metadata visibility', () => collection.setLayerMetadataVisibility(c.layerDefs.map(layer => !!layer.metadataHidden)), steps, si++);
+      if (c.oneOfOneLayerIndex >= 0) await sendStep('Configure standalone 1/1 layer', () => collection.setOneOfOneLayer(c.oneOfOneLayerIndex), steps, si++);
+      for (let start = 0, batch = 1; start < (c.oneOfOneMetadataInputs || []).length; start += 15, batch++, si++) {
+        const items = c.oneOfOneMetadataInputs.slice(start, start + 15);
+        await sendStep(`Store 1/1 metadata batch ${batch}/${oneOfOneMetadataBatches}`, () => collection.setOneOfOneMetadata(items), steps, si);
+      }
       for (let start = 0, batch = 1; start < c.traits.length; start += 30, batch++, si++) {
         const items = c.traits.slice(start, start + 30);
-        const traitInputs = items.map(t => [t.layerIndex, t.traitIndex, t.name, t.shard, t.offset, t.length, t.encodingCode]);
+        const traitInputs = items.map(t => [t.layerIndex, t.traitIndex, t.name, t.shard, t.offset, t.length, t.encodingCode, !!t.metadataHidden]);
         await sendStep(`Register trait batch ${batch}/${traitBatches}`, () => collection.addTraits(traitInputs), steps, si);
       }
       for (let i = 0; i < c.dnaShards.length; i++, si++) await sendStep(`Write DNA shard ${i + 1}/${c.dnaShards.length}`, () => collection.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);

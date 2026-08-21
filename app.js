@@ -34,6 +34,9 @@
     imageHeight: 1000,
     draggedTrait: null,
     draggedLayer: null,
+    oneOfOnes: [],
+    categoryPendingFiles: [],
+    hideNoneMetadata: false,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -43,6 +46,12 @@
     landingPage: $('#landingPage'),
     studioApp: $('#studioApp'),
     folderInput: $('#folderInput'),
+    newLayerName: $('#newLayerName'),
+    createLayerBtn: $('#createLayerBtn'),
+    categoryName: $('#categoryName'),
+    categoryTraitInput: $('#categoryTraitInput'),
+    categoryTraitFileCount: $('#categoryTraitFileCount'),
+    addCategoryBtn: $('#addCategoryBtn'),
     uploadZone: $('#uploadZone'),
     layerList: $('#layerList'),
     artworkSummary: $('#artworkSummary'),
@@ -61,6 +70,12 @@
     manualPreviewCanvas: $('#manualPreviewCanvas'),
     manualTokenCount: $('#manualTokenCount'),
     manualSavedList: $('#manualSavedList'),
+    oneOfOneToggle: $('#oneOfOneToggle'),
+    oneOfOnePanel: $('#oneOfOnePanel'),
+    oneOfOneInput: $('#oneOfOneInput'),
+    oneOfOneCount: $('#oneOfOneCount'),
+    oneOfOneList: $('#oneOfOneList'),
+    hideNoneMetadata: $('#hideNoneMetadata'),
     noRulesBtn: $('#noRulesBtn'),
     yesRulesBtn: $('#yesRulesBtn'),
     rulesWorkspace: $('#rulesWorkspace'),
@@ -126,6 +141,10 @@
     return Math.max(1, Math.min(25000, Number.parseInt(el.collectionSize.value || '1', 10) || 1));
   }
 
+  function getGenerativeSupply() {
+    return Math.max(0, getSupply() - state.oneOfOnes.length);
+  }
+
   function getTrait(traitId) {
     for (const layer of state.layers) {
       const trait = layer.traits.find(t => t.id === traitId);
@@ -149,10 +168,9 @@
     return `${trait.name} (${layer?.name || 'Layer'})`;
   }
 
-  function revokeArtworkUrls() {
-    for (const trait of allTraits()) {
-      if (trait.url) URL.revokeObjectURL(trait.url);
-    }
+  function revokeArtworkUrls(includeOneOfOnes = true) {
+    for (const trait of allTraits()) if (trait.url) URL.revokeObjectURL(trait.url);
+    if (includeOneOfOnes) for (const item of state.oneOfOnes) if (item.url) URL.revokeObjectURL(item.url);
   }
 
   async function imageMeta(file) {
@@ -160,14 +178,139 @@
       const bitmap = await createImageBitmap(file);
       const meta = { width: bitmap.width, height: bitmap.height };
       bitmap.close();
-      return meta;
-    } catch {
-      return { width: 0, height: 0 };
+      if (meta.width && meta.height) return meta;
+    } catch (_) {}
+    if (/\.svg$/i.test(file?.name || '') || /svg\+xml/i.test(file?.type || '')) {
+      try {
+        const text = await file.text();
+        const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+        const root = doc.documentElement;
+        const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+        if (vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0) return { width: vb[2], height: vb[3] };
+        const width = Number.parseFloat(root.getAttribute('width') || '0');
+        const height = Number.parseFloat(root.getAttribute('height') || '0');
+        if (width > 0 && height > 0) return { width, height };
+      } catch (_) {}
     }
+    return { width: 0, height: 0 };
   }
 
   function naturalSort(a, b) {
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function isArtworkFile(file) {
+    return !!file && (/^image\/(png|webp|jpeg|svg\+xml)$/i.test(file.type || '') || /\.(png|webp|jpe?g|svg)$/i.test(file.name || ''));
+  }
+
+  function freshLayerId(name = 'Layer') {
+    return `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}-${slug(name)}`;
+  }
+
+  async function traitFromFile(layer, file, traitIndex = layer.traits.length) {
+    const meta = await imageMeta(file);
+    return {
+      id: `${layer.id}::trait-${Date.now().toString(36)}-${traitIndex}-${slug(file.name)}`,
+      layerId: layer.id,
+      name: displayName(file.name),
+      filename: file.name,
+      file,
+      url: URL.createObjectURL(file),
+      width: meta.width,
+      height: meta.height,
+      rarity: 'common',
+      distribution: 'weighted',
+      exactCount: null,
+      exactManual: false,
+      percentage: null,
+      percentageManual: false,
+      image: null,
+      svgFragment: null,
+      svgStats: null,
+      isNone: false,
+      metadataHidden: false,
+    };
+  }
+
+  function createLayerObject(name) {
+    return {
+      id: freshLayerId(name),
+      name: String(name || `Layer ${state.layers.length + 1}`).trim() || `Layer ${state.layers.length + 1}`,
+      allowNone: false,
+      rarityMode: 'tier',
+      autoFillStyle: 'gradual',
+      rarityOrder: 'most_to_least',
+      metadataHidden: false,
+      traits: [],
+    };
+  }
+
+  function resetCompiledForArtworkChange() {
+    state.compiledTokens = [];
+    state.compilerReport = null;
+  }
+
+  function refreshArtworkUi() {
+    renderArtwork();
+    renderTraitSetup();
+    renderManualBuilder();
+    renderRulePickers();
+    renderRulesList();
+    renderOneOfOnes();
+    updateStep1State();
+    resetCompiledForArtworkChange();
+  }
+
+  async function addFilesToLayer(layerId, files) {
+    const layer = getLayer(layerId);
+    if (!layer) throw new Error('Layer not found.');
+    const valid = [...files].filter(isArtworkFile);
+    if (!valid.length) throw new Error('Choose PNG, WEBP, JPG, or SVG trait artwork.');
+    valid.sort((a, b) => naturalSort(a.name, b.name));
+    for (const file of valid) layer.traits.push(await traitFromFile(layer, file));
+    const firstReal = allTraits().find(t => !t.isNone && t.width && t.height);
+    if (firstReal && (!state.imageWidth || !state.imageHeight || (state.layers.length === 1 && layer.traits.length === valid.length))) {
+      state.imageWidth = firstReal.width;
+      state.imageHeight = firstReal.height;
+    }
+    refreshArtworkUi();
+    showStatus(`Added ${valid.length} trait${valid.length === 1 ? '' : 's'} to ${layer.name}.`, 'success');
+  }
+
+  async function addCategory(name, files) {
+    const valid = [...files].filter(isArtworkFile);
+    if (!valid.length) throw new Error('Choose at least one trait image for this category.');
+    const layer = createLayerObject(name || `Layer ${state.layers.length + 1}`);
+    state.layers.push(layer);
+    await addFilesToLayer(layer.id, valid);
+  }
+
+  function removeTrait(layerId, traitId) {
+    const layer = getLayer(layerId);
+    if (!layer) return;
+    const index = layer.traits.findIndex(t => t.id === traitId);
+    if (index < 0) return;
+    const trait = layer.traits[index];
+    if (trait.isNone) return;
+    if (trait.url) URL.revokeObjectURL(trait.url);
+    layer.traits.splice(index, 1);
+    for (const recipe of state.manifestTokens.values()) if (recipe[layerId] === traitId) delete recipe[layerId];
+    state.sourceSelected.delete(traitId);
+    state.targetSelected.delete(traitId);
+    state.rules = state.rules.map(rule => ({...rule, sources: rule.sources.filter(id => id !== traitId), targets: rule.targets.filter(id => id !== traitId)})).filter(rule => rule.sources.length && rule.targets.length);
+    refreshArtworkUi();
+  }
+
+  function removeLayer(layerId) {
+    const index = state.layers.findIndex(l => l.id === layerId);
+    if (index < 0) return;
+    const layer = state.layers[index];
+    for (const trait of layer.traits) if (trait.url) URL.revokeObjectURL(trait.url);
+    const traitIds = new Set(layer.traits.map(t => t.id));
+    state.layers.splice(index, 1);
+    for (const recipe of state.manifestTokens.values()) delete recipe[layerId];
+    state.rules = state.rules.map(rule => ({...rule, sources: rule.sources.filter(id => !traitIds.has(id)), targets: rule.targets.filter(id => !traitIds.has(id))})).filter(rule => rule.sources.length && rule.targets.length);
+    refreshArtworkUi();
   }
 
 
@@ -184,11 +327,14 @@
       rarity: 'common',
       distribution: 'weighted',
       exactCount: null,
-      percentage: 0,
+      exactManual: false,
+      percentage: null,
+      percentageManual: false,
       image: null,
       svgFragment: '',
       svgStats: { rectangles: 0, colors: 0, bytes: 0 },
       isNone: true,
+      metadataHidden: false,
     };
   }
 
@@ -248,61 +394,106 @@
     node.textContent = `Total ${formatPercent(total)}% ${valid ? '✓' : total > 100 ? `· Over by ${formatPercent(Math.abs(diff))}%` : `· Add ${formatPercent(Math.abs(diff))}%`}`;
   }
 
-  function equalizeLayerPercentages(layerId) {
-    const layer = getLayer(layerId);
+  function percentageManualTotal(layer) {
+    return layer.traits.reduce((sum, trait) => sum + (trait.percentageManual ? (Number.parseFloat(trait.percentage || '0') || 0) : 0), 0);
+  }
+
+  function allocatePercentRemainder(layer, equal = false) {
     if (!layer || !layer.traits.length) return;
-    const totalHundredths = 10000;
-    const base = Math.floor(totalHundredths / layer.traits.length);
-    let remainder = totalHundredths - (base * layer.traits.length);
-    layer.traits.forEach(trait => {
-      const hundredths = base + (remainder > 0 ? 1 : 0);
-      if (remainder > 0) remainder--;
-      trait.percentage = hundredths / 100;
+    const unlocked = layer.traits.filter(trait => !trait.percentageManual);
+    const manualTotal = percentageManualTotal(layer);
+    if (manualTotal > 100.0001) {
+      showStatus(`${layer.name}: manually entered percentages already total ${formatPercent(manualTotal)}%.`, 'error');
+      return;
+    }
+    if (!unlocked.length) {
+      renderTraitSetup();
+      showStatus(`${layer.name}: no blank/auto percentage fields remain to fill.`, 'warn');
+      return;
+    }
+    const remainderHundredths = Math.max(0, Math.round((100 - manualTotal) * 100));
+    const powers = { balanced: 1, gradual: 1.35, steep: 1.9, very_steep: 2.6 };
+    const power = equal ? 0 : (powers[layer.autoFillStyle] || 1.35);
+    const mostCommonFirst = layer.rarityOrder !== 'least_to_most';
+    const weighted = unlocked.map(trait => {
+      const index = layer.traits.indexOf(trait);
+      const rank = mostCommonFirst ? (layer.traits.length - index) : (index + 1);
+      return { trait, weight: equal ? 1 : Math.pow(rank, power) };
     });
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0) || 1;
+    const raw = weighted.map(item => {
+      const value = remainderHundredths * item.weight / totalWeight;
+      return { ...item, units: Math.floor(value), rem: value - Math.floor(value) };
+    });
+    let used = raw.reduce((sum, item) => sum + item.units, 0);
+    raw.sort((a,b) => b.rem - a.rem);
+    for (let i=0; used < remainderHundredths; i++, used++) raw[i % raw.length].units++;
+    for (const item of raw) {
+      item.trait.percentage = item.units / 100;
+      item.trait.percentageManual = false;
+    }
     renderTraitSetup();
     if (state.step === 3) { updateRuleSentence(); renderRulesList(); }
-    showStatus(`${layer.name} split as evenly as possible across ${layer.traits.length} traits.`, 'success');
+    showStatus(`${layer.name}: filled the remaining ${formatPercent(100 - manualTotal)}% across ${unlocked.length} blank/auto trait${unlocked.length === 1 ? '' : 's'}.`, 'success');
+  }
+
+  function equalizeLayerPercentages(layerId) {
+    allocatePercentRemainder(getLayer(layerId), true);
   }
 
   function autoFillLayerPercentages(layerId) {
+    allocatePercentRemainder(getLayer(layerId), false);
+  }
+
+  function exactTotal(layer) {
+    return layer.traits.reduce((sum, trait) => sum + (trait.exactCount != null ? Math.max(0, Number.parseInt(trait.exactCount, 10) || 0) : 0), 0);
+  }
+
+  function updateExactTotalUI(layerId) {
     const layer = getLayer(layerId);
     if (!layer) return;
-    const powers = {
-      balanced: 1,
-      gradual: 1.35,
-      steep: 1.9,
-      very_steep: 2.6,
-    };
-    const power = powers[layer.autoFillStyle] || 1.35;
+    const target = getGenerativeSupply();
+    const total = exactTotal(layer);
+    const node = $(`.trait-config-layer[data-layer-id="${CSS.escape(layerId)}"] .exact-total`, el.traitSetup);
+    if (!node) return;
+    node.classList.remove('valid','over','under');
+    node.classList.add(total === target ? 'valid' : total > target ? 'over' : 'under');
+    node.textContent = total === target ? `Total ${total.toLocaleString()} ✓` : total > target ? `Over by ${(total-target).toLocaleString()}` : `${(target-total).toLocaleString()} remaining`;
+  }
+
+  function autoFillLayerExact(layerId, equal = false) {
+    const layer = getLayer(layerId);
+    if (!layer || !layer.traits.length) return;
+    const target = getGenerativeSupply();
+    const manual = layer.traits.filter(t => t.exactManual);
+    const unlocked = layer.traits.filter(t => !t.exactManual);
+    const manualTotal = manual.reduce((sum,t) => sum + Math.max(0, Number.parseInt(t.exactCount || '0',10)||0),0);
+    if (manualTotal > target) {
+      showStatus(`${layer.name}: manually entered exact amounts exceed the ${target.toLocaleString()} generative slots.`, 'error');
+      return;
+    }
+    if (!unlocked.length) {
+      renderTraitSetup();
+      showStatus(`${layer.name}: no blank/auto exact fields remain to fill.`, 'warn');
+      return;
+    }
+    const remaining = target - manualTotal;
+    const powers = { balanced:1, gradual:1.35, steep:1.9, very_steep:2.6 };
     const mostCommonFirst = layer.rarityOrder !== 'least_to_most';
-    const weights = layer.traits.map((_, index) => {
-      const rank = mostCommonFirst ? (layer.traits.length - index) : (index + 1);
-      return Math.pow(rank, power);
+    const weighted = unlocked.map(trait => {
+      const index = layer.traits.indexOf(trait);
+      const rank = mostCommonFirst ? (layer.traits.length-index) : (index+1);
+      return { id: trait.id, trait, weight: equal ? 1 : Math.pow(rank, powers[layer.autoFillStyle] || 1.35) };
     });
-    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
-    const raw = layer.traits.map((trait, index) => ({ id: trait.id, value: (weights[index] / totalWeight) * 100 }));
-    const floors = raw.map(item => ({ ...item, floor: Math.floor(item.value * 100) / 100, remainder: item.value - Math.floor(item.value * 100) / 100 }));
-    let allocated = floors.reduce((sum, item) => sum + item.floor, 0);
-    floors.sort((a, b) => b.remainder - a.remainder);
-    let i = 0;
-    while (allocated < 99.999) {
-      floors[i % floors.length].floor = Number((floors[i % floors.length].floor + 0.01).toFixed(2));
-      allocated = Number((allocated + 0.01).toFixed(2));
-      i++;
+    const alloc = largestRemainder(remaining, weighted.map(x => ({id:x.id, weight:x.weight})));
+    for (const item of weighted) {
+      item.trait.exactCount = alloc.get(item.id) || 0;
+      item.trait.exactManual = false;
+      item.trait.distribution = 'exact';
     }
-    if (allocated > 100) {
-      let j = floors.length - 1;
-      while (allocated > 100 && floors.length) {
-        if (floors[j].floor >= 0.01) {
-          floors[j].floor = Number((floors[j].floor - 0.01).toFixed(2));
-          allocated = Number((allocated - 0.01).toFixed(2));
-        }
-        j = (j - 1 + floors.length) % floors.length;
-      }
-    }
-    const pctMap = new Map(floors.map(item => [item.id, item.floor]));
-    layer.traits.forEach(trait => { trait.percentage = pctMap.get(trait.id) || 0; });
+    for (const trait of manual) trait.distribution = 'exact';
     renderTraitSetup();
+    showStatus(`${layer.name}: filled ${remaining.toLocaleString()} remaining generative slots across ${unlocked.length} blank/auto trait${unlocked.length === 1 ? '' : 's'}.`, 'success');
   }
 
   function validatePercentageLayers() {
@@ -318,10 +509,22 @@
   }
 
 
+  function validateExactLayers() {
+    const errors = [];
+    if (state.buildMode !== 'exact') return errors;
+    const target = getGenerativeSupply();
+    for (const layer of state.layers) {
+      const total = exactTotal(layer);
+      if (total !== target) errors.push(`${layer.name}: exact amounts must total ${target.toLocaleString()} generative slots (currently ${total.toLocaleString()}). Use Auto Fill Remainder to finish the blanks.`);
+    }
+    return errors;
+  }
+
   function updateBuildContinueState() {
     const button = $('.next-btn[data-next="3"]');
     if (!button) return;
-    const errors = validatePercentageLayers();
+    const errors = [...validatePercentageLayers(), ...validateExactLayers()];
+    if (state.oneOfOnes.length > getSupply()) errors.push(`Full 1/1 count exceeds the collection supply.`);
     button.disabled = errors.length > 0;
     button.title = errors.length ? errors[0] : '';
   }
@@ -342,13 +545,13 @@
 
 
   async function loadArtwork(files) {
-    const imageFiles = [...files].filter(file => /^image\/(png|webp|jpeg)$/i.test(file.type) || /\.(png|webp|jpe?g)$/i.test(file.name));
+    const imageFiles = [...files].filter(isArtworkFile);
     if (!imageFiles.length) {
-      showStatus('No PNG, WEBP, or JPG artwork was found in that folder.', 'error');
+      showStatus('No PNG, WEBP, JPG, or SVG artwork was found in that folder.', 'error');
       return;
     }
 
-    revokeArtworkUrls();
+    revokeArtworkUrls(false);
     state.layers = [];
     state.rules = [];
     state.sourceSelected.clear();
@@ -379,6 +582,7 @@
         rarityMode: 'tier',
         autoFillStyle: 'gradual',
         rarityOrder: 'most_to_least',
+        metadataHidden: false,
         traits: layerFiles.map((file, traitIndex) => {
           const meta = metaMap.get(file) || { width: 0, height: 0 };
           return {
@@ -393,11 +597,14 @@
             rarity: 'common',
             distribution: 'weighted',
             exactCount: null,
-            percentage: 0,
+            exactManual: false,
+            percentage: null,
+            percentageManual: false,
             image: null,
             svgFragment: null,
             svgStats: null,
             isNone: false,
+            metadataHidden: false,
           };
         }),
       };
@@ -450,6 +657,7 @@
             <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">⠿</span>
             <button class="icon-btn move-layer" data-dir="up" title="Move layer backward" ${index === 0 ? 'disabled' : ''}>↑</button>
             <button class="icon-btn move-layer" data-dir="down" title="Move layer forward" ${index === state.layers.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="icon-btn delete-layer-btn" data-delete-layer="${escapeHtml(layer.id)}" title="Delete layer">×</button>
           </div>
         </div>
         <div class="trait-thumbs">
@@ -457,9 +665,15 @@
             <div class="trait-thumb" data-trait-id="${escapeHtml(trait.id)}">
               ${traitPreviewMarkup(trait)}
               <input class="trait-name-input" data-trait-id="${escapeHtml(trait.id)}" type="text" value="${escapeHtml(trait.name)}" maxlength="80" aria-label="Rename trait ${escapeHtml(trait.name)}" ${trait.isNone ? 'disabled title="None is a system trait"' : ''} />
+              ${trait.isNone ? '' : `<button class="trait-thumb-remove" type="button" data-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}" title="Remove trait">Remove</button>`}
             </div>
           `).join('')}
           ${layer.traits.length > 24 ? `<div class="trait-thumb"><div class="thumb-box">+${layer.traits.length - 24}</div><span>more traits</span></div>` : ''}
+        </div>
+        <div class="layer-upload-row">
+          <label class="ghost-btn small-btn file-button" for="layer-traits-${escapeHtml(layer.id)}">Add Trait Artwork</label>
+          <input class="layer-trait-input" id="layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
+          <small>Upload one trait or an entire category batch directly into this layer.</small>
         </div>
       </article>
     `).join('');
@@ -467,10 +681,15 @@
 
   function updateStep1State() {
     const next = $('.next-btn[data-next="2"]');
-    const hasArtwork = state.layers.length > 0;
+    const emptyLayers = state.layers.filter(layer => !layer.traits.some(trait => !trait.isNone && trait.file));
+    const hasArtwork = state.layers.length > 0 && emptyLayers.length === 0;
     next.disabled = !hasArtwork;
-    if (!hasArtwork) {
-      el.step1Hint.textContent = 'Upload artwork to continue.';
+    if (!state.layers.length) {
+      el.step1Hint.textContent = 'Upload artwork or create your first layer to continue.';
+      return;
+    }
+    if (emptyLayers.length) {
+      el.step1Hint.textContent = `Add trait artwork to ${emptyLayers.map(layer => layer.name).join(', ')} before continuing.`;
       return;
     }
     const mismatchCount = allTraits().filter(t => t.width !== state.imageWidth || t.height !== state.imageHeight).length;
@@ -521,26 +740,43 @@
     if (!showTraitControls) {
       el.traitSetup.innerHTML = `
         <div class="validation-box">
-          Your uploaded collection list will choose the layers for defined token IDs. Any missing traits or token IDs will be filled using the current rarity settings.
-        </div>`;
+          Your uploaded collection list chooses the layer combinations. Metadata visibility can still be configured below and applies to the final onchain token attributes.
+        </div>
+        ${state.layers.map(layer => `<section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
+          <div class="trait-config-header trait-config-header-rich">
+            <div><strong>${escapeHtml(layer.name)}</strong><span>${layer.traits.length} traits</span></div>
+            <div class="trait-header-controls"><label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''}/> Hide category from metadata</label></div>
+          </div>
+          <div class="trait-config-grid">
+            ${layer.traits.map(trait => `<div class="trait-config" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
+              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}"/>`}
+              <div><div class="trait-config-name">${escapeHtml(trait.name)}</div><label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''}/> Hide this trait from metadata</label></div>
+            </div>`).join('')}
+          </div>
+        </section>`).join('')}`;
       updateBuildContinueState();
       return;
     }
 
+    const genSupply = getGenerativeSupply();
     el.traitSetup.innerHTML = state.layers.map(layer => {
       const pctTotal = percentTotal(layer);
       const pctDiff = Number((pctTotal - 100).toFixed(2));
       const pctValid = Math.abs(pctDiff) <= 0.01;
       const pctClass = pctValid ? 'valid' : (pctTotal > 100 ? 'over' : 'under');
+      const countTotal = exactTotal(layer);
+      const countClass = countTotal === genSupply ? 'valid' : countTotal > genSupply ? 'over' : 'under';
+      const sortMode = (autoMode && layer.rarityMode === 'percentage') || showExact;
       return `
       <section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
         <div class="trait-config-header trait-config-header-rich">
           <div>
             <strong>${escapeHtml(layer.name)}</strong>
-            <span>${layer.traits.length} traits${layer.allowNone ? ' · None enabled' : ''}</span>
+            <span>${layer.traits.length} traits${layer.allowNone ? ' · None enabled' : ''}${showExact ? ` · ${genSupply.toLocaleString()} generative slots` : ''}</span>
           </div>
           <div class="trait-header-controls">
             <label class="inline-check"><input class="none-layer-toggle" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.allowNone ? 'checked' : ''} /> Allow None</label>
+            <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''} /> Hide category from metadata</label>
             ${autoMode ? `
               <label class="mini-select">Rarity input
                 <select class="layer-rarity-mode" data-layer-id="${escapeHtml(layer.id)}">
@@ -549,7 +785,7 @@
                 </select>
               </label>
             ` : ''}
-            ${autoMode && layer.rarityMode === 'percentage' ? `
+            ${(autoMode && layer.rarityMode === 'percentage') || showExact ? `
               <label class="mini-select">Auto fill
                 <select class="layer-autofill-style" data-layer-id="${escapeHtml(layer.id)}">
                   <option value="balanced" ${layer.autoFillStyle === 'balanced' ? 'selected' : ''}>Balanced</option>
@@ -564,33 +800,34 @@
                   <option value="least_to_most" ${layer.rarityOrder === 'least_to_most' ? 'selected' : ''}>Ascending — rarest first</option>
                 </select>
               </label>
-              <button type="button" class="ghost-btn small-btn autofill-btn" data-layer-id="${escapeHtml(layer.id)}">Auto Fill</button>
-              <button type="button" class="ghost-btn small-btn equalize-btn" data-layer-id="${escapeHtml(layer.id)}">Equal Split</button>
-              <div class="percent-total ${pctClass}" aria-live="polite">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>
+              <button type="button" class="ghost-btn small-btn ${showExact ? 'exact-autofill-btn' : 'autofill-btn'}" data-layer-id="${escapeHtml(layer.id)}">Auto Fill Remainder</button>
+              <button type="button" class="ghost-btn small-btn ${showExact ? 'exact-equalize-btn' : 'equalize-btn'}" data-layer-id="${escapeHtml(layer.id)}">Equal Split Remainder</button>
+              ${showExact
+                ? `<div class="exact-total ${countClass}" aria-live="polite">${countTotal === genSupply ? `Total ${countTotal.toLocaleString()} ✓` : countTotal > genSupply ? `Over by ${(countTotal-genSupply).toLocaleString()}` : `${(genSupply-countTotal).toLocaleString()} remaining`}</div>`
+                : `<div class="percent-total ${pctClass}" aria-live="polite">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>`}
             ` : ''}
           </div>
         </div>
-        ${autoMode && layer.rarityMode === 'percentage' ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Drag traits into rarity order. Auto Fill follows the selected ascending/descending direction.</div>` : ''}
-        <div class="trait-config-grid ${autoMode && layer.rarityMode === 'percentage' ? 'sortable-grid' : ''}">
-          ${layer.traits.map((trait, traitIndex) => `
-            <div class="trait-config ${autoMode && layer.rarityMode === 'percentage' ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
-              ${trait.isNone
-                ? '<div class="trait-config-placeholder">None</div>'
-                : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
+        ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
+        <div class="trait-config-grid ${sortMode ? 'sortable-grid' : ''}">
+          ${layer.traits.map(trait => `
+            <div class="trait-config ${sortMode ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
+              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
               <div>
                 <div class="trait-config-topline">
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
-                  ${autoMode && layer.rarityMode === 'percentage' ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
+                  ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
                 </div>
-                <div class="trait-config-controls ${autoMode && layer.rarityMode === 'percentage' ? 'percent-mode' : ''}">
-                  ${autoMode && layer.rarityMode === 'percentage'
-                    ? `<input class="percent-input" type="number" min="0" max="100" step="0.01" value="${formatPercent(trait.percentage)}" aria-label="Percentage for ${escapeHtml(trait.name)}" /><span class="input-tag">%</span>`
-                    : `<select class="rarity-select" aria-label="Rarity for ${escapeHtml(trait.name)}" ${trait.distribution === 'exact' ? 'disabled' : ''}>
-                        ${Object.entries(rarityLabels).map(([key, label]) => `<option value="${key}" ${trait.rarity === key ? 'selected' : ''}>${label}</option>`).join('')}
-                      </select>`}
-                  ${showExact ? `<input class="exact-count" type="number" min="0" max="${getSupply()}" placeholder="Exact #" value="${trait.distribution === 'exact' && trait.exactCount != null ? trait.exactCount : ''}" ${trait.distribution !== 'exact' ? 'disabled' : ''} />` : `<span></span>`}
+                <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : ''}">
+                  ${showExact
+                    ? `<input class="exact-count" type="number" min="0" max="${genSupply}" placeholder="Blank / auto" value="${trait.exactCount == null ? '' : trait.exactCount}" aria-label="Exact amount for ${escapeHtml(trait.name)}" />${trait.exactManual ? '<span class="input-manual-badge">Manual</span>' : '<span class="input-tag">#</span>'}`
+                    : autoMode && layer.rarityMode === 'percentage'
+                      ? `<input class="percent-input" type="number" min="0" max="100" step="0.01" placeholder="Blank / auto" value="${trait.percentage == null ? '' : formatPercent(trait.percentage)}" aria-label="Percentage for ${escapeHtml(trait.name)}" /><span class="input-tag">%</span>${trait.percentageManual ? '<span class="input-manual-badge">Manual</span>' : ''}`
+                      : `<select class="rarity-select" aria-label="Rarity for ${escapeHtml(trait.name)}">
+                          ${Object.entries(rarityLabels).map(([key, label]) => `<option value="${key}" ${trait.rarity === key ? 'selected' : ''}>${label}</option>`).join('')}
+                        </select>`}
                 </div>
-                ${showExact ? `<label class="exact-toggle"><input class="exact-check" type="checkbox" ${trait.distribution === 'exact' ? 'checked' : ''} /> Use exact amount</label>` : ''}
+                <label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''} /> Hide this trait from metadata</label>
               </div>
             </div>
           `).join('')}
@@ -616,7 +853,7 @@
       el.manualSavedList.innerHTML = '';
       return;
     }
-    const supply = getSupply();
+    const supply = Math.max(1, getGenerativeSupply());
     el.manualTokenId.max = supply;
     const id = tokenId ?? Math.max(1, Math.min(supply, Number.parseInt(el.manualTokenId.value || '1', 10) || 1));
     el.manualTokenId.value = id;
@@ -1717,7 +1954,7 @@
     const seen = new Map();
     let duplicates = 0;
     for (const token of tokens) {
-      const key = state.layers.map(layer => token.traits[layer.id]).join('|');
+      const key = token.oneOfOneId ? `1of1:${token.oneOfOneId}` : state.layers.map(layer => token.traits[layer.id]).join('|');
       const count = seen.get(key) || 0;
       if (count >= 1) duplicates++;
       seen.set(key, count + 1);
@@ -1740,12 +1977,13 @@
   function distributionValidation(tokens, targetCounts) {
     const rows = [];
     const issues = [];
-    const supply = tokens.length || 1;
+    const generativeTokens = tokens.filter(token => !token.oneOfOneId);
+    const supply = generativeTokens.length || 1;
     for (const layer of state.layers) {
       const layerTargets = targetCounts?.[layer.id] || {};
       for (const trait of layer.traits) {
         const expected = Number(layerTargets[trait.id] || 0);
-        const actual = tokens.reduce((count, token) => count + (token.traits[layer.id] === trait.id ? 1 : 0), 0);
+        const actual = generativeTokens.reduce((count, token) => count + (token.traits[layer.id] === trait.id ? 1 : 0), 0);
         let curated = 0;
         for (const [tokenId, recipe] of state.manifestTokens.entries()) {
           if (tokenId >= 1 && tokenId <= supply && recipe[layer.id] === trait.id) curated++;
@@ -1772,7 +2010,9 @@
 
   function compileCollection() {
     if (!state.layers.length) throw new Error('Upload artwork first.');
-    const supply = getSupply();
+    const totalSupply = getSupply();
+    const supply = getGenerativeSupply();
+    if (supply < 0) throw new Error('Full 1/1 artwork exceeds the collection supply.');
     const seed = el.seedInput.value.trim() || 'RELIC-001';
     const rng = createRng(seed);
     const lockedByToken = new Map([...state.manifestTokens.entries()].filter(([tokenId]) => tokenId >= 1 && tokenId <= supply));
@@ -1797,11 +2037,19 @@
     const distributionAudit = distributionValidation(tokens, targetCountTable);
     const duplicates = duplicateCount(tokens);
 
+    const allRecipes = [...tokens];
+    state.oneOfOnes.forEach((item, index) => {
+      allRecipes.push({ tokenId: supply + index + 1, traits: {}, oneOfOneId: item.id });
+    });
+    if (allRecipes.length !== totalSupply) throw new Error(`Compiler produced ${allRecipes.length} recipes for a ${totalSupply} token collection.`);
+
     return {
-      tokens,
+      tokens: allRecipes,
       report: {
-        compilerVersion: '10.8.6',
-        supply,
+        compilerVersion: '10.10.0',
+        supply: totalSupply,
+        generativeSupply: supply,
+        oneOfOneCount: state.oneOfOnes.length,
         seed,
         manualTokens: lockedByToken.size,
         rules: state.rulesEnabled ? state.rules.length : 0,
@@ -1826,8 +2074,9 @@
 
     await new Promise(resolve => setTimeout(resolve, 35));
     try {
-      const percentErrors = validatePercentageLayers();
-      if (percentErrors.length) throw new Error(percentErrors[0]);
+      const inputErrors = [...validatePercentageLayers(), ...validateExactLayers()];
+      if (inputErrors.length) throw new Error(inputErrors[0]);
+      if (state.oneOfOnes.length > getSupply()) throw new Error('Full 1/1 artwork exceeds the collection supply.');
       const result = compileCollection();
       state.compiledTokens = result.tokens;
       state.compilerReport = result.report;
@@ -1850,7 +2099,7 @@
     const distributionIssues = r.distributionIssues || [];
     const hardProblems = r.ruleViolations + r.exactIssues.length + distributionIssues.length;
     const messages = [
-      `${r.supply.toLocaleString()} token recipes created`,
+      `${r.supply.toLocaleString()} token recipes created${r.oneOfOneCount ? ` · ${r.generativeSupply.toLocaleString()} generative + ${r.oneOfOneCount.toLocaleString()} full 1/1` : ''}`,
       `${r.manualTokens.toLocaleString()} token(s) use imported/manual layer choices and consume their configured rarity targets`,
       `${r.rules} shared rule(s) checked`,
       r.ruleViolations ? `${r.ruleViolations} rule conflict(s) remain` : 'All active trait rules are satisfied',
@@ -1922,7 +2171,7 @@
       byLayer.get(row.layerId).push(row);
     }
     el.rarityAudit.classList.remove('hidden');
-    el.rarityAudit.innerHTML = `<div class="rarity-audit-heading"><div><span>RARITY AUDIT</span><strong>Compiled totals vs. configured targets</strong></div><small>Curated tokens count toward these totals; Relic Forge only generates the remaining amount.</small></div>${[...byLayer.values()].map(layerRows => `
+    el.rarityAudit.innerHTML = `<div class="rarity-audit-heading"><div><span>RARITY AUDIT</span><strong>Compiled totals vs. configured targets</strong></div><small>Curated layered tokens count toward these totals; full standalone 1/1 artwork is excluded and the rarity targets apply to the remaining generative slots.</small></div>${[...byLayer.values()].map(layerRows => `
       <div class="rarity-audit-layer">
         <h4>${escapeHtml(layerRows[0].layerName)}</h4>
         <div class="rarity-audit-table">
@@ -2082,7 +2331,91 @@
     return trait.svgFragment;
   }
 
+  function renderOneOfOnes() {
+    if (!el.oneOfOnePanel) return;
+    const enabled = !!el.oneOfOneToggle?.checked;
+    el.oneOfOnePanel.classList.toggle('hidden', !enabled);
+    if (el.oneOfOneCount) el.oneOfOneCount.textContent = state.oneOfOnes.length;
+    if (!el.oneOfOneList) return;
+    if (!state.oneOfOnes.length) {
+      el.oneOfOneList.innerHTML = '<div class="empty-state">No full 1/1 artwork uploaded yet.</div>';
+      updateBuildContinueState();
+      return;
+    }
+    el.oneOfOneList.innerHTML = state.oneOfOnes.map(item => `
+      <div class="oneofone-item oneofone-item-rich" data-oneofone-id="${escapeHtml(item.id)}">
+        <div class="oneofone-art-column">
+          <img src="${item.url}" alt="${escapeHtml(item.name)}"/>
+          <label class="field compact-field"><span>Artwork label</span><input class="oneofone-name" value="${escapeHtml(item.name)}" maxlength="80" aria-label="1 of 1 artwork label"/></label>
+          <div class="oneofone-item-footer"><span>${item.width || '?'}×${item.height || '?'}</span><button class="trait-thumb-remove" type="button" data-remove-oneofone="${escapeHtml(item.id)}">Remove</button></div>
+        </div>
+        <div class="oneofone-meta-column">
+          <div class="oneofone-meta-heading"><strong>Custom token metadata</strong><small>Optional. Customize this standalone token without affecting the rest of the collection.</small></div>
+          <label class="inline-check"><input class="oneofone-default-attribute" type="checkbox" ${item.includeDefaultAttribute !== false ? 'checked' : ''}/> Include default “1/1 = ${escapeHtml(item.name)}” attribute</label>
+          <label class="field compact-field"><span>Token name override</span><input class="oneofone-token-name" value="${escapeHtml(item.tokenName || '')}" maxlength="120" placeholder="e.g. The First Relic"/></label>
+          <label class="field compact-field"><span>Description override</span><textarea class="oneofone-description" rows="2" maxlength="1000" placeholder="Optional custom description">${escapeHtml(item.description || '')}</textarea></label>
+          <div class="oneofone-metadata-list">
+            ${(item.metadata || []).map((row, index) => `<div class="oneofone-metadata-row" data-meta-index="${index}">
+              <input class="oneofone-meta-type" value="${escapeHtml(row.traitType || '')}" maxlength="80" placeholder="Trait type"/>
+              <input class="oneofone-meta-value" value="${escapeHtml(row.value || '')}" maxlength="120" placeholder="Value"/>
+              <button type="button" class="icon-btn" data-remove-oneofone-meta="${index}" title="Remove metadata field">×</button>
+            </div>`).join('')}
+          </div>
+          <button class="ghost-btn small-btn" type="button" data-add-oneofone-meta="${escapeHtml(item.id)}">Add metadata field</button>
+        </div>
+      </div>`).join('');
+    updateBuildContinueState();
+  }
+
+  async function addOneOfOneFiles(files) {
+    const valid = [...files].filter(isArtworkFile);
+    if (!valid.length) return;
+    const available = Math.max(0, getSupply() - state.oneOfOnes.length);
+    if (valid.length > available) throw new Error(`Only ${available} collection slot${available === 1 ? '' : 's'} remain for full 1/1 artwork.`);
+    for (const file of valid) {
+      const meta = await imageMeta(file);
+      if (state.layers.length && meta.width && meta.height && (meta.width !== state.imageWidth || meta.height !== state.imageHeight)) {
+        throw new Error(`${file.name} is ${meta.width}×${meta.height}; full 1/1 artwork must match the ${state.imageWidth}×${state.imageHeight} collection canvas.`);
+      }
+      if (!state.layers.length && meta.width && meta.height) { state.imageWidth = meta.width; state.imageHeight = meta.height; }
+      state.oneOfOnes.push({
+        id: `oneofone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,
+        name: displayName(file.name), tokenName: '', description: '', metadata: [], includeDefaultAttribute: true, filename: file.name, file, url: URL.createObjectURL(file), width: meta.width, height: meta.height,
+        svgFragment: null, svgStats: null, isOneOfOne: true,
+      });
+    }
+    resetCompiledForArtworkChange();
+    renderOneOfOnes();
+    renderTraitSetup();
+    if (state.buildMode === 'manual') renderManualBuilder();
+    showStatus(`Added ${valid.length} standalone 1/1${valid.length === 1 ? '' : 's'}. Layer rarity now fills ${getGenerativeSupply().toLocaleString()} remaining generative slot${getGenerativeSupply() === 1 ? '' : 's'}.`, 'success');
+  }
+
+  function getOneOfOne(id) { return state.oneOfOnes.find(item => item.id === id) || null; }
+
+  function removeOneOfOne(id) {
+    const index = state.oneOfOnes.findIndex(item => item.id === id);
+    if (index < 0) return;
+    const [item] = state.oneOfOnes.splice(index,1);
+    if (item.url) URL.revokeObjectURL(item.url);
+    resetCompiledForArtworkChange();
+    renderOneOfOnes();
+    renderTraitSetup();
+    if (state.buildMode === 'manual') renderManualBuilder();
+  }
+
+  async function oneOfOneToSvg(item) {
+    if (!item) return '';
+    try {
+      const fragment = await traitToSvgFragment(item);
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${state.imageWidth} ${state.imageHeight}" shape-rendering="crispEdges" preserveAspectRatio="xMidYMid meet">${fragment}</svg>`;
+    } catch (_) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${state.imageWidth} ${state.imageHeight}"><image x="0" y="0" width="${state.imageWidth}" height="${state.imageHeight}" href="${item.url}" preserveAspectRatio="none"/></svg>`;
+    }
+  }
+
   async function tokenToSvg(token) {
+    if (token?.oneOfOneId) return oneOfOneToSvg(getOneOfOne(token.oneOfOneId));
     const width = state.imageWidth || 1000;
     const height = state.imageHeight || 1000;
     const parts = [];
@@ -2164,7 +2497,7 @@
         <div class="preview-canvas-wrap"><div class="svg-preview-host preview-svg-host" role="img" aria-label="SVG token preview"></div></div>
         <div class="preview-card-body">
           <strong>#${token.tokenId}</strong>
-          <div class="preview-traits">${state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || '—')}</span>`).join('')}</div>
+          <div class="preview-traits">${token.oneOfOneId ? `<span>1/1 · ${escapeHtml(getOneOfOne(token.oneOfOneId)?.name || 'Standalone')}</span>` : state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || '—')}</span>`).join('')}</div>
         </div>
       </article>
     `).join('');
@@ -2189,6 +2522,7 @@
         order: index,
         allowNone: layer.allowNone,
         rarityMode: layer.rarityMode,
+        metadataHidden: !!layer.metadataHidden,
         traits: layer.traits.map(trait => ({
           name: trait.name,
           file: trait.filename,
@@ -2196,8 +2530,11 @@
           percentage: layer.rarityMode === 'percentage' ? Number(trait.percentage || 0) : null,
           distribution: trait.distribution,
           exactCount: trait.distribution === 'exact' ? Number(trait.exactCount || 0) : null,
+          metadataHidden: !!trait.metadataHidden || (!!trait.isNone && !!state.hideNoneMetadata),
         })),
       })),
+      hideNoneMetadata: !!state.hideNoneMetadata,
+      oneOfOnes: state.oneOfOnes.map(item => ({ name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType, value: row.value })), includeDefaultAttribute: item.includeDefaultAttribute !== false, file: item.filename })),
       rules: state.rulesEnabled ? state.rules.map(rule => ({
         type: rule.type,
         sources: rule.sources.map(id => ({ layer: getLayer(getTrait(id)?.layerId)?.name, trait: getTrait(id)?.name })),
@@ -2205,14 +2542,19 @@
       })) : [],
       tokens: state.compiledTokens.map(token => ({
         tokenId: token.tokenId,
-        traits: Object.fromEntries(state.layers.map(layer => [layer.name, getTrait(token.traits[layer.id])?.name || null])),
+        oneOfOne: token.oneOfOneId ? getOneOfOne(token.oneOfOneId)?.name || '1/1' : null,
+        traits: token.oneOfOneId ? {} : Object.fromEntries(state.layers.map(layer => [layer.name, getTrait(token.traits[layer.id])?.name || null])),
       })),
     };
   }
 
   function manifestCsv() {
-    const headers = ['Token', ...state.layers.map(l => l.name)];
-    const rows = state.compiledTokens.map(token => [token.tokenId, ...state.layers.map(layer => getTrait(token.traits[layer.id])?.name || '')]);
+    const headers = ['Token', 'Full 1/1', ...state.layers.map(l => l.name)];
+    const rows = state.compiledTokens.map(token => [
+      token.tokenId,
+      token.oneOfOneId ? (getOneOfOne(token.oneOfOneId)?.name || '1/1') : '',
+      ...state.layers.map(layer => token.oneOfOneId ? '' : (getTrait(token.traits[layer.id])?.name || ''))
+    ]);
     return [headers, ...rows].map(row => row.map(csvEscape).join(',')).join('\n');
   }
 
@@ -2227,15 +2569,21 @@
         rarityMode: layer.rarityMode,
         autoFillStyle: layer.autoFillStyle,
         rarityOrder: layer.rarityOrder,
+        metadataHidden: !!layer.metadataHidden,
         traits: layer.traits.map(trait => ({
           name: trait.name,
           file: trait.filename,
           rarity: trait.rarity,
           percentage: trait.percentage,
+          percentageManual: !!trait.percentageManual,
           distribution: trait.distribution,
           exactCount: trait.exactCount,
+          exactManual: !!trait.exactManual,
+          metadataHidden: !!trait.metadataHidden,
         }))
       })),
+      hideNoneMetadata: !!state.hideNoneMetadata,
+      oneOfOnes: state.oneOfOnes.map(item => ({ name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType, value: row.value })), includeDefaultAttribute: item.includeDefaultAttribute !== false, file: item.filename })),
       rules: state.rules.map(rule => ({
         type: rule.type,
         sources: rule.sources.map(traitLabel),
@@ -2269,6 +2617,7 @@
           rarityMode: layer.rarityMode,
           autoFillStyle: layer.autoFillStyle,
           rarityOrder: layer.rarityOrder,
+          metadataHidden: !!layer.metadataHidden,
           traits: layer.traits.map(trait => ({
             id: trait.id,
             layerId: trait.layerId,
@@ -2280,10 +2629,19 @@
             rarity: trait.rarity,
             distribution: trait.distribution,
             exactCount: trait.exactCount,
+            exactManual: !!trait.exactManual,
             percentage: trait.percentage,
+            percentageManual: !!trait.percentageManual,
             isNone: !!trait.isNone,
+            metadataHidden: !!trait.metadataHidden,
           })),
         })),
+        oneOfOnes: state.oneOfOnes.map(item => ({
+          id: item.id, name: item.name, tokenName: item.tokenName || '', description: item.description || '', includeDefaultAttribute: item.includeDefaultAttribute !== false,
+          metadata: (item.metadata || []).map(row => ({ traitType: row.traitType || '', value: row.value || '' })),
+          filename: item.filename, file: item.file || null, width: item.width, height: item.height,
+        })),
+        hideNoneMetadata: !!state.hideNoneMetadata,
         rules: state.rules.map(rule => ({
           id: rule.id,
           type: rule.type,
@@ -2293,7 +2651,7 @@
         sourceSelected: [...state.sourceSelected],
         targetSelected: [...state.targetSelected],
         manifestTokens: [...state.manifestTokens.entries()].map(([tokenId, recipe]) => [tokenId, { ...recipe }]),
-        compiledTokens: state.compiledTokens.map(token => ({ tokenId: token.tokenId, traits: { ...token.traits } })),
+        compiledTokens: state.compiledTokens.map(token => ({ tokenId: token.tokenId, traits: { ...token.traits }, oneOfOneId: token.oneOfOneId || null })),
         compilerReport: state.compilerReport ? JSON.parse(JSON.stringify(state.compilerReport)) : null,
       },
     };
@@ -2313,6 +2671,7 @@
       rarityMode: layer.rarityMode || 'tier',
       autoFillStyle: layer.autoFillStyle || 'gradual',
       rarityOrder: layer.rarityOrder || 'most_to_least',
+      metadataHidden: !!layer.metadataHidden,
       traits: (layer.traits || []).map(trait => {
         const file = trait.file || null;
         return {
@@ -2327,14 +2686,25 @@
           rarity: trait.rarity || 'common',
           distribution: trait.distribution || 'weighted',
           exactCount: trait.exactCount ?? null,
-          percentage: Number(trait.percentage || 0),
+          exactManual: trait.exactManual != null ? !!trait.exactManual : trait.exactCount != null,
+          percentage: trait.percentage == null ? null : Number(trait.percentage),
+          percentageManual: trait.percentageManual != null ? !!trait.percentageManual : Number(trait.percentage || 0) !== 0,
           image: null,
           svgFragment: trait.isNone ? '' : null,
           svgStats: trait.isNone ? { rectangles: 0, colors: 0, bytes: 0 } : null,
           isNone: !!trait.isNone,
+          metadataHidden: !!trait.metadataHidden,
         };
       }),
     }));
+    state.oneOfOnes = (saved.oneOfOnes || []).map(item => {
+      const file = item.file || null;
+      return { id: item.id, name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType || '', value: row.value || '' })), includeDefaultAttribute: item.includeDefaultAttribute !== false, filename: item.filename, file, url: file ? URL.createObjectURL(file) : '', width: Number(item.width || saved.imageWidth || 0), height: Number(item.height || saved.imageHeight || 0), svgFragment: null, svgStats: null, isOneOfOne: true };
+    });
+    state.hideNoneMetadata = !!saved.hideNoneMetadata;
+    if (el.hideNoneMetadata) el.hideNoneMetadata.checked = state.hideNoneMetadata;
+    if (el.oneOfOneToggle) el.oneOfOneToggle.checked = state.oneOfOnes.length > 0;
+    renderOneOfOnes();
     state.rulesEnabled = !!saved.rulesEnabled;
     state.rules = (saved.rules || []).map(rule => ({ id: rule.id, type: rule.type, sources: [...(rule.sources || [])], targets: [...(rule.targets || [])] }));
     state.ruleType = saved.ruleType || 'only_with';
@@ -2343,8 +2713,8 @@
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
     const savedCompilerReport = saved.compilerReport || null;
-    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.8.6';
-    state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) } }));
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.10.0';
+    state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) }, oneOfOneId: token.oneOfOneId || null }));
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
     state.imageHeight = Number(saved.imageHeight || state.layers[0]?.traits[0]?.height || 1000);
@@ -2366,7 +2736,7 @@
     if (state.compiledTokens.length) await renderPreviewGrid();
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
-    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.8.6 rarity compiler before forging.`, 'warn');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.10.0 compiler before forging.`, 'warn');
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
@@ -2458,7 +2828,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.8.6',
+    version: '10.10.0',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2471,7 +2841,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.8.6' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.10.0' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
@@ -2481,6 +2851,28 @@
 
   // Artwork upload
   el.folderInput.addEventListener('change', e => loadArtwork(e.target.files));
+  el.createLayerBtn?.addEventListener('click', () => {
+    const name = el.newLayerName?.value.trim() || `Layer ${state.layers.length + 1}`;
+    const layer = createLayerObject(name);
+    state.layers.push(layer);
+    if (el.newLayerName) el.newLayerName.value = '';
+    refreshArtworkUi();
+    showStatus(`${name} layer created. Add trait artwork directly to it.`, 'success');
+  });
+  el.categoryTraitInput?.addEventListener('change', e => {
+    state.categoryPendingFiles = [...(e.target.files || [])];
+    if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = state.categoryPendingFiles.length ? `${state.categoryPendingFiles.length} file${state.categoryPendingFiles.length === 1 ? '' : 's'} selected` : 'No files selected';
+  });
+  el.addCategoryBtn?.addEventListener('click', async () => {
+    try {
+      const name = el.categoryName?.value.trim() || `Layer ${state.layers.length + 1}`;
+      await addCategory(name, state.categoryPendingFiles || []);
+      if (el.categoryName) el.categoryName.value = '';
+      if (el.categoryTraitInput) el.categoryTraitInput.value = '';
+      state.categoryPendingFiles = [];
+      if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = 'No files selected';
+    } catch (error) { showStatus(error.message, 'error'); }
+  });
   el.uploadZone.addEventListener('dragover', e => { e.preventDefault(); el.uploadZone.classList.add('dragover'); });
   el.uploadZone.addEventListener('dragleave', () => el.uploadZone.classList.remove('dragover'));
   el.uploadZone.addEventListener('drop', async e => {
@@ -2490,10 +2882,21 @@
     await loadArtwork(files);
   });
   el.layerList.addEventListener('click', e => {
-    const btn = e.target.closest('.move-layer');
-    if (!btn) return;
-    const card = btn.closest('[data-layer-id]');
-    moveLayer(card.dataset.layerId, btn.dataset.dir);
+    const moveBtn = e.target.closest('.move-layer');
+    if (moveBtn) {
+      const card = moveBtn.closest('[data-layer-id]');
+      moveLayer(card.dataset.layerId, moveBtn.dataset.dir);
+      return;
+    }
+    const deleteLayer = e.target.closest('[data-delete-layer]');
+    if (deleteLayer) {
+      if (confirm('Delete this layer and its trait artwork from the project?')) removeLayer(deleteLayer.dataset.deleteLayer);
+      return;
+    }
+    const deleteTrait = e.target.closest('[data-delete-trait]');
+    if (deleteTrait) {
+      removeTrait(deleteTrait.dataset.layerId, deleteTrait.dataset.deleteTrait);
+    }
   });
 
   el.layerList.addEventListener('dragstart', e => {
@@ -2531,6 +2934,11 @@
   });
 
   el.layerList.addEventListener('change', e => {
+    if (e.target.classList.contains('layer-trait-input')) {
+      addFilesToLayer(e.target.dataset.layerId, e.target.files || []).catch(error => showStatus(error.message, 'error'));
+      e.target.value = '';
+      return;
+    }
     if (e.target.classList.contains('layer-name-input')) {
       const layer = getLayer(e.target.dataset.layerId);
       const nextName = e.target.value.trim();
@@ -2556,6 +2964,61 @@
     }
   });
 
+  el.hideNoneMetadata?.addEventListener('change', () => {
+    state.hideNoneMetadata = !!el.hideNoneMetadata.checked;
+    resetCompiledForArtworkChange();
+  });
+
+  el.oneOfOneToggle?.addEventListener('change', () => {
+    if (!el.oneOfOneToggle.checked && state.oneOfOnes.length) {
+      const ok = confirm('Disable full 1/1 artwork and remove the uploaded standalone pieces from this project?');
+      if (!ok) { el.oneOfOneToggle.checked = true; return; }
+      for (const item of state.oneOfOnes) if (item.url) URL.revokeObjectURL(item.url);
+      state.oneOfOnes = [];
+      resetCompiledForArtworkChange();
+      renderTraitSetup();
+    }
+    renderOneOfOnes();
+  });
+  el.oneOfOneInput?.addEventListener('change', e => {
+    addOneOfOneFiles(e.target.files || []).catch(error => showStatus(error.message, 'error'));
+    e.target.value = '';
+  });
+  el.oneOfOneList?.addEventListener('input', e => {
+    const item = getOneOfOne(e.target.closest('[data-oneofone-id]')?.dataset.oneofoneId);
+    if (!item) return;
+    if (e.target.classList.contains('oneofone-name')) item.name = e.target.value.trim() || item.name;
+    if (e.target.classList.contains('oneofone-token-name')) item.tokenName = e.target.value;
+    if (e.target.classList.contains('oneofone-description')) item.description = e.target.value;
+    if (e.target.classList.contains('oneofone-default-attribute')) item.includeDefaultAttribute = e.target.checked;
+    const row = e.target.closest('[data-meta-index]');
+    if (row) {
+      const index = Number(row.dataset.metaIndex);
+      if (!item.metadata) item.metadata = [];
+      if (!item.metadata[index]) item.metadata[index] = { traitType: '', value: '' };
+      if (e.target.classList.contains('oneofone-meta-type')) item.metadata[index].traitType = e.target.value;
+      if (e.target.classList.contains('oneofone-meta-value')) item.metadata[index].value = e.target.value;
+    }
+    resetCompiledForArtworkChange();
+  });
+  el.oneOfOneList?.addEventListener('click', e => {
+    const removeBtn = e.target.closest('[data-remove-oneofone]');
+    if (removeBtn) { removeOneOfOne(removeBtn.dataset.removeOneofone); return; }
+    const item = getOneOfOne(e.target.closest('[data-oneofone-id]')?.dataset.oneofoneId);
+    if (!item) return;
+    const addBtn = e.target.closest('[data-add-oneofone-meta]');
+    if (addBtn) {
+      if (!item.metadata) item.metadata = [];
+      item.metadata.push({ traitType: '', value: '' });
+      renderOneOfOnes(); resetCompiledForArtworkChange(); return;
+    }
+    const metaRemove = e.target.closest('[data-remove-oneofone-meta]');
+    if (metaRemove) {
+      item.metadata?.splice(Number(metaRemove.dataset.removeOneofoneMeta), 1);
+      renderOneOfOnes(); resetCompiledForArtworkChange();
+    }
+  });
+
   // Navigation and mode
   $$('.step').forEach(btn => btn.addEventListener('click', () => {
     const target = Number(btn.dataset.step);
@@ -2567,30 +3030,44 @@
   // Build mode + trait controls
   $$('.build-card').forEach(card => card.addEventListener('click', () => setBuildMode(card.dataset.buildMode)));
   el.traitSetup.addEventListener('input', e => {
-    if (!e.target.classList.contains('percent-input')) return;
+    if (!e.target.classList.contains('percent-input') && !e.target.classList.contains('exact-count')) return;
     const config = e.target.closest('[data-trait-id]');
     if (!config) return;
     const trait = getTrait(config.dataset.traitId);
     const layerId = config.dataset.layerId;
     if (!trait || !layerId) return;
-    trait.percentage = Math.max(0, Math.min(100, Number.parseFloat(e.target.value || '0') || 0));
-    updatePercentTotalUI(layerId);
+    if (e.target.classList.contains('percent-input')) {
+      const raw = e.target.value.trim();
+      if (raw === '') { trait.percentage = null; trait.percentageManual = false; }
+      else { trait.percentage = Math.max(0, Math.min(100, Number.parseFloat(raw) || 0)); trait.percentageManual = true; }
+      updatePercentTotalUI(layerId);
+    } else {
+      const raw = e.target.value.trim();
+      if (raw === '') { trait.exactCount = null; trait.exactManual = false; trait.distribution = 'weighted'; }
+      else { trait.exactCount = Math.max(0, Number.parseInt(raw, 10) || 0); trait.exactManual = true; trait.distribution = 'exact'; }
+      updateExactTotalUI(layerId);
+    }
+    resetCompiledForArtworkChange();
     updateBuildContinueState();
     if (state.step === 3) { updateRuleSentence(); renderRulesList(); }
   });
+
   el.traitSetup.addEventListener('change', e => {
     const layerId = e.target.dataset.layerId || e.target.closest('[data-layer-id]')?.dataset.layerId;
+    if (e.target.classList.contains('layer-metadata-hidden')) {
+      const layer = getLayer(e.target.dataset.layerId);
+      if (!layer) return;
+      layer.metadataHidden = e.target.checked;
+      resetCompiledForArtworkChange();
+      return;
+    }
     if (e.target.classList.contains('none-layer-toggle')) {
       const layer = getLayer(e.target.dataset.layerId);
       if (!layer) return;
       layer.allowNone = e.target.checked;
       syncNoneTrait(layer);
-      if (layer.allowNone && layer.rarityMode === 'percentage' && !layer.traits.some(t => Number.parseFloat(t.percentage || '0') > 0)) autoFillLayerPercentages(layer.id);
-      renderArtwork();
-      renderTraitSetup();
-      renderManualBuilder();
-      renderRulePickers();
-      renderRulesList();
+      if (layer.allowNone && layer.rarityMode === 'percentage') autoFillLayerPercentages(layer.id);
+      refreshArtworkUi();
       return;
     }
     if (e.target.classList.contains('layer-rarity-mode')) {
@@ -2599,45 +3076,33 @@
       layer.rarityMode = e.target.value;
       if (layer.rarityMode === 'percentage') autoFillLayerPercentages(layer.id);
       else renderTraitSetup();
+      resetCompiledForArtworkChange();
       return;
     }
     if (e.target.classList.contains('layer-autofill-style')) {
-      const layer = getLayer(e.target.dataset.layerId);
-      if (!layer) return;
-      layer.autoFillStyle = e.target.value;
-      return;
+      const layer = getLayer(e.target.dataset.layerId); if (layer) layer.autoFillStyle = e.target.value; return;
     }
     if (e.target.classList.contains('layer-rarity-order')) {
-      const layer = getLayer(e.target.dataset.layerId);
-      if (!layer) return;
-      layer.rarityOrder = e.target.value;
-      return;
+      const layer = getLayer(e.target.dataset.layerId); if (layer) layer.rarityOrder = e.target.value; return;
     }
-
     const config = e.target.closest('[data-trait-id]');
     if (!config) return;
     const trait = getTrait(config.dataset.traitId);
     if (!trait) return;
-    if (e.target.classList.contains('rarity-select')) trait.rarity = e.target.value;
-    if (e.target.classList.contains('percent-input')) trait.percentage = Math.max(0, Math.min(100, Number.parseFloat(e.target.value || '0') || 0));
-    if (e.target.classList.contains('exact-check')) {
-      trait.distribution = e.target.checked ? 'exact' : 'weighted';
-      if (e.target.checked && trait.exactCount == null) trait.exactCount = 0;
-      renderTraitSetup();
-    }
-    if (e.target.classList.contains('exact-count')) trait.exactCount = Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0);
-    if (e.target.classList.contains('percent-input')) { updatePercentTotalUI(layerId); updateBuildContinueState(); }
+    if (e.target.classList.contains('trait-metadata-hidden')) { trait.metadataHidden = e.target.checked; resetCompiledForArtworkChange(); return; }
+    if (e.target.classList.contains('rarity-select')) { trait.rarity = e.target.value; resetCompiledForArtworkChange(); }
+    if (e.target.classList.contains('percent-input') || e.target.classList.contains('exact-count')) renderTraitSetup();
   });
+
   el.traitSetup.addEventListener('click', e => {
     const autoFillBtn = e.target.closest('.autofill-btn');
-    if (autoFillBtn) {
-      autoFillLayerPercentages(autoFillBtn.dataset.layerId);
-      return;
-    }
+    if (autoFillBtn) { autoFillLayerPercentages(autoFillBtn.dataset.layerId); resetCompiledForArtworkChange(); return; }
     const equalizeBtn = e.target.closest('.equalize-btn');
-    if (equalizeBtn) {
-      equalizeLayerPercentages(equalizeBtn.dataset.layerId);
-    }
+    if (equalizeBtn) { equalizeLayerPercentages(equalizeBtn.dataset.layerId); resetCompiledForArtworkChange(); return; }
+    const exactFill = e.target.closest('.exact-autofill-btn');
+    if (exactFill) { autoFillLayerExact(exactFill.dataset.layerId, false); resetCompiledForArtworkChange(); return; }
+    const exactEqual = e.target.closest('.exact-equalize-btn');
+    if (exactEqual) { autoFillLayerExact(exactEqual.dataset.layerId, true); resetCompiledForArtworkChange(); }
   });
 
   // Drag-and-drop rarity ordering in Generate For Me percentage mode.

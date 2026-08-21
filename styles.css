@@ -1350,3 +1350,56 @@ body.modal-open { overflow: hidden; }
   .rarity-audit-table { overflow-x: auto; }
   .rarity-audit-row { min-width: 660px; }
 }
+
+/* V10.9 artwork intake + remainder autofill + 1/1s */
+.artwork-or { display:flex; align-items:center; gap:12px; margin:18px 0; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+.artwork-or::before,.artwork-or::after { content:""; height:1px; background:var(--border); flex:1; }
+.manual-artwork-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+.manual-art-card { border:1px solid var(--border); border-radius:12px; background:#0b0b0b; padding:14px; display:grid; gap:12px; }
+.manual-art-card strong,.manual-art-card small { display:block; }
+.manual-art-card small { color:var(--muted); margin-top:4px; line-height:1.45; }
+.manual-art-card input[type="text"] { flex:1 1 180px; min-width:0; }
+.file-button { cursor:pointer; }
+#categoryTraitInput,.layer-trait-input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+#categoryTraitFileCount { color:var(--muted); font-size:10px; align-self:center; }
+.layer-upload-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.layer-upload-row small { color:var(--dim); }
+.trait-thumb-remove,.delete-layer-btn { border:0; background:transparent; color:var(--dim); cursor:pointer; }
+.trait-thumb-remove:hover,.delete-layer-btn:hover { color:var(--danger); }
+.oneofone-toggle-row { display:flex; align-items:center; gap:12px; margin:18px 0 10px; padding:12px 14px; border:1px solid var(--border); border-radius:11px; background:#0b0b0b; }
+.oneofone-toggle-row small { color:var(--muted); }
+.oneofone-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-top:14px; }
+.oneofone-item { border:1px solid var(--border); border-radius:10px; background:#090909; padding:9px; display:grid; gap:7px; }
+.oneofone-item img { width:100%; aspect-ratio:1; object-fit:contain; image-rendering:pixelated; background:#050505; border-radius:7px; }
+.oneofone-item input { width:100%; }
+.oneofone-item-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted); font-size:9px; }
+.autofill-note { color:var(--muted); font-size:9px; line-height:1.4; }
+.input-manual-badge { color:var(--accent-2); font-size:8px; text-transform:uppercase; letter-spacing:.06em; }
+.exact-total { border:1px solid var(--border); border-radius:8px; padding:7px 9px; font-size:9px; white-space:nowrap; }
+.exact-total.valid { color:var(--success); border-color:rgba(86,180,116,.4); }
+.exact-total.under { color:var(--warn); }
+.exact-total.over { color:var(--danger); }
+@media(max-width:850px){.manual-artwork-tools{grid-template-columns:1fr}.oneofone-toggle-row{align-items:flex-start;flex-direction:column}}
+
+/* V10.10 metadata visibility + richer 1/1 metadata editor */
+.metadata-visibility-panel {
+  display:flex; justify-content:space-between; gap:18px; align-items:center;
+  margin:18px 0 12px; padding:13px 15px; border:1px solid var(--border); border-radius:11px; background:#0b0b0b;
+}
+.metadata-visibility-panel strong,.metadata-visibility-panel small { display:block; }
+.metadata-visibility-panel small { margin-top:4px; color:var(--muted); line-height:1.45; }
+.trait-metadata-check { margin-top:7px; color:var(--dim); font-size:9px; }
+.oneofone-list { grid-template-columns:1fr; }
+.oneofone-item-rich { grid-template-columns:minmax(150px,220px) minmax(0,1fr); gap:14px; align-items:start; }
+.oneofone-art-column,.oneofone-meta-column { display:grid; gap:8px; min-width:0; }
+.oneofone-meta-heading strong,.oneofone-meta-heading small { display:block; }
+.oneofone-meta-heading small { color:var(--muted); margin-top:3px; line-height:1.4; }
+.compact-field { margin:0; }
+.oneofone-metadata-list { display:grid; gap:6px; }
+.oneofone-metadata-row { display:grid; grid-template-columns:minmax(120px,.7fr) minmax(140px,1fr) auto; gap:6px; align-items:center; }
+.oneofone-metadata-row input { min-width:0; }
+@media(max-width:760px){
+  .metadata-visibility-panel{align-items:flex-start;flex-direction:column}
+  .oneofone-item-rich{grid-template-columns:1fr}
+  .oneofone-metadata-row{grid-template-columns:1fr 1fr auto}
+}

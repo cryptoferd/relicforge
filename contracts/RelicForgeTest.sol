@@ -140,6 +140,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         uint32 offset;
         uint32 length;
         uint8 encoding; // 0 SVG fragment, 1 PNG, 2 JPEG, 3 WEBP
+        bool hiddenFromMetadata;
         bool exists;
     }
 
@@ -151,6 +152,21 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         uint32 offset;
         uint32 length;
         uint8 encoding;
+        bool hiddenFromMetadata;
+    }
+
+    struct OneOfOneMetadata {
+        string tokenName;
+        string tokenDescription;
+        string attributesJson;
+        bool exists;
+    }
+
+    struct OneOfOneMetadataInput {
+        uint8 index;
+        string tokenName;
+        string tokenDescription;
+        string attributesJson;
     }
 
     string public name;
@@ -175,6 +191,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     uint16 public canvasWidth;
     uint16 public canvasHeight;
     uint8 public layerCount;
+    uint8 public oneOfOneLayerPlusOne; // 0 disabled, otherwise layer index + 1
     uint8 public revealMode; // 0 Forge Reveal, 1 Creator Reveal
     address public randomnessProvider;
 
@@ -196,6 +213,8 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     mapping(uint8 => mapping(uint8 => Trait)) internal _traits;
     mapping(uint8 => uint16) public traitCountByLayer;
     mapping(uint8 => string) public layerNames;
+    mapping(uint8 => bool) public layerHiddenFromMetadata;
+    mapping(uint8 => OneOfOneMetadata) internal _oneOfOneMetadata;
 
     mapping(uint256 => address) internal _ownerOf;
     mapping(address => uint256) internal _balanceOf;
@@ -325,7 +344,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
             require(input.length > 0, "ZERO_TRAIT");
             require(input.encoding <= 3, "BAD_ENCODING");
             _traits[input.layer][input.index] = Trait(
-                input.name, input.shard, input.offset, input.length, input.encoding, true
+                input.name, input.shard, input.offset, input.length, input.encoding, input.hiddenFromMetadata, true
             );
             if (input.index >= traitCountByLayer[input.layer]) {
                 traitCountByLayer[input.layer] = uint16(input.index) + 1;
@@ -336,6 +355,27 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     function setLayerNames(string[] calldata names_) external onlyOwner beforeFinalized {
         require(names_.length == layerCount, "BAD_LAYER_NAMES");
         for (uint8 i; i < layerCount; ++i) layerNames[i] = names_[i];
+    }
+
+    function setLayerMetadataVisibility(bool[] calldata hidden_) external onlyOwner beforeFinalized {
+        require(hidden_.length == layerCount, "BAD_LAYER_FLAGS");
+        for (uint8 i; i < layerCount; ++i) layerHiddenFromMetadata[i] = hidden_[i];
+    }
+
+    function setOneOfOneLayer(uint8 layer) external onlyOwner beforeFinalized {
+        require(layer < layerCount, "BAD_1OF1_LAYER");
+        oneOfOneLayerPlusOne = layer + 1;
+    }
+
+    function setOneOfOneMetadata(OneOfOneMetadataInput[] calldata inputs) external onlyOwner beforeFinalized {
+        require(oneOfOneLayerPlusOne != 0, "NO_1OF1_LAYER");
+        for (uint256 i; i < inputs.length; ++i) {
+            OneOfOneMetadataInput calldata input = inputs[i];
+            require(input.index != 0, "BAD_1OF1_INDEX");
+            _oneOfOneMetadata[input.index] = OneOfOneMetadata(
+                input.tokenName, input.tokenDescription, input.attributesJson, true
+            );
+        }
     }
 
     function traitDetails(uint8 layer, uint8 index) external view returns (Trait memory) { return _traits[layer][index]; }
@@ -587,7 +627,17 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         uint256 recipeId = recipeForToken(tokenId);
         bytes memory dna = _readRecipe(recipeId);
         bytes memory svg = _svgOpen();
+        if (oneOfOneLayerPlusOne != 0) {
+            uint8 specialLayer = oneOfOneLayerPlusOne - 1;
+            uint8 specialIndex = uint8(dna[specialLayer]);
+            if (specialIndex != 0) {
+                Trait storage specialTrait = _traits[specialLayer][specialIndex];
+                require(specialTrait.exists, "MISSING_1OF1");
+                return string(abi.encodePacked(svg, _renderTrait(specialTrait), "</svg>"));
+            }
+        }
         for (uint8 layer; layer < layerCount; ++layer) {
+            if (oneOfOneLayerPlusOne != 0 && layer == oneOfOneLayerPlusOne - 1) continue;
             uint8 traitIndex = uint8(dna[layer]);
             Trait storage t = _traits[layer][traitIndex];
             require(t.exists, "MISSING_TRAIT");
@@ -596,12 +646,47 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         return string(abi.encodePacked(svg, "</svg>"));
     }
 
+    function _oneOfOneIndex(uint256 tokenId) internal view returns (uint8 specialIndex) {
+        if (oneOfOneLayerPlusOne == 0) return 0;
+        bytes memory dna = _readRecipe(recipeForToken(tokenId));
+        specialIndex = uint8(dna[oneOfOneLayerPlusOne - 1]);
+    }
+
+    function _tokenNameDescription(uint256 tokenId) internal view returns (string memory tokenName_, string memory tokenDescription_) {
+        tokenName_ = string(abi.encodePacked(name, " #", tokenId.toString()));
+        tokenDescription_ = description;
+        uint8 specialIndex = _oneOfOneIndex(tokenId);
+        if (specialIndex != 0) {
+            OneOfOneMetadata storage meta = _oneOfOneMetadata[specialIndex];
+            if (meta.exists) {
+                if (bytes(meta.tokenName).length != 0) tokenName_ = meta.tokenName;
+                if (bytes(meta.tokenDescription).length != 0) tokenDescription_ = meta.tokenDescription;
+            }
+        }
+    }
+
     function _attributes(uint256 tokenId) internal view returns (string memory) {
         bytes memory dna = _readRecipe(recipeForToken(tokenId));
+        if (oneOfOneLayerPlusOne != 0) {
+            uint8 specialLayer = oneOfOneLayerPlusOne - 1;
+            uint8 specialIndex = uint8(dna[specialLayer]);
+            if (specialIndex != 0) {
+                OneOfOneMetadata storage meta = _oneOfOneMetadata[specialIndex];
+                if (meta.exists && bytes(meta.attributesJson).length != 0) return meta.attributesJson;
+                Trait storage specialTrait = _traits[specialLayer][specialIndex];
+                if (specialTrait.hiddenFromMetadata || layerHiddenFromMetadata[specialLayer]) return "[]";
+                return string(abi.encodePacked('[{"trait_type":"1/1","value":"', specialTrait.name, '"}]'));
+            }
+        }
         bytes memory out = "[";
+        bool first = true;
         for (uint8 layer; layer < layerCount; ++layer) {
+            if (oneOfOneLayerPlusOne != 0 && layer == oneOfOneLayerPlusOne - 1) continue;
+            if (layerHiddenFromMetadata[layer]) continue;
             Trait storage t = _traits[layer][uint8(dna[layer])];
-            if (layer != 0) out = abi.encodePacked(out, ",");
+            if (t.hiddenFromMetadata) continue;
+            if (!first) out = abi.encodePacked(out, ",");
+            first = false;
             out = abi.encodePacked(out, '{"trait_type":"', layerNames[layer], '","value":"', t.name, '"}');
         }
         return string(abi.encodePacked(out, "]"));
@@ -613,8 +698,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         string memory svg = revealed ? renderToken(tokenId) : renderPlaceholder();
         string memory json;
         if (revealed) {
+            (string memory tokenName_, string memory tokenDescription_) = _tokenNameDescription(tokenId);
             json = string(abi.encodePacked(
-                '{"name":"', name, " #", tokenId.toString(), '","description":"', description,
+                '{"name":"', tokenName_, '","description":"', tokenDescription_,
                 '","image":"data:image/svg+xml;base64,', RFBase64.encode(bytes(svg)), '","attributes":', _attributes(tokenId), "}"
             ));
         } else {
