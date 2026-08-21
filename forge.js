@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_2_3';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_3_0';
 
   const forgeState = {
     compiled: null,
@@ -21,6 +21,11 @@
     latestTokenId: null,
     latestCreatorRevealRequestId: null,
     infra: null,
+    viewerAddress: null,
+    viewerPage: 1,
+    viewerPageSize: 8,
+    viewerTotalMinted: 0,
+    viewerMeta: null,
   };
 
   function bridge() {
@@ -30,6 +35,11 @@
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function shortAddr(value) {
+    const text = String(value || '');
+    return text && text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
   }
 
   function fmtBytes(n) {
@@ -673,6 +683,7 @@
       $('forgedCollectionAddress').textContent = collectionAddress;
       $('forgedEtherscanLink').href = `https://sepolia.etherscan.io/address/${collectionAddress}`;
       $('forgeResult').classList.remove('hidden');
+      if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = collectionAddress;
 
       const collection = new window.ethers.Contract(collectionAddress, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
       for (let i = 0; i < c.artShards.length; i++, si++) await sendStep(`Write artwork shard ${i + 1}/${c.artShards.length}`, () => collection.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si);
@@ -693,6 +704,7 @@
       $('forgeFulfillBtn').disabled = true;
       log('forgeTestStatus', `Collection ready: ${collectionAddress}`, true);
       bridge().showStatus?.('Collection forged on Sepolia.', 'success');
+      loadViewerCollection(true).catch(() => {});
     } catch (error) {
       log('forgeTestStatus', `FORGE ERROR: ${error.message}`, true);
     }
@@ -725,6 +737,7 @@
       log('forgeTestStatus', `✓ Minted token #${tokenId?.toString() || '?'}${requestId != null ? `\nForge randomness request #${requestId}` : '\nCreator Reveal placeholder active.'}`);
       $('forgeFulfillBtn').disabled = requestId == null;
       await inspectToken();
+      loadViewerCollection(false).catch(() => {});
     } catch (error) {
       log('forgeTestStatus', `MINT ERROR: ${error.message}`, true);
     }
@@ -765,6 +778,7 @@
       forgeState.latestRequestId = null;
       $('forgeFulfillBtn').disabled = true;
       await inspectToken();
+      loadViewerCollection(false).catch(() => {});
     } catch (error) {
       log('forgeTestStatus', `RANDOMNESS ERROR: ${error.message}`, true);
     }
@@ -795,6 +809,138 @@
       }
     } catch (error) {
       log('forgeTestStatus', `INSPECT: ${error.message}`, true);
+    }
+  }
+
+  function setViewerMetric(id, value) { const node = $(id); if (node) node.textContent = value; }
+
+  function viewerAddressInput() { return $('viewerCollectionAddress')?.value.trim() || forgeState.collectionAddress || ''; }
+
+  async function viewerContract() {
+    await compileContracts();
+    if (!forgeState.signer) await connectWallet();
+    const address = viewerAddressInput();
+    if (!window.ethers.isAddress(address)) throw new Error('Enter a valid Sepolia collection address.');
+    forgeState.viewerAddress = address;
+    return new window.ethers.Contract(address, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
+  }
+
+  async function loadViewerCollection(resetPage = true) {
+    try {
+      const collection = await viewerContract();
+      const [name, symbol, description, owner, totalMinted, maxSupply, revealMode] = await Promise.all([
+        collection.name(),
+        collection.symbol(),
+        collection.description(),
+        collection.owner(),
+        collection.totalMinted(),
+        collection.maxSupply(),
+        collection.revealMode(),
+      ]);
+      forgeState.viewerMeta = {
+        name, symbol, description, owner,
+        totalMinted: Number(totalMinted),
+        maxSupply: Number(maxSupply),
+        revealMode: Number(revealMode),
+      };
+      forgeState.viewerTotalMinted = Number(totalMinted);
+      if (resetPage) forgeState.viewerPage = 1;
+      setViewerMetric('viewerMetricName', name || '—');
+      setViewerMetric('viewerMetricSymbol', symbol || '—');
+      setViewerMetric('viewerMetricMinted', String(Number(totalMinted)));
+      setViewerMetric('viewerMetricSupply', String(Number(maxSupply)));
+      setViewerMetric('viewerMetricReveal', Number(revealMode) === 0 ? 'Forge' : 'Creator');
+      setViewerMetric('viewerMetricOwner', shortAddr(owner));
+      const links = $('viewerLinks');
+      if (links) links.classList.remove('hidden');
+      const eLink = $('viewerEtherscanLink');
+      if (eLink) eLink.href = `https://sepolia.etherscan.io/address/${forgeState.viewerAddress}`;
+      const metaBox = $('viewerCollectionMeta');
+      if (metaBox) {
+        metaBox.classList.remove('hidden');
+        metaBox.innerHTML = `<strong>${esc(name)}</strong><br>${esc(description || 'No description.')}<br><br>Collection: <code>${esc(forgeState.viewerAddress)}</code>`;
+      }
+      $('viewerStatus').textContent = `Loaded ${name} on Sepolia.`;
+      await renderViewerPage();
+    } catch (error) {
+      $('viewerStatus').textContent = `Viewer error: ${error.message}`;
+      $('viewerGrid').innerHTML = `<div class="forge-market-empty">${esc(error.message)}</div>`;
+    }
+  }
+
+  async function renderViewerPage() {
+    const grid = $('viewerGrid');
+    if (!grid) return;
+    const total = forgeState.viewerTotalMinted || 0;
+    if (!forgeState.viewerAddress) {
+      grid.innerHTML = '<div class="forge-market-empty">Deploy or enter a collection address to browse the Sepolia collection.</div>';
+      $('viewerPagination')?.classList.add('hidden');
+      $('viewerPagerStatus')?.classList.add('hidden');
+      return;
+    }
+    if (total <= 0) {
+      grid.innerHTML = '<div class="forge-market-empty">No NFTs have been minted yet. Mint a test NFT to populate the marketplace viewer.</div>';
+      $('viewerPagination')?.classList.add('hidden');
+      $('viewerPagerStatus')?.classList.add('hidden');
+      return;
+    }
+    const pageSize = forgeState.viewerPageSize;
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    if (forgeState.viewerPage > pageCount) forgeState.viewerPage = pageCount;
+    if (forgeState.viewerPage < 1) forgeState.viewerPage = 1;
+    const start = (forgeState.viewerPage - 1) * pageSize + 1;
+    const end = Math.min(total, start + pageSize - 1);
+    $('viewerStatus').textContent = `Loading tokens ${start}-${end} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}…`;
+    grid.innerHTML = '<div class="forge-market-empty">Loading token metadata from Sepolia…</div>';
+    const collection = await viewerContract();
+    const tokenIds = []; for (let i=start; i<=end; i++) tokenIds.push(i);
+    const cards = await Promise.all(tokenIds.map(async (tokenId) => {
+      try {
+        const [uri, owner] = await Promise.all([collection.tokenURI(tokenId), collection.ownerOf(tokenId)]);
+        const metadata = JSON.parse(decodeDataUri(uri));
+        const image = metadata.image?.startsWith('data:image/svg+xml') ? decodeDataUri(metadata.image) : '';
+        const revealed = Array.isArray(metadata.attributes) && metadata.attributes.length > 0;
+        const traits = (metadata.attributes || []).map(a => `<span>${esc(a.trait_type)}: ${esc(a.value)}</span>`).join('');
+        return `
+          <article class="forge-market-card">
+            <div class="forge-market-thumb">${image || '<div class="forge-market-empty">No preview</div>'}</div>
+            <div class="forge-market-body">
+              <div class="forge-market-topline"><strong>${esc(metadata.name || `Token #${tokenId}`)}</strong><span>#${tokenId}</span></div>
+              <div class="forge-market-owner">Owner: ${esc(shortAddr(owner))}</div>
+              <div class="forge-market-state">${revealed ? 'Revealed' : 'Placeholder'}</div>
+              <div class="forge-market-traits">${traits || '<span>Unrevealed</span>'}</div>
+            </div>
+          </article>`;
+      } catch (error) {
+        return `
+          <article class="forge-market-card">
+            <div class="forge-market-thumb"><div class="forge-market-empty">Token #${tokenId}</div></div>
+            <div class="forge-market-body">
+              <div class="forge-market-topline"><strong>Token #${tokenId}</strong><span>Error</span></div>
+              <div class="forge-market-owner">${esc(error.message)}</div>
+            </div>
+          </article>`;
+      }
+    }));
+    grid.innerHTML = cards.join('');
+    const pager = $('viewerPagination');
+    const pagerStatus = $('viewerPagerStatus');
+    if (pager) pager.classList.remove('hidden');
+    if (pagerStatus) { pagerStatus.classList.remove('hidden'); pagerStatus.textContent = `Showing tokens ${start}-${end} of ${total} · Page ${forgeState.viewerPage} of ${pageCount}`; }
+    if ($('viewerPrevBtn')) $('viewerPrevBtn').disabled = forgeState.viewerPage <= 1;
+    if ($('viewerNextBtn')) $('viewerNextBtn').disabled = forgeState.viewerPage >= pageCount;
+    $('viewerStatus').textContent = `Loaded ${end - start + 1} token${end - start + 1 === 1 ? '' : 's'} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}.`;
+  }
+
+  async function readViewerContractUri() {
+    try {
+      const collection = await viewerContract();
+      const uri = await collection.contractURI();
+      const jsonText = decodeDataUri(uri);
+      const metadata = JSON.parse(jsonText);
+      log('forgeTestStatus', `contractURI()\n${JSON.stringify(metadata, null, 2)}`, true);
+    } catch (error) {
+      log('forgeTestStatus', `CONTRACT URI: ${error.message}`, true);
     }
   }
 
@@ -870,6 +1016,11 @@
     $('forgeFulfillBtn')?.addEventListener('click', fulfillLatest);
     $('forgeCreatorRevealBtn')?.addEventListener('click', requestCreatorReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
+    $('viewerUseForgedBtn')?.addEventListener('click', () => { if (forgeState.collectionAddress && $('viewerCollectionAddress')) $('viewerCollectionAddress').value = forgeState.collectionAddress; });
+    $('viewerLoadBtn')?.addEventListener('click', () => loadViewerCollection(true).catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }));
+    $('viewerPrevBtn')?.addEventListener('click', () => { forgeState.viewerPage = Math.max(1, forgeState.viewerPage - 1); renderViewerPage().catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }); });
+    $('viewerNextBtn')?.addEventListener('click', () => { forgeState.viewerPage += 1; renderViewerPage().catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }); });
+    $('viewerContractUriBtn')?.addEventListener('click', readViewerContractUri);
     ['launchName', 'launchSymbol', 'launchDescription', 'mintPrice', 'royalty', 'royaltyWallet'].forEach(id => $(id)?.addEventListener('input', () => {
       if (forgeState.compiled && ['launchName', 'launchSymbol', 'launchDescription'].includes(id)) invalidateCompile('Collection metadata changed — recompile for onchain.');
     }));

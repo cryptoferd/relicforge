@@ -305,7 +305,7 @@
   }
 
   window.RelicForgeProjects = {
-    version: '10.2.3',
+    version: '10.3.0',
     connectWallet,
     saveProject,
     openManager,

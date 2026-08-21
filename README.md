@@ -1,6 +1,12 @@
-## V10.2.3 adaptive onchain art storage + Solidity compiler fix
+## V10.3.0 testnet marketplace viewer
 
-### V10.2.3 changes
+### V10.3.0 changes
+
+- Added a built-in Sepolia marketplace-style viewer inside Studio Step 5.
+- Viewer can load a forged collection or any pasted Sepolia Relic Forge collection address.
+- Viewer reads onchain `tokenURI()` / `contractURI()` data and renders token cards with owners, reveal state, and traits.
+
+### Earlier changes
 
 - Fixes Solidity `Stack too deep` compilation by enabling `viaIR` and refactoring trait registration into tuple batches.
 - Stops blindly vectorizing PNGs. Each PNG trait is compared as original PNG, browser-recompressed lossless PNG, and pixel-SVG geometry; Relic Forge stores the smallest lossless representation.
@@ -21,7 +27,7 @@ This build is based directly on **Relic Forge v9** and keeps the same flat, stat
 ## Drag/drop update for an existing GitHub repo
 
 1. Unzip this package.
-2. Open the `relic-forge-test-v10.2.3` folder.
+2. Open the `relic-forge-test-v10.3.0` folder.
 3. Drag **all files and folders inside it** into the root of the existing Relic Forge GitHub repository.
 4. Allow GitHub to replace the existing `index.html`, `studio.html`, `styles.css`, `app.js`, `README.md`, and `vercel.json` files.
 5. Keep the new `forge.js`, `project-storage.js`, `contracts/`, and `js/` paths.
@@ -106,7 +112,7 @@ Studio can now save the full editable project in browser IndexedDB under the con
 
 
 
-## V10.2.3 hotfix
+## Earlier hotfixes
 - Cache-busts Studio JS/CSS assets so static hosting does not mix an older `app.js` with the new project-saving module.
 - Publishes the Studio project bridge before optional UI event bindings.
 - Improves the project-save error message if the Studio core does not load.

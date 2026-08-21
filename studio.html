@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.2.3" />
+  <link rel="stylesheet" href="./styles.css?v=10.3.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -411,6 +411,35 @@
       <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable test controls.</pre>
       <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
     </article>
+
+    <article class="forge-workbench-card forge-marketplace-card">
+      <div class="forge-card-heading"><div><span>TESTNET MARKETPLACE VIEWER</span><h3>Browse the deployed Sepolia collection</h3></div></div>
+      <div class="inline-actions forge-viewer-actions">
+        <label class="field forge-viewer-address"><span>Collection address</span><input id="viewerCollectionAddress" placeholder="Forged collection or paste a Sepolia collection address" type="text"/></label>
+        <button class="ghost-btn" id="viewerUseForgedBtn" type="button">Use Forged Collection</button>
+        <button class="primary-btn" id="viewerLoadBtn" type="button">Load Collection</button>
+      </div>
+      <div class="forge-inline-status" id="viewerStatus">Deploy or paste a Sepolia collection to load the viewer.</div>
+      <div class="forge-metrics forge-viewer-metrics" id="viewerMetrics">
+        <div><span>Name</span><strong id="viewerMetricName">—</strong></div>
+        <div><span>Symbol</span><strong id="viewerMetricSymbol">—</strong></div>
+        <div><span>Minted</span><strong id="viewerMetricMinted">—</strong></div>
+        <div><span>Max supply</span><strong id="viewerMetricSupply">—</strong></div>
+        <div><span>Reveal</span><strong id="viewerMetricReveal">—</strong></div>
+        <div><span>Owner</span><strong id="viewerMetricOwner">—</strong></div>
+      </div>
+      <div class="inline-actions forge-viewer-links hidden" id="viewerLinks">
+        <a class="ghost-btn link-btn" id="viewerEtherscanLink" rel="noreferrer" target="_blank">View contract on Etherscan</a>
+        <button class="ghost-btn" id="viewerContractUriBtn" type="button">Read contractURI</button>
+      </div>
+      <div class="forge-summary hidden" id="viewerCollectionMeta"></div>
+      <div class="forge-inline-status hidden" id="viewerPagerStatus"></div>
+      <div class="inline-actions forge-viewer-pagination hidden" id="viewerPagination">
+        <button class="ghost-btn" id="viewerPrevBtn" type="button">Previous</button>
+        <button class="ghost-btn" id="viewerNextBtn" type="button">Next</button>
+      </div>
+      <div class="forge-marketplace-grid" id="viewerGrid"></div>
+    </article>
   </div>
 
   <div class="panel-footer">
@@ -454,8 +483,8 @@
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.2.3" defer></script>
-  <script src="./forge.js?v=10.2.3" defer></script>
-  <script src="./project-storage.js?v=10.2.3" defer></script>
+  <script src="./app.js?v=10.3.0" defer></script>
+  <script src="./forge.js?v=10.3.0" defer></script>
+  <script src="./project-storage.js?v=10.3.0" defer></script>
 </body>
 </html>

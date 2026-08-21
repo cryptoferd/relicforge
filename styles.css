@@ -1108,6 +1108,36 @@ textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; 
 }
 .forge-preview-image { aspect-ratio: 1; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: #050505; }
 .forge-preview-image svg { width: 100%; height: 100%; display: block; }
+
+.forge-marketplace-card { grid-column: 1 / -1; }
+.forge-viewer-actions { align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+.forge-viewer-address { flex: 1 1 320px; min-width: min(100%, 340px); }
+.forge-viewer-metrics { margin-top: 12px; }
+.forge-viewer-links { margin-top: 12px; flex-wrap: wrap; }
+.link-btn { text-decoration: none; display: inline-flex; align-items: center; }
+.forge-viewer-pagination { justify-content: space-between; margin: 12px 0; }
+.forge-marketplace-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px;
+}
+.forge-market-card {
+  border: 1px solid var(--border); border-radius: 14px; background: #090909; overflow: hidden; display: grid;
+}
+.forge-market-thumb {
+  aspect-ratio: 1; background: #050505; border-bottom: 1px solid var(--border); display: grid; place-items: center; overflow: hidden;
+}
+.forge-market-thumb svg, .forge-market-thumb img { width: 100%; height: 100%; display: block; }
+.forge-market-body { padding: 12px; display: grid; gap: 8px; }
+.forge-market-topline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.forge-market-topline strong { font-size: 12px; }
+.forge-market-topline span { color: var(--muted); font-size: 9px; }
+.forge-market-owner { color: var(--dim); font-size: 9px; overflow-wrap: anywhere; }
+.forge-market-state { color: var(--accent-2); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.forge-market-traits { display: flex; flex-wrap: wrap; gap: 6px; }
+.forge-market-traits span { border: 1px solid var(--border); border-radius: 999px; padding: 4px 6px; color: var(--muted); font-size: 9px; }
+.forge-market-empty {
+  border: 1px dashed var(--border); border-radius: 12px; padding: 20px; color: var(--muted); text-align: center; background: #090909;
+}
+
 .forge-token-preview strong, .forge-token-preview small { display: block; }
 .forge-token-preview small { margin-top: 5px; color: var(--muted); line-height: 1.45; }
 .forge-preview-traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
