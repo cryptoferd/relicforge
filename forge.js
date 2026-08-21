@@ -9,8 +9,8 @@
   const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_5_1';
 
   const WHITELIST_SOURCE_CHAINS = {
-    1: { chainId: 1, label: 'Ethereum Mainnet', rpc: 'https://ethereum-rpc.publicnode.com' },
-    11155111: { chainId: 11155111, label: 'Ethereum Sepolia', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
+    1: { chainId: 1, label: 'Ethereum Mainnet', rpc: 'https://ethereum-rpc.publicnode.com', historyRpc: 'https://eth.drpc.org' },
+    11155111: { chainId: 11155111, label: 'Ethereum Sepolia', rpc: 'https://ethereum-sepolia-rpc.publicnode.com', historyRpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
   };
 
   const forgeState = {
@@ -53,9 +53,11 @@
     return WHITELIST_SOURCE_CHAINS[chainId] || WHITELIST_SOURCE_CHAINS[1];
   }
 
-  function whitelistSourceProvider() {
+  function whitelistSourceProvider(useHistory = false) {
     const config = whitelistSourceChainConfig();
-    return new window.ethers.JsonRpcProvider(config.rpc, config.chainId, { staticNetwork: true });
+    const override = $('whitelistSnapshotRpc')?.value.trim() || '';
+    const rpc = override || (useHistory ? (config.historyRpc || config.rpc) : config.rpc);
+    return new window.ethers.JsonRpcProvider(rpc, config.chainId, { staticNetwork: true });
   }
 
   function currentWhitelistSourceMode() {
@@ -194,20 +196,93 @@
     return normalizeWhitelistEntries(out, fallbackAllowance);
   }
 
-  async function findDeploymentBlock(provider, address, latestBlock) {
-    let lo = 0, hi = latestBlock;
-    try {
-      const currentCode = await provider.getCode(address, latestBlock);
-      if (!currentCode || currentCode === '0x') throw new Error('No contract code at that address.');
-      while (lo < hi) {
-        const mid = Math.floor((lo + hi) / 2);
-        const code = await provider.getCode(address, mid);
-        if (code && code !== '0x') hi = mid; else lo = mid + 1;
-      }
-      return lo;
-    } catch (_) {
-      return 0;
+  const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
+
+  async function multicallAtBlock(provider, calls, blockTag) {
+    const abi = ['function aggregate3(tuple(address target,bool allowFailure,bytes callData)[] calls) payable returns(tuple(bool success,bytes returnData)[])'];
+    const multicall = new window.ethers.Contract(MULTICALL3_ADDRESS, abi, provider);
+    return multicall.aggregate3.staticCall(calls, { blockTag });
+  }
+
+  async function ownerOfBatch(provider, source, tokenIds, blockTag) {
+    const iface = new window.ethers.Interface(['function ownerOf(uint256) view returns(address)']);
+    const calls = tokenIds.map(tokenId => ({ target: source, allowFailure: true, callData: iface.encodeFunctionData('ownerOf', [tokenId]) }));
+    const results = await multicallAtBlock(provider, calls, blockTag);
+    return results.map((result, index) => {
+      if (!result.success || result.returnData === '0x') return null;
+      try { return window.ethers.getAddress(iface.decodeFunctionResult('ownerOf', result.returnData)[0]); }
+      catch (_) { return null; }
+    });
+  }
+
+  async function snapshotEnumerable721(provider, source, totalSupply, blockTag, onProgress) {
+    const enumIface = new window.ethers.Interface(['function tokenByIndex(uint256) view returns(uint256)']);
+    const tokenIds = [];
+    const batchSize = 250;
+    for (let start = 0; start < totalSupply; start += batchSize) {
+      const end = Math.min(totalSupply, start + batchSize);
+      const calls = [];
+      for (let i = start; i < end; i++) calls.push({ target: source, allowFailure: false, callData: enumIface.encodeFunctionData('tokenByIndex', [i]) });
+      const results = await multicallAtBlock(provider, calls, blockTag);
+      for (const result of results) tokenIds.push(BigInt(enumIface.decodeFunctionResult('tokenByIndex', result.returnData)[0]));
+      onProgress?.(end, totalSupply, 'token indexes');
     }
+    const owners = [];
+    for (let start = 0; start < tokenIds.length; start += batchSize) {
+      const ids = tokenIds.slice(start, start + batchSize);
+      owners.push(...await ownerOfBatch(provider, source, ids, blockTag));
+      onProgress?.(Math.min(tokenIds.length, start + batchSize), tokenIds.length, 'owners');
+    }
+    return owners.filter(Boolean);
+  }
+
+  async function snapshotSequential721(provider, source, totalSupply, blockTag, onProgress) {
+    if (totalSupply <= 0) return [];
+    if (totalSupply > 100000) throw new Error('Collection is too large for direct browser ownership enumeration. Historical/indexer fallback required.');
+    const probeOwners = await ownerOfBatch(provider, source, [0n, 1n], blockTag);
+    let cursor = probeOwners[0] ? 0 : 1;
+    const owners = [];
+    const seenTokens = new Set();
+    const batchSize = 400;
+    // Allow room for burned/gapped token IDs while keeping accidental random-ID scans bounded.
+    const maxAttempts = Math.min(250000, Math.max(totalSupply + 2048, Math.ceil(totalSupply * 1.75)));
+    let attempted = 0;
+    while (owners.length < totalSupply && attempted < maxAttempts) {
+      const count = Math.min(batchSize, maxAttempts - attempted);
+      const ids = Array.from({ length: count }, (_, i) => BigInt(cursor + i));
+      const batchOwners = await ownerOfBatch(provider, source, ids, blockTag);
+      for (let i = 0; i < batchOwners.length; i++) {
+        if (!batchOwners[i]) continue;
+        const id = ids[i].toString();
+        if (seenTokens.has(id)) continue;
+        seenTokens.add(id);
+        owners.push(batchOwners[i]);
+        if (owners.length >= totalSupply) break;
+      }
+      cursor += count;
+      attempted += count;
+      onProgress?.(owners.length, totalSupply, `current owners · scanned ${attempted.toLocaleString()} token IDs`);
+    }
+    if (owners.length !== totalSupply) {
+      throw new Error(`Direct current-state scan found ${owners.length.toLocaleString()} of ${totalSupply.toLocaleString()} live tokens. Historical/indexer fallback required for this token-ID layout.`);
+    }
+    return owners;
+  }
+
+  async function snapshotERC721CurrentState(provider, source, snapshotBlock, onProgress) {
+    const abi = [
+      'function totalSupply() view returns(uint256)',
+      'function supportsInterface(bytes4) view returns(bool)'
+    ];
+    const contract = new window.ethers.Contract(source, abi, provider);
+    const totalSupply = Number(await contract.totalSupply({ blockTag: snapshotBlock }));
+    if (!Number.isSafeInteger(totalSupply) || totalSupply < 0) throw new Error('Invalid totalSupply() response.');
+    let enumerable = false;
+    try { enumerable = await contract.supportsInterface('0x780e9d63', { blockTag: snapshotBlock }); } catch (_) {}
+    onProgress?.(0, totalSupply, enumerable ? 'ERC-721 Enumerable current-state scan' : 'ERC-721 current-state scan');
+    return enumerable
+      ? snapshotEnumerable721(provider, source, totalSupply, snapshotBlock, onProgress)
+      : snapshotSequential721(provider, source, totalSupply, snapshotBlock, onProgress);
   }
 
   async function getLogsChunked(provider, filterBase, fromBlock, toBlock, onProgress) {
@@ -236,24 +311,29 @@
       if (!window.ethers.isAddress(source)) throw new Error('Enter a valid collection contract address.');
       const allowance = whitelistDefaultAllowance();
       const chain = whitelistSourceChainConfig();
-      const provider = whitelistSourceProvider();
+      const provider = whitelistSourceProvider(false);
       $('whitelistStatus').textContent = `Connecting to ${chain.label}…`;
       const snapshotBlock = await provider.getBlockNumber();
-      const code = await provider.getCode(source, snapshotBlock);
+      const code = await provider.getCode(source);
       if (!code || code === '0x') throw new Error(`No contract exists at this address on ${chain.label}. Check the Source network selection.`);
-      const contract = new window.ethers.Contract(source, ['function supportsInterface(bytes4) view returns(bool)'], provider);
+      const contract = new window.ethers.Contract(source, ['function supportsInterface(bytes4) view returns(bool)', 'function totalSupply() view returns(uint256)'], provider);
       let is1155 = false, is721 = false;
-      try { is1155 = await contract.supportsInterface('0xd9b67a26'); } catch (_) {}
-      try { is721 = await contract.supportsInterface('0x80ac58cd'); } catch (_) {}
-      if (!is721 && !is1155) throw new Error(`A contract exists on ${chain.label}, but it does not report ERC-721 or ERC-1155 support through ERC-165.`);
-      const deploymentBlock = await findDeploymentBlock(provider, source, snapshotBlock);
-      $('whitelistStatus').textContent = `Scanning ${is1155 ? 'ERC-1155' : 'ERC-721'} on ${chain.label} · blocks ${deploymentBlock.toLocaleString()}-${snapshotBlock.toLocaleString()}…`;
+      try { is1155 = await contract.supportsInterface('0xd9b67a26', { blockTag: snapshotBlock }); } catch (_) {}
+      try { is721 = await contract.supportsInterface('0x80ac58cd', { blockTag: snapshotBlock }); } catch (_) {}
+      // Some older/nonconforming ERC-721 contracts do not report ERC-165 correctly. A working totalSupply is a useful secondary probe.
+      if (!is721 && !is1155) {
+        try { await contract.totalSupply({ blockTag: snapshotBlock }); is721 = true; } catch (_) {}
+      }
+      if (!is721 && !is1155) throw new Error(`A contract exists on ${chain.label}, but Relic Forge could not identify it as ERC-721 or ERC-1155.`);
       const zero = window.ethers.ZeroAddress.toLowerCase();
       let addresses = [];
       if (is1155) {
+        const historyProvider = whitelistSourceProvider(true);
+        const deploymentBlock = 0;
+        $('whitelistStatus').textContent = `ERC-1155 requires transfer-history reconstruction. Scanning ${chain.label} through the historical RPC…`;
         const singleTopic = window.ethers.id('TransferSingle(address,address,address,uint256,uint256)');
         const batchTopic = window.ethers.id('TransferBatch(address,address,address,uint256[],uint256[])');
-        const logs = await getLogsChunked(provider, { address: source, topics: [[singleTopic, batchTopic]] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
+        const logs = await getLogsChunked(historyProvider, { address: source, topics: [[singleTopic, batchTopic]] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
           $('whitelistStatus').textContent = `Scanning ERC-1155 · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfer events`;
         });
         const totals = new Map();
@@ -276,24 +356,39 @@
         }
         addresses = [...totals.entries()].filter(([, balance]) => balance > 0n).map(([address]) => window.ethers.getAddress(address));
       } else {
-        const topic = window.ethers.id('Transfer(address,address,uint256)');
-        const logs = await getLogsChunked(provider, { address: source, topics: [topic] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
-          $('whitelistStatus').textContent = `Scanning ERC-721 · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfers`;
-        });
-        const owners = new Map();
-        for (const logEntry of logs) {
-          if (logEntry.topics.length < 4) continue;
-          const to = window.ethers.getAddress(`0x${logEntry.topics[2].slice(26)}`);
-          const tokenId = BigInt(logEntry.topics[3]).toString();
-          if (to.toLowerCase() === zero) owners.delete(tokenId); else owners.set(tokenId, to);
+        try {
+          $('whitelistStatus').textContent = `Reading current ERC-721 ownership at ${chain.label} block ${snapshotBlock.toLocaleString()}…`;
+          const currentOwners = await snapshotERC721CurrentState(provider, source, snapshotBlock, (done, total, phase) => {
+            $('whitelistStatus').textContent = `${phase} · ${Number(done).toLocaleString()} / ${Number(total).toLocaleString()} at block ${snapshotBlock.toLocaleString()}`;
+          });
+          addresses = [...new Set(currentOwners.map(a => a.toLowerCase()))].map(a => window.ethers.getAddress(a));
+        } catch (directError) {
+          const historyProvider = whitelistSourceProvider(true);
+          $('whitelistStatus').textContent = `Current-state enumeration unavailable (${directError.message}). Falling back to transfer history…`;
+          const topic = window.ethers.id('Transfer(address,address,uint256)');
+          const logs = await getLogsChunked(historyProvider, { address: source, topics: [topic] }, 0, snapshotBlock, (cursor, end, count) => {
+            $('whitelistStatus').textContent = `Historical ERC-721 fallback · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfers`;
+          });
+          const owners = new Map();
+          for (const logEntry of logs) {
+            if (logEntry.topics.length < 4) continue;
+            const to = window.ethers.getAddress(`0x${logEntry.topics[2].slice(26)}`);
+            const tokenId = BigInt(logEntry.topics[3]).toString();
+            if (to.toLowerCase() === zero) owners.delete(tokenId); else owners.set(tokenId, to);
+          }
+          addresses = [...new Set([...owners.values()].map(a => a.toLowerCase()))].map(a => window.ethers.getAddress(a));
         }
-        addresses = [...new Set([...owners.values()].map(a => a.toLowerCase()))].map(a => window.ethers.getAddress(a));
       }
       const entries = normalizeWhitelistEntries(addresses, allowance);
       const tree = buildMerkleWhitelist(entries);
       setWhitelistResult({ ...tree, sourceType: 1, sourceContract: window.ethers.getAddress(source), sourceChainId: chain.chainId, sourceChainLabel: chain.label, snapshotBlock, tokenStandard: is1155 ? 'ERC-1155' : 'ERC-721', uniformAllowance: allowance });
     } catch (error) {
-      $('whitelistStatus').textContent = `Snapshot error: ${error.message}`;
+      const message = String(error?.message || error);
+      if (/archive requests|archive|historical/i.test(message)) {
+        $('whitelistStatus').textContent = 'Snapshot error: the fallback RPC does not provide the historical data this collection needs. ERC-721 collections with sequential/enumerable IDs normally avoid this. For unusual ERC-721 layouts or ERC-1155, open Advanced snapshot RPC and paste an archive-capable Alchemy/Infura/RPC endpoint.';
+      } else {
+        $('whitelistStatus').textContent = `Snapshot error: ${message}`;
+      }
     }
   }
 
@@ -1315,6 +1410,7 @@ ${await file.text()}`;
       whitelistSourceMode: currentWhitelistSourceMode(),
       whitelistSourceChain: $('whitelistSourceChain')?.value || '1',
       whitelistCollectionAddress: $('whitelistCollectionAddress')?.value || '',
+      whitelistSnapshotRpc: $('whitelistSnapshotRpc')?.value || '',
       whitelistCustomText: $('whitelistCustomText')?.value || '',
       whitelist: wl ? {
         entries: wl.entries,
@@ -1343,6 +1439,7 @@ ${await file.text()}`;
       whitelistDefaultAllowance: saved.whitelistDefaultAllowance,
       whitelistSourceChain: saved.whitelistSourceChain || String(saved.whitelist?.sourceChainId || 1),
       whitelistCollectionAddress: saved.whitelistCollectionAddress,
+      whitelistSnapshotRpc: saved.whitelistSnapshotRpc || '',
       whitelistCustomText: saved.whitelistCustomText,
     };
     for (const [id, value] of Object.entries(values)) {

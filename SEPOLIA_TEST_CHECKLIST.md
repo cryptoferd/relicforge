@@ -86,3 +86,11 @@
 - With an eligible connected wallet, use **Whitelist Mint** and verify the Merkle proof succeeds.
 - Attempt to exceed the wallet's whitelist allowance and confirm the transaction is rejected.
 - Confirm creator mint still bypasses mint price and public wallet limit.
+
+
+## V10.5.2 whitelist snapshot
+
+- [ ] Snapshot an Ethereum Mainnet ERC-721 while the deployment wallet remains on Sepolia.
+- [ ] Confirm current-state ownership scan completes without PublicNode archive access for a sequential/ERC721A collection.
+- [ ] Confirm the displayed snapshot block and holder count are populated.
+- [ ] Optional: paste an archive-capable RPC in Advanced snapshot RPC and verify historical fallback can be used.

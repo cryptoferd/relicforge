@@ -1,3 +1,11 @@
+## V10.5.2 whitelist snapshot RPC fix
+
+- ERC-721 holder snapshots now try a **current-state snapshot first** instead of reconstructing the entire transfer history.
+- Current-state snapshots use Multicall3 + `totalSupply()` / `ownerOf()` (and ERC-721 Enumerable when available), so normal sequential/ERC721A collections do not require an archive RPC.
+- Historical transfer-log reconstruction is now a fallback for unusual token-ID layouts and ERC-1155 collections.
+- Added an optional **Advanced snapshot RPC** field for an archive-capable Alchemy/Infura/custom RPC.
+- This is a front-end whitelist scanner change only; V10.5.1 test infrastructure/factory remains compatible and can be reused.
+
 ## V10.5.1 cross-network whitelist snapshot fix
 
 - Whitelist snapshots now select their own source network independently of the Sepolia deployment wallet.
