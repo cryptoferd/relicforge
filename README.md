@@ -1,13 +1,26 @@
-## V10.7.0 Creator Dashboard for launched collections
+## V10.8.1 mint-page activity + holder UI (no contract changes)
 
-- Added **Launched Projects** to the Studio header and **Creator Dashboard** to the landing-page navigation.
-- The dashboard reconnects the creator wallet and discovers collections through `RelicForgeFactory.collectionsByCreator(wallet)`.
-- Previously used Sepolia Factory addresses are remembered locally so test deployments across Factory revisions can still be rediscovered; an older Factory or owned collection can also be pasted manually.
-- A launched collection dashboard shows supply, mint price, reveal mode, wallet limit, whitelist state, royalties, provenance, and sealed status directly from Sepolia.
-- Creator-only controls remain inside Studio: batch Creator Mint, Creator Reveal, mutable mint settings, royalties, and permanent sealing.
-- Public mint pages still expose only Public Mint and Whitelist Mint; `creatorMint()` remains absent from the public mint-page ABI/UI.
-- Saved editable projects now remember the deployed collection and Factory address when available.
-- No Solidity changes in V10.7.0; compatible V10.5.1/V10.5.2/V10.6 test infrastructure can be reused.
+### V10.8.1 changes
+
+- **No Solidity changes.** `contracts/RelicForgeTest.sol` is byte-for-byte identical to V10.8.0. Existing compatible Sepolia collections can be used; no new Factory is required for this UI update.
+- Public mint quantity inputs now clamp immediately to the connected wallet's remaining `maxPerWallet` allotment and remaining supply.
+- Mint page shows `X / Y` minted for the connected wallet plus an allotment progress indicator.
+- Added a minted NFT gallery with 10 tokens per page, previous/next pagination, and direct token-number search.
+- Gallery reads live onchain `tokenURI()` and `ownerOf()` data.
+- Added a current-holder panel with truncated addresses and NFT counts. Holder balances are reconstructed from this collection's onchain `Transfer` events, with pagination and manual refresh.
+- Standalone downloaded mint pages include the same activity/holder UI.
+
+## V10.8.0 creator mint-page editor + strict wallet quantity limits
+
+### V10.8.0 changes
+
+- Launched Projects dashboard now includes a Public Mint Page editor for each deployed collection.
+- Creators can replace the rounded collection image and wide banner from the launched-project dashboard, save the presentation locally, preview/open it, and download an updated standalone mint page.
+- Public mint quantity is dynamically capped to the wallet's remaining global mint allowance and remaining collection supply.
+- Whitelist mint quantity is dynamically capped to the smallest of remaining whitelist allowance, remaining global wallet allowance, and remaining collection supply.
+- Quantity fields clamp immediately when a user types a value above the allowed maximum.
+- Public and whitelist mint now enforce `maxPerWallet` for the collection owner too; only Studio-only `creatorMint()` bypasses the wallet cap.
+- Because the contract behavior changed, deploy fresh V10.8.0 Sepolia test infrastructure before testing new collections.
 
 ## V10.6.0 generated public mint page
 

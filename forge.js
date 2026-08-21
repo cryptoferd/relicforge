@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_5_1';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_8_0';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
   const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
   const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
@@ -50,6 +50,8 @@
     mintPageBannerFile: null,
     launchedCollections: [],
     launchedSelected: null,
+    dashboardMintPageImageFile: null,
+    dashboardMintPageBannerFile: null,
   };
 
   function bridge() {
@@ -115,6 +117,21 @@
     return config;
   }
 
+  function mintPageConfigKey(collectionAddress, chainId = 11155111) {
+    return `relicforge_mint_page_${chainId}_${String(collectionAddress || '').toLowerCase()}`;
+  }
+
+  function readMintPageConfig(collectionAddress, chainId = 11155111) {
+    try { return JSON.parse(localStorage.getItem(mintPageConfigKey(collectionAddress, chainId)) || '{}'); }
+    catch (_) { return {}; }
+  }
+
+  function writeMintPageConfig(config) {
+    if (!config?.contract || !window.ethers.isAddress(config.contract)) throw new Error('Mint page config is missing a valid collection address.');
+    localStorage.setItem(mintPageConfigKey(config.contract, config.chainId || 11155111), JSON.stringify(config));
+    return config;
+  }
+
   async function openMintPage() {
     try {
       const config = await persistMintPageConfig();
@@ -127,25 +144,29 @@
     return String(value || 'relicforge').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'relicforge';
   }
 
+  async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.8.1', { cache: 'no-store' })]);
+    if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
+    let html = await templateRes.text();
+    const script = await scriptRes.text();
+    const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
+    html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
+    html = html.replace(/<script src="\.\/mint\.js\?v=10\.8\.1"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
+    html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
+    html = html.replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeDownloadName(filenameBase)}-mint.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   async function downloadStandaloneMintPage() {
     try {
       const config = await buildMintPageConfig();
-      const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.7.0', { cache: 'no-store' })]);
-      if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
-      let html = await templateRes.text();
-      const script = await scriptRes.text();
-      const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-      html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
-      html = html.replace(/<script src="\.\/mint\.js\?v=10\.6\.0"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
-      html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
-      html = html.replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${safeDownloadName($('launchName')?.value)}-mint.html`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadMintPageFromConfig(config, $('launchName')?.value || 'relicforge');
       if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Standalone mint page downloaded. It contains the page media and whitelist entries needed to build wallet proofs.';
     } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Mint page export: ${error.message}`; }
   }
@@ -1046,7 +1067,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.7.0');
+      const worker = new Worker('./js/solc-worker.js?v=10.8.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1631,6 +1652,11 @@ ${await file.text()}`;
       const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
       const mutableDisabled = snap.sealed || !isOwner;
       const creatorRevealReady = snap.revealMode === 1 && snap.creatorRevealSeed === 0n && snap.totalMinted > 0 && isOwner;
+      const dashboardMintConfig = readMintPageConfig(snap.address);
+      forgeState.dashboardMintPageImageFile = null;
+      forgeState.dashboardMintPageBannerFile = null;
+      const dashboardMintImage = dashboardMintConfig.collectionImage || '';
+      const dashboardMintBanner = dashboardMintConfig.bannerImage || '';
       const detail = $('launchedCollectionDetail');
       if (!detail) return;
       detail.innerHTML = `
@@ -1649,6 +1675,30 @@ ${await file.text()}`;
           <button class="ghost-btn" data-dashboard-action="mintpage" type="button">Open Public Mint Page</button>
           <button class="ghost-btn" data-dashboard-action="viewer" type="button">Open Testnet Viewer</button>
           <a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/${esc(snap.address)}" rel="noreferrer" target="_blank">View on Etherscan</a>
+        </div>
+
+        <div class="launched-section">
+          <h4>Public Mint Page</h4>
+          <p class="forge-footnote">Update the collection image and banner for this launched collection. These page assets are offchain presentation settings and do not change the NFT artwork or metadata.</p>
+          <div class="mint-page-builder-grid dashboard-mint-page-builder">
+            <div class="mint-page-media-settings">
+              <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : 'Square image recommended · PNG, JPG, WEBP, or SVG'}</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="dashboardMintPageImageInput" type="file"/></label>
+              <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : 'Wide image recommended · scales across the top'}</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="dashboardMintPageBannerInput" type="file"/></label>
+              <div class="launched-actions">
+                <button class="primary-btn" data-dashboard-action="savemintpage" ${!isOwner ? 'disabled' : ''} type="button">Save Mint Page</button>
+                <button class="ghost-btn" data-dashboard-action="downloadmintpage" type="button">Download Updated Page</button>
+              </div>
+              <small class="forge-footnote">The hosted test page reads this browser's saved presentation config. Download the updated standalone page when you want a portable/shareable copy.</small>
+            </div>
+            <div class="mint-page-studio-preview">
+              <div class="mint-page-preview-banner" id="dashboardMintPagePreviewBanner">${dashboardMintBanner ? `<img src="${esc(dashboardMintBanner)}" alt=""/>` : '<span>BANNER</span>'}</div>
+              <div class="mint-page-preview-content">
+                <div class="mint-page-preview-avatar" id="dashboardMintPagePreviewImage">${dashboardMintImage ? `<img src="${esc(dashboardMintImage)}" alt=""/>` : '<span>RF</span>'}</div>
+                <div><small>ONCHAIN COLLECTION</small><strong>${esc(snap.name)}</strong><p>${esc(snap.description || 'A fully onchain collection forged with Relic Forge.')}</p></div>
+                <div class="mint-page-preview-action"><span>Mint</span><button type="button" disabled>Connect Wallet</button></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="launched-section">
@@ -1692,6 +1742,18 @@ ${await file.text()}`;
         </div>
         <div class="launched-tx-status" id="launchedTxStatus">Ready.</div>`;
       detail.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => handleLaunchedAction(button.dataset.dashboardAction, snap)));
+      $('dashboardMintPageImageInput')?.addEventListener('change', async event => {
+        forgeState.dashboardMintPageImageFile = event.target.files?.[0] || null;
+        if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile ? forgeState.dashboardMintPageImageFile.name : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : 'Square image recommended · PNG, JPG, WEBP, or SVG');
+        const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
+        setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
+      });
+      $('dashboardMintPageBannerInput')?.addEventListener('change', async event => {
+        forgeState.dashboardMintPageBannerFile = event.target.files?.[0] || null;
+        if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile ? forgeState.dashboardMintPageBannerFile.name : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : 'Wide image recommended · scales across the top');
+        const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
+        setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
+      });
     } catch (error) {
       if ($('launchedCollectionDetail')) $('launchedCollectionDetail').innerHTML = `<div class="forge-market-empty">Unable to load collection: ${esc(error.message)}</div>`;
     }
@@ -1707,6 +1769,41 @@ ${await file.text()}`;
       const contract = new window.ethers.Contract(snap.address, COLLECTION_DASHBOARD_ABI, forgeState.signer);
       if (action === 'mintpage') {
         window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
+        return;
+      }
+      if (action === 'savemintpage') {
+        if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the collection owner.');
+        const existing = readMintPageConfig(snap.address);
+        const [newImage, newBanner] = await Promise.all([fileToDataUrl(forgeState.dashboardMintPageImageFile), fileToDataUrl(forgeState.dashboardMintPageBannerFile)]);
+        const config = writeMintPageConfig({
+          ...existing,
+          schema: 'relic-forge/mint-page@1',
+          chainId: 11155111,
+          contract: snap.address,
+          collectionImage: newImage || existing.collectionImage || null,
+          bannerImage: newBanner || existing.bannerImage || null,
+          updatedAt: new Date().toISOString(),
+        });
+        forgeState.dashboardMintPageImageFile = null;
+        forgeState.dashboardMintPageBannerFile = null;
+        launchedStatus('Mint page appearance saved.');
+        await openLaunchedCollection(snap.address);
+        return;
+      }
+      if (action === 'downloadmintpage') {
+        const existing = readMintPageConfig(snap.address);
+        const [newImage, newBanner] = await Promise.all([fileToDataUrl(forgeState.dashboardMintPageImageFile), fileToDataUrl(forgeState.dashboardMintPageBannerFile)]);
+        const config = {
+          ...existing,
+          schema: 'relic-forge/mint-page@1',
+          chainId: 11155111,
+          contract: snap.address,
+          collectionImage: newImage || existing.collectionImage || null,
+          bannerImage: newBanner || existing.bannerImage || null,
+          updatedAt: new Date().toISOString(),
+        };
+        await downloadMintPageFromConfig(config, snap.name || 'relicforge');
+        launchedStatus('Updated standalone mint page downloaded.');
         return;
       }
       if (action === 'viewer') {

@@ -106,7 +106,7 @@
 - Download Standalone Page, host/open it over HTTP(S), and confirm collection image/banner and mint controls work.
 
 
-## V10.7.0 creator dashboard
+## V10.8.0 creator dashboard
 
 - Launch at least one collection through the current Factory.
 - Reload Studio and click **Launched Projects**.
@@ -117,3 +117,25 @@
 - Open the public mint page and testnet viewer from the dashboard.
 - Test manual recovery by pasting an owned collection address.
 - Do not test **Seal Collection Permanently** on a collection you still need to modify unless you explicitly intend to lock it.
+
+## V10.8.0 mint page checks
+
+- Open **Launched Projects** and select a deployed collection.
+- Replace the collection image and banner under **Public Mint Page** and click **Save Mint Page**.
+- Open the public mint page and verify the new media renders.
+- Set Max per Wallet to 3, connect a fresh minter wallet, and verify the public quantity input cannot exceed 3.
+- Mint 2, refresh, and verify the public quantity input cannot exceed 1.
+- For a whitelist allowance of 5 with a global max of 3, verify the whitelist quantity never exceeds the smaller global remaining allowance.
+- Connect the creator wallet to the public mint page and verify public mint is still capped; use **Creator Mint** in Studio to bypass the cap.
+
+
+## V10.8.1 mint page activity (UI-only)
+
+- [ ] Open an already deployed compatible collection mint page; do not redeploy infrastructure just for V10.8.1.
+- [ ] Connect a wallet with a finite wallet cap and confirm the mint input cannot remain above the remaining allowance.
+- [ ] Confirm the page shows `X / Y` wallet mints and remaining allotment.
+- [ ] Confirm minted NFTs appear as thumbnails, 10 per page.
+- [ ] Search for a specific minted token number and clear the search.
+- [ ] Confirm each token card shows its current owner in truncated form.
+- [ ] Confirm Current Holders lists truncated addresses and current NFT balances.
+- [ ] Transfer a test NFT, refresh holders, and confirm balances update.

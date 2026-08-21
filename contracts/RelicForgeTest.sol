@@ -401,7 +401,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         require(dataFinalized, "NOT_READY");
         require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
         require(msg.value == mintPrice * quantity, "WRONG_PRICE");
-        if (maxPerWallet != 0 && msg.sender != owner) {
+        if (maxPerWallet != 0) {
             require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
         }
         mintedByWallet[msg.sender] += quantity;
@@ -418,7 +418,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         bytes32 leaf = keccak256(abi.encodePacked(msg.sender, allowance));
         require(RFMerkleProof.verify(proof, whitelistRoot, leaf), "NOT_WHITELISTED");
         require(uint256(whitelistMintedByWallet[msg.sender]) + quantity <= allowance, "WHITELIST_ALLOWANCE");
-        if (maxPerWallet != 0 && msg.sender != owner) {
+        if (maxPerWallet != 0) {
             require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
         }
         whitelistMintedByWallet[msg.sender] += quantity;
