@@ -118,7 +118,18 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         uint16 shard;
         uint32 offset;
         uint32 length;
+        uint8 encoding; // 0 SVG fragment, 1 PNG, 2 JPEG, 3 WEBP
         bool exists;
+    }
+
+    struct TraitInput {
+        uint8 layer;
+        uint8 index;
+        string name;
+        uint16 shard;
+        uint32 offset;
+        uint32 length;
+        uint8 encoding;
     }
 
     string public name;
@@ -267,22 +278,19 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         placeholderLength = uint32(svgFragment.length);
     }
 
-    function addTraits(
-        uint8[] calldata layers,
-        uint8[] calldata indexes,
-        string[] calldata names,
-        uint16[] calldata shards,
-        uint32[] calldata offsets,
-        uint32[] calldata lengths
-    ) external onlyOwner beforeFinalized {
-        uint256 n = layers.length;
-        require(indexes.length == n && names.length == n && shards.length == n && offsets.length == n && lengths.length == n, "ARRAY_LENGTH");
-        for (uint256 i; i < n; ++i) {
-            require(layers[i] < layerCount, "BAD_LAYER");
-            require(shards[i] < artShards.length, "BAD_SHARD");
-            require(lengths[i] > 0, "ZERO_TRAIT");
-            _traits[layers[i]][indexes[i]] = Trait(names[i], shards[i], offsets[i], lengths[i], true);
-            if (indexes[i] >= traitCountByLayer[layers[i]]) traitCountByLayer[layers[i]] = uint16(indexes[i]) + 1;
+    function addTraits(TraitInput[] calldata inputs) external onlyOwner beforeFinalized {
+        for (uint256 i; i < inputs.length; ++i) {
+            TraitInput calldata input = inputs[i];
+            require(input.layer < layerCount, "BAD_LAYER");
+            require(input.shard < artShards.length, "BAD_SHARD");
+            require(input.length > 0, "ZERO_TRAIT");
+            require(input.encoding <= 3, "BAD_ENCODING");
+            _traits[input.layer][input.index] = Trait(
+                input.name, input.shard, input.offset, input.length, input.encoding, true
+            );
+            if (input.index >= traitCountByLayer[input.layer]) {
+                traitCountByLayer[input.layer] = uint16(input.index) + 1;
+            }
         }
     }
 
@@ -428,6 +436,24 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         return string(abi.encodePacked(_svgOpen(), fragment, "</svg>"));
     }
 
+    function _renderTrait(Trait storage t) internal view returns (bytes memory) {
+        bytes memory raw = RFDataReader.read(artShards[t.shard], t.offset, t.length);
+        if (t.encoding == 0) return raw;
+
+        string memory mime;
+        if (t.encoding == 1) mime = "image/png";
+        else if (t.encoding == 2) mime = "image/jpeg";
+        else if (t.encoding == 3) mime = "image/webp";
+        else revert("BAD_ENCODING");
+
+        return abi.encodePacked(
+            '<image x="0" y="0" width="', uint256(canvasWidth).toString(),
+            '" height="', uint256(canvasHeight).toString(),
+            '" preserveAspectRatio="none" style="image-rendering:pixelated" href="data:',
+            mime, ';base64,', RFBase64.encode(raw), '"/>'
+        );
+    }
+
     function renderToken(uint256 tokenId) public view returns (string memory) {
         uint256 recipeId = recipeForToken(tokenId);
         bytes memory dna = _readRecipe(recipeId);
@@ -436,7 +462,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
             uint8 traitIndex = uint8(dna[layer]);
             Trait storage t = _traits[layer][traitIndex];
             require(t.exists, "MISSING_TRAIT");
-            svg = abi.encodePacked(svg, RFDataReader.read(artShards[t.shard], t.offset, t.length));
+            svg = abi.encodePacked(svg, _renderTrait(t));
         }
         return string(abi.encodePacked(svg, "</svg>"));
     }

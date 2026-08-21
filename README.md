@@ -1,4 +1,13 @@
-## V10.2.2 wallet project saves + Sepolia compiler fixes
+## V10.2.3 adaptive onchain art storage + Solidity compiler fix
+
+### V10.2.3 changes
+
+- Fixes Solidity `Stack too deep` compilation by enabling `viaIR` and refactoring trait registration into tuple batches.
+- Stops blindly vectorizing PNGs. Each PNG trait is compared as original PNG, browser-recompressed lossless PNG, and pixel-SVG geometry; Relic Forge stores the smallest lossless representation.
+- The onchain renderer can now compose raw PNG/JPEG/WEBP trait bytes inside the final SVG. Raster bytes remain fully onchain.
+- Renames the compiler metric from `Compiled art` to `Onchain art` and calculates `Art savings` against source artwork only (DNA is shown separately).
+- Keeps the V10.2 wallet-scoped IndexedDB project-saving workflow.
+
 
 - Keeps the V10.2.1 fix that renamed the Solidity state variable `sealed` to `isSealed`.
 - Replaces the Unicode em dash in the unrevealed token-name Solidity string with ASCII (`#123 - Forging`) so Solidity 0.8.30 parses the source normally.
@@ -12,7 +21,7 @@ This build is based directly on **Relic Forge v9** and keeps the same flat, stat
 ## Drag/drop update for an existing GitHub repo
 
 1. Unzip this package.
-2. Open the `relic-forge-test-v10.2.2` folder.
+2. Open the `relic-forge-test-v10.2.3` folder.
 3. Drag **all files and folders inside it** into the root of the existing Relic Forge GitHub repository.
 4. Allow GitHub to replace the existing `index.html`, `studio.html`, `styles.css`, `app.js`, `README.md`, and `vercel.json` files.
 5. Keep the new `forge.js`, `project-storage.js`, `contracts/`, and `js/` paths.
@@ -85,7 +94,7 @@ Then open:
 
 The core Steps 1–4 remain local-first and do not upload artwork to a Relic Forge backend.
 
-## Wallet-scoped project saves (V10.2.2)
+## Wallet-scoped project saves
 
 Studio can now save the full editable project in browser IndexedDB under the connected EVM wallet address. The save includes artwork File/Blob data, layer and trait settings, rules, curated/imported token recipes, compiled collection state, and launch/reveal settings (including a Creator Reveal placeholder).
 
@@ -97,7 +106,7 @@ Studio can now save the full editable project in browser IndexedDB under the con
 
 
 
-## V10.2.2 hotfix
+## V10.2.3 hotfix
 - Cache-busts Studio JS/CSS assets so static hosting does not mix an older `app.js` with the new project-saving module.
 - Publishes the Studio project bridge before optional UI event bindings.
 - Improves the project-save error message if the Studio core does not load.

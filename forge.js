@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_2_3';
 
   const forgeState = {
     compiled: null,
@@ -65,6 +65,83 @@
     let offset = 0;
     for (const p of parts) { out.set(p, offset); offset += p.length; }
     return out;
+  }
+
+  async function bytesDigest(bytes) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function canvasPngBytes(file) {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: false });
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('PNG recompression failed.')), 'image/png'));
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  function rasterEncoding(file) {
+    const type = String(file?.type || '').toLowerCase();
+    const ext = String(file?.name || '').split('.').pop().toLowerCase();
+    if (type === 'image/png' || ext === 'png') return { code: 1, label: 'png' };
+    if (type === 'image/jpeg' || ext === 'jpg' || ext === 'jpeg') return { code: 2, label: 'jpeg' };
+    if (type === 'image/webp' || ext === 'webp') return { code: 3, label: 'webp' };
+    return null;
+  }
+
+  async function compileTraitAsset(source) {
+    if (isNoneTrait(source)) {
+      const data = enc.encode('<g/>');
+      return { data, encoding: 'none-svg', encodingCode: 0, sourceBytes: 0, assetKey: `0:${await bytesDigest(data)}` };
+    }
+    if (!source?.file) throw new Error(`Missing source file for trait ${source?.name || ''}.`);
+
+    const sourceData = new Uint8Array(await source.file.arrayBuffer());
+    const raster = rasterEncoding(source.file);
+    let chosenData = sourceData;
+    let encodingCode = raster?.code ?? 0;
+    let encoding = raster ? `raw-${raster.label}` : 'svg-fragment';
+
+    // PNG is already highly compressed. Vectorizing every pixel can be much larger,
+    // so compare lossless representations and store whichever is smallest.
+    if (raster?.code === 1) {
+      let smallestPng = sourceData;
+      try {
+        const recompressed = await canvasPngBytes(source.file);
+        if (recompressed.length < smallestPng.length) smallestPng = recompressed;
+      } catch (_) {}
+
+      const fragment = (await bridge().traitToSvgFragment(source)) || '<g/>';
+      const vectorData = enc.encode(fragment);
+      if (vectorData.length < smallestPng.length) {
+        chosenData = vectorData;
+        encodingCode = 0;
+        encoding = 'pixel-svg';
+      } else {
+        chosenData = smallestPng;
+        encodingCode = 1;
+        encoding = smallestPng.length < sourceData.length ? 'optimized-png' : 'raw-png';
+      }
+    } else if (!raster) {
+      const fragment = (await bridge().traitToSvgFragment(source)) || '<g/>';
+      chosenData = enc.encode(fragment);
+      encodingCode = 0;
+      encoding = 'svg-fragment';
+    }
+
+    return {
+      data: chosenData,
+      encoding,
+      encodingCode,
+      sourceBytes: source.file.size || sourceData.length,
+      assetKey: `${encodingCode}:${await bytesDigest(chosenData)}`,
+    };
   }
 
   function normalized(value) {
@@ -197,9 +274,10 @@
       currentParts = []; currentLength = 0;
     };
     for (const trait of compiledTraits) {
-      const bytes = enc.encode(trait.fragment);
-      if (bytes.length > MAX_TRAIT_BYTES) throw new Error(`${trait.layerName} / ${trait.name} compiles to ${fmtBytes(bytes.length)}, above the ${fmtBytes(MAX_TRAIT_BYTES)} v10 test limit.`);
-      const prior = exactAssetIndex.get(trait.fragment);
+      const bytes = trait.data;
+      if (!(bytes instanceof Uint8Array)) throw new Error(`Missing compiled bytes for ${trait.layerName} / ${trait.name}.`);
+      if (bytes.length > MAX_TRAIT_BYTES) throw new Error(`${trait.layerName} / ${trait.name} needs ${fmtBytes(bytes.length)} after lossless optimization, above the ${fmtBytes(MAX_TRAIT_BYTES)} v10 test limit.`);
+      const prior = exactAssetIndex.get(trait.assetKey);
       if (prior) {
         Object.assign(trait, prior, { deduped: true });
         continue;
@@ -209,7 +287,7 @@
       trait.offset = currentLength;
       trait.length = bytes.length;
       trait.deduped = false;
-      exactAssetIndex.set(trait.fragment, { shard: trait.shard, offset: trait.offset, length: trait.length });
+      exactAssetIndex.set(trait.assetKey, { shard: trait.shard, offset: trait.offset, length: trait.length });
       currentParts.push(bytes); currentLength += bytes.length;
     }
     flush();
@@ -284,14 +362,12 @@
         for (const traitDef of layer.traits) {
           setCompileProgress(5 + 55 * (done / Math.max(1, totalTraits)), `Optimizing ${layer.name} / ${traitDef.name}…`);
           const source = traitDef.trait;
-          const fragment = isNoneTrait(source) ? '<g/>' : await bridge().traitToSvgFragment(source);
+          const asset = await compileTraitAsset(source);
           compiledTraits.push({
             ...traitDef,
             layerIndex: layer.index,
             layerName: layer.name,
-            fragment: fragment || '<g/>',
-            encoding: isNoneTrait(source) ? 'none' : 'pixel-rectangles',
-            sourceBytes: source.file?.size || 0,
+            ...asset,
           });
           done++;
         }
@@ -355,10 +431,11 @@
   function renderCompileReport() {
     const c = forgeState.compiled;
     if (!c) return;
+    const artDelta = c.sourceBytes > 0 ? (1 - (c.artBytes / c.sourceBytes)) * 100 : 0;
+    const savingsText = artDelta >= 0 ? `${artDelta.toFixed(1)}%` : `+${Math.abs(artDelta).toFixed(1)}%`;
     const vals = [
       fmtBytes(c.sourceBytes), fmtBytes(c.artBytes), fmtBytes(c.dnaBytes),
-      String(c.artShards.length), String(c.dnaShards.length),
-      `${Math.max(0, 100 - (c.totalCompiledBytes / Math.max(1, c.sourceBytes)) * 100).toFixed(1)}%`,
+      String(c.artShards.length), String(c.dnaShards.length), savingsText,
     ];
     [...$('forgeCompileMetrics').children].forEach((node, i) => node.querySelector('strong').textContent = vals[i]);
     const largest = [...c.traits].sort((a, b) => b.length - a.length).slice(0, 8);
@@ -370,6 +447,7 @@
       `<div class="forge-check good">✓ ${c.layerDefs.length} layer(s), ${c.traits.length} trait(s)</div>`,
       `<div class="forge-check good">✓ ${c.recipeCount} exact recipes compiled from Step 4</div>`,
       `<div class="forge-check good">✓ ${c.traits.filter(t => t.deduped).length} exact duplicate art asset(s) deduplicated</div>`,
+      `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 1).length} PNG trait(s) stored as compressed raster because that was smaller than SVG</div>`,
       `<div class="forge-check good">✓ ${c.artShards.length + c.dnaShards.length + 1} data shard(s) including placeholder</div>`,
       `<div class="forge-check good">✓ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Creator Reveal'} configured</div>`,
       ...warnings.map(w => `<div class="forge-check warn">⚠ ${esc(w)}</div>`),
@@ -601,7 +679,8 @@
       await sendStep('Register layer names', () => collection.setLayerNames(c.layerDefs.map(layer => layer.name)), steps, si++);
       for (let start = 0, batch = 1; start < c.traits.length; start += 30, batch++, si++) {
         const items = c.traits.slice(start, start + 30);
-        await sendStep(`Register trait batch ${batch}/${traitBatches}`, () => collection.addTraits(items.map(t => t.layerIndex), items.map(t => t.traitIndex), items.map(t => t.name), items.map(t => t.shard), items.map(t => t.offset), items.map(t => t.length)), steps, si);
+        const traitInputs = items.map(t => [t.layerIndex, t.traitIndex, t.name, t.shard, t.offset, t.length, t.encodingCode]);
+        await sendStep(`Register trait batch ${batch}/${traitBatches}`, () => collection.addTraits(traitInputs), steps, si);
       }
       for (let i = 0; i < c.dnaShards.length; i++, si++) await sendStep(`Write DNA shard ${i + 1}/${c.dnaShards.length}`, () => collection.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);
       await sendStep('Configure DNA', () => collection.setDNAConfig(c.recipeCount, c.recipesPerShard), steps, si++);
