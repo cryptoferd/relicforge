@@ -1360,7 +1360,7 @@ body.modal-open { overflow: hidden; }
 .manual-art-card small { color:var(--muted); margin-top:4px; line-height:1.45; }
 .manual-art-card input[type="text"] { flex:1 1 180px; min-width:0; }
 .file-button { cursor:pointer; }
-#categoryTraitInput,.layer-trait-input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+#categoryTraitInput,.layer-trait-input,.rarity-layer-trait-input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 #categoryTraitFileCount { color:var(--muted); font-size:10px; align-self:center; }
 .layer-upload-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
 .layer-upload-row small { color:var(--dim); }
@@ -1403,3 +1403,11 @@ body.modal-open { overflow: hidden; }
   .oneofone-item-rich{grid-template-columns:1fr}
   .oneofone-metadata-row{grid-template-columns:1fr 1fr auto}
 }
+
+/* V10.10.1 incremental trait editing inside rarity setup */
+.rarity-add-trait-btn { white-space: nowrap; }
+.rarity-remove-trait-btn {
+  border: 0; background: transparent; color: var(--dim); cursor: pointer; padding: 5px 0 0;
+  font-size: 9px; text-align: left;
+}
+.rarity-remove-trait-btn:hover { color: var(--danger); }

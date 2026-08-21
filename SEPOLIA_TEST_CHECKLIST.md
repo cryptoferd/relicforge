@@ -26,3 +26,10 @@
 - [ ] Confirm a hidden category never appears in `attributes` but its artwork still renders.
 - [ ] Confirm a hidden trait omits its attribute only on tokens using that trait.
 - [ ] Reveal the full 1/1 and confirm its custom token name, description, and custom attributes are returned onchain.
+
+## V10.10.1 rarity-page incremental upload
+- Add a new trait from Step 2 using **+ Add Trait Artwork** on an existing category.
+- Confirm the trait appears immediately with a blank/auto percentage or exact amount.
+- Confirm manually pinned values remain unchanged after **Auto Fill Remainder**.
+- Remove a trait from Step 2 and confirm curated-token/rule references are cleaned up.
+- No infrastructure redeploy is required for this UI/compiler update.

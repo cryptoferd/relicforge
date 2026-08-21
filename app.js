@@ -745,12 +745,16 @@
         ${state.layers.map(layer => `<section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
           <div class="trait-config-header trait-config-header-rich">
             <div><strong>${escapeHtml(layer.name)}</strong><span>${layer.traits.length} traits</span></div>
-            <div class="trait-header-controls"><label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''}/> Hide category from metadata</label></div>
+            <div class="trait-header-controls">
+              <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''}/> Hide category from metadata</label>
+              <label class="ghost-btn small-btn file-button rarity-add-trait-btn" for="rarity-layer-traits-${escapeHtml(layer.id)}">+ Add Trait Artwork</label>
+              <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
+            </div>
           </div>
           <div class="trait-config-grid">
             ${layer.traits.map(trait => `<div class="trait-config" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
               ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}"/>`}
-              <div><div class="trait-config-name">${escapeHtml(trait.name)}</div><label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''}/> Hide this trait from metadata</label></div>
+              <div><div class="trait-config-name">${escapeHtml(trait.name)}</div><label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''}/> Hide this trait from metadata</label>${trait.isNone ? '' : `<button class="rarity-remove-trait-btn" type="button" data-rarity-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">Remove trait</button>`}</div>
             </div>`).join('')}
           </div>
         </section>`).join('')}`;
@@ -777,6 +781,8 @@
           <div class="trait-header-controls">
             <label class="inline-check"><input class="none-layer-toggle" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.allowNone ? 'checked' : ''} /> Allow None</label>
             <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''} /> Hide category from metadata</label>
+            <label class="ghost-btn small-btn file-button rarity-add-trait-btn" for="rarity-layer-traits-${escapeHtml(layer.id)}">+ Add Trait Artwork</label>
+            <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
             ${autoMode ? `
               <label class="mini-select">Rarity input
                 <select class="layer-rarity-mode" data-layer-id="${escapeHtml(layer.id)}">
@@ -828,6 +834,7 @@
                         </select>`}
                 </div>
                 <label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''} /> Hide this trait from metadata</label>
+                ${trait.isNone ? '' : `<button class="rarity-remove-trait-btn" type="button" data-rarity-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">Remove trait</button>`}
               </div>
             </div>
           `).join('')}
@@ -2046,7 +2053,7 @@
     return {
       tokens: allRecipes,
       report: {
-        compilerVersion: '10.10.0',
+        compilerVersion: '10.10.1',
         supply: totalSupply,
         generativeSupply: supply,
         oneOfOneCount: state.oneOfOnes.length,
@@ -2713,7 +2720,7 @@
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
     const savedCompilerReport = saved.compilerReport || null;
-    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.10.0';
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.10.1';
     state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) }, oneOfOneId: token.oneOfOneId || null }));
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
@@ -2736,7 +2743,7 @@
     if (state.compiledTokens.length) await renderPreviewGrid();
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
-    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.10.0 compiler before forging.`, 'warn');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.10.1 compiler before forging.`, 'warn');
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
@@ -2828,7 +2835,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.10.0',
+    version: '10.10.1',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2841,7 +2848,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.10.0' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.10.1' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
@@ -3053,6 +3060,13 @@
   });
 
   el.traitSetup.addEventListener('change', e => {
+    if (e.target.classList.contains('rarity-layer-trait-input')) {
+      const layerId = e.target.dataset.layerId;
+      const files = [...(e.target.files || [])];
+      e.target.value = '';
+      addFilesToLayer(layerId, files).catch(error => showStatus(error.message, 'error'));
+      return;
+    }
     const layerId = e.target.dataset.layerId || e.target.closest('[data-layer-id]')?.dataset.layerId;
     if (e.target.classList.contains('layer-metadata-hidden')) {
       const layer = getLayer(e.target.dataset.layerId);
@@ -3095,6 +3109,15 @@
   });
 
   el.traitSetup.addEventListener('click', e => {
+    const removeTraitBtn = e.target.closest('[data-rarity-delete-trait]');
+    if (removeTraitBtn) {
+      const layer = getLayer(removeTraitBtn.dataset.layerId);
+      const trait = getTrait(removeTraitBtn.dataset.rarityDeleteTrait);
+      if (layer && trait && confirm(`Remove ${trait.name} from ${layer.name}? This also removes references to it from curated tokens and rules.`)) {
+        removeTrait(layer.id, trait.id);
+      }
+      return;
+    }
     const autoFillBtn = e.target.closest('.autofill-btn');
     if (autoFillBtn) { autoFillLayerPercentages(autoFillBtn.dataset.layerId); resetCompiledForArtworkChange(); return; }
     const equalizeBtn = e.target.closest('.equalize-btn');

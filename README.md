@@ -1,3 +1,11 @@
+# Relic Forge V10.10.1
+
+## Incremental trait editing in Rarity Setup
+
+Creators can now add one or multiple trait artwork files directly to any existing trait category while setting rarities/exact amounts in Step 2. New traits start with blank percentage/exact allocations and participate in Auto Fill Remainder without disturbing manually pinned values. Traits can also be removed directly from the rarity cards; references in curated recipes and rules are cleaned up using the existing removal logic.
+
+No Solidity changes were made in V10.10.1. Existing V10.10.0 infrastructure remains compatible.
+
 # Relic Forge Studio V10.10.0
 
 V10.10.0 builds on the V10.9 Studio and adds editable metadata visibility plus custom metadata for standalone 1/1 artwork.
