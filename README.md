@@ -1,3 +1,11 @@
+## V10.8.5 mint-page contract compatibility fix
+
+- UI-only update; Solidity contract source is unchanged from V10.8.4.
+- Mint page now reads collection methods independently instead of one all-or-nothing Promise.all.
+- Optional method failures use safe compatibility fallbacks and cannot disable Public Mint.
+- Public mint requires only core collection reads plus connected-wallet allowance.
+- Error diagnostics now identify the exact contract method that failed.
+
 ## V10.8.4 fresh-browser public mint fix (UI only)
 
 - Fixed a race where the initial anonymous/read-only mint-page refresh could finish after wallet connection and overwrite the Public Mint button back to disabled.

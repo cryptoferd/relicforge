@@ -120,17 +120,49 @@
     if(fill)fill.style.width=finite?`${Math.min(100,(walletMints/Math.max(1,maxPerWallet))*100)}%`:'0%';
   }
 
+  async function safeRead(label, fn, fallback, diagnostics, required=false){
+    try{return await fn()}
+    catch(error){
+      const message=error?.shortMessage||error?.reason||error?.message||'read failed';
+      diagnostics.push(`${label}: ${message}`);
+      if(required)throw new Error(`${label} failed: ${message}`);
+      return fallback;
+    }
+  }
+  async function hasContractCode(provider,address){
+    try{return (await provider.getCode(address))!=='0x'}catch(_){return true}
+  }
+
   async function refresh(){
     const serial=++refreshSerial;
     if(!config.contract||!ethers.isAddress(config.contract)){status('Mint page is missing a valid collection contract address.');return}
+    const diagnostics=[];
     try{
       const c=await readOnlyContract();
-      const [name,desc,maxSupply,totalMinted,maxPerWallet,mintPrice,wlPrice,pub,wlEnabled,root,reveal]=await Promise.all([c.name(),c.description(),c.maxSupply(),c.totalMinted(),c.maxPerWallet(),c.mintPrice(),c.whitelistMintPrice(),c.publicMintEnabled(),c.whitelistMintEnabled(),c.whitelistRoot(),c.revealMode()]);
+      const readProvider=c.runner?.provider||c.runner||getReadProvider();
+      if(!(await hasContractCode(readProvider,config.contract))){
+        throw new Error(`No contract exists at ${shortAddr(config.contract)} on chain ${config.chainId}.`);
+      }
+
+      // Read each field independently. A missing optional method from an older
+      // Relic Forge implementation must never make public mint unusable.
+      const name=await safeRead('name()',()=>c.name(),'Relic Forge Collection',diagnostics,true);
+      const desc=await safeRead('description()',()=>c.description(),'',diagnostics,false);
+      const maxSupply=await safeRead('maxSupply()',()=>c.maxSupply(),0n,diagnostics,true);
+      const totalMinted=await safeRead('totalMinted()',()=>c.totalMinted(),0n,diagnostics,true);
+      const maxPerWallet=await safeRead('maxPerWallet()',()=>c.maxPerWallet(),0n,diagnostics,false);
+      const mintPrice=await safeRead('mintPrice()',()=>c.mintPrice(),0n,diagnostics,true);
+      const wlPrice=await safeRead('whitelistMintPrice()',()=>c.whitelistMintPrice(),0n,diagnostics,false);
+      const pub=await safeRead('publicMintEnabled()',()=>c.publicMintEnabled(),true,diagnostics,false);
+      const wlEnabled=await safeRead('whitelistMintEnabled()',()=>c.whitelistMintEnabled(),false,diagnostics,false);
+      const root=await safeRead('whitelistRoot()',()=>c.whitelistRoot(),ethers.ZeroHash,diagnostics,false);
+      const reveal=await safeRead('revealMode()',()=>c.revealMode(),0n,diagnostics,false);
       if(serial!==refreshSerial)return;
-      contractState={name,desc,maxSupply:Number(maxSupply),totalMinted:Number(totalMinted),maxPerWallet:Number(maxPerWallet),mintPrice,wlPrice,pub,wlEnabled,root,reveal:Number(reveal)};
+
+      contractState={name,desc,maxSupply:Number(maxSupply),totalMinted:Number(totalMinted),maxPerWallet:Number(maxPerWallet),mintPrice,wlPrice,pub:Boolean(pub),wlEnabled:Boolean(wlEnabled),root,reveal:Number(reveal),diagnostics};
       document.title=`${name} — Mint`;
       $('collectionName').textContent=name;
-      $('collectionDescription').textContent=desc;
+      $('collectionDescription').textContent=desc||'Fully onchain collection forged with Relic Forge.';
       $('mintedStat').textContent=`${Number(totalMinted).toLocaleString()} / ${Number(maxSupply).toLocaleString()}`;
       $('priceStat').textContent=fmtEth(mintPrice);
       $('limitStat').textContent=Number(maxPerWallet)?Number(maxPerWallet).toLocaleString():'Unlimited';
@@ -141,11 +173,11 @@
       $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a>`;
       const supplyRemaining=Math.max(0,Number(maxSupply)-Number(totalMinted));
 
-      // Public mint eligibility is intentionally calculated before any offchain
-      // whitelist/config request. A fresh browser only needs contract + wallet.
       if(wallet){
         const activeWallet=wallet;
-        const m=await c.mintedByWallet(activeWallet);
+        // mintedByWallet was added with wallet-limit support. If an older test
+        // collection lacks it, fall back to 0 rather than disabling public mint.
+        const m=await safeRead('mintedByWallet()',()=>c.mintedByWallet(activeWallet),0n,diagnostics,false);
         if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
         const walletMints=Number(m);
         const globalRemaining=Number(maxPerWallet)>0?Math.max(0,Number(maxPerWallet)-walletMints):supplyRemaining;
@@ -157,15 +189,12 @@
         $('publicMintBtn').disabled=!pub||publicRemaining<1;
         $('publicMintBtn').dataset.ready=(!$('publicMintBtn').disabled).toString();
 
-        // Whitelist proof data is offchain and optional. Failure here must never
-        // disable or overwrite the independently calculated public mint state.
         whitelistData=await readConfigWhitelist();
         if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
-        let whitelistMints=0;
-        try{whitelistMints=Number(await c.whitelistMintedByWallet(activeWallet))}catch(_){}
+        let whitelistMints=Number(await safeRead('whitelistMintedByWallet()',()=>c.whitelistMintedByWallet(activeWallet),0n,diagnostics,false));
         if(serial!==refreshSerial)return;
         const entry=whitelistData?.by?.[activeWallet.toLowerCase()];
-        if(wlEnabled&&entry&&(!root||root.toLowerCase()===whitelistData.root.toLowerCase())){
+        if(wlEnabled&&entry&&(!root||root===ethers.ZeroHash||root.toLowerCase()===whitelistData.root.toLowerCase())){
           const allowanceRemaining=Math.max(0,Number(entry.allowance)-whitelistMints);
           const whitelistRemaining=Math.min(supplyRemaining,globalRemaining,allowanceRemaining);
           setQtyLimit('whitelistQty',whitelistRemaining);
@@ -192,17 +221,22 @@
         $('whitelistQtyHint').textContent=wlEnabled?'Connect wallet to calculate whitelist allowance.':'Whitelist mint is disabled.';
         $('whitelistState').textContent=wlEnabled?'Connect to check':'Disabled';
         $('whitelistMintBtn').disabled=true;
-        // Load proof configuration opportunistically; it is not required for public mint.
         readConfigWhitelist().then(data=>{if(serial===refreshSerial)whitelistData=data}).catch(()=>{});
       }
       if(serial!==refreshSerial)return;
       $('whitelistCard').classList.toggle('disabled',!wlEnabled);
       $('mintIntro').textContent=Number(reveal)===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.';
-      status(wallet?($('publicMintBtn').disabled?'Wallet connected. Check the mint availability message above.':'Wallet connected. Ready to mint.'):'Collection loaded. Connect a wallet to mint.');
+      const diagText=diagnostics.length?` · Compatibility fallback: ${diagnostics.map(v=>v.split(':')[0]).join(', ')}`:'';
+      status(wallet?($('publicMintBtn').disabled?`Wallet connected. Check the mint availability message above.${diagText}`:`Wallet connected. Ready to mint.${diagText}`):`Collection loaded. Connect a wallet to mint.${diagText}`);
       updateExplorerControls();
       loadMintedGallery().catch(()=>{});
       if(holdersLoadedForMintCount!==Number(totalMinted))loadHolders().catch(()=>{}); else {renderHolders();renderMyNfts().catch(()=>{});}
-    }catch(e){if(serial===refreshSerial)status(`Contract error: ${e.shortMessage||e.message}`)}
+    }catch(e){
+      if(serial===refreshSerial){
+        const extra=diagnostics.length?` Failed reads: ${diagnostics.join(' | ')}`:'';
+        status(`Contract error: ${e.shortMessage||e.message}.${extra}`);
+      }
+    }
   }
 
   function captureReceiptOwnership(receipt){
