@@ -1,3 +1,13 @@
+## V10.6.0 generated public mint page
+
+- Added `mint.html` + `mint.js`, a generic Relic Forge themed public mint interface driven by the deployed collection contract.
+- Studio Step 5 now has Mint Page customization for a rounded square collection image and wide banner.
+- Public mint page exposes only Public Mint and Whitelist Mint. Creator Mint remains Studio-only.
+- After forging, `Open Mint Page` opens the generic same-origin test page using the forged contract.
+- `Download Standalone Page` exports one collection-specific HTML mint page with collection media and whitelist entries embedded offchain so eligible wallets can derive Merkle proofs locally.
+- No Solidity changes in V10.6.0; existing compatible V10.5.1/V10.5.2 shared test infrastructure can be reused.
+- Mint-page image/banner Files are included in wallet-scoped IndexedDB project saves.
+
 ## V10.5.2 whitelist snapshot RPC fix
 
 - ERC-721 holder snapshots now try a **current-state snapshot first** instead of reconstructing the entire transfer history.

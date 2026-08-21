@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080808" />
+  <title>Relic Forge Mint</title>
+  <style>
+    :root{--bg:#080808;--panel:#111;--panel2:#161616;--border:#2a2a2a;--border2:#404040;--text:#f1f1f1;--muted:#9a9a9a;--dim:#6d6d6d;--accent:#d2d2d2;--good:#bfc8c1;--bad:#c9aaaa}
+    *{box-sizing:border-box}html{color-scheme:dark}body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(circle at 18% -8%,rgba(255,255,255,.055),transparent 30%),#080808;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input{font:inherit}.shell{width:min(1180px,100%);margin:auto;padding:0 22px 48px}.nav{height:78px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.07)}.brand{display:flex;align-items:center;gap:11px;color:inherit;text-decoration:none}.brand img{width:42px;height:42px}.brand strong{font-family:Georgia,serif;letter-spacing:.13em}.brand small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.wallet{border:1px solid var(--border2);background:#111;color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}.wallet:hover,.btn:hover{border-color:#686868}
+    .banner{width:100%;margin-top:24px;min-height:120px;max-height:310px;aspect-ratio:4/1;border:1px solid var(--border);border-radius:18px;overflow:hidden;background:linear-gradient(135deg,#181818,#0b0b0b);display:grid;place-items:center}.banner img{width:100%;height:100%;object-fit:cover;display:block}.banner-empty{font-family:Georgia,serif;color:#555;font-size:32px;letter-spacing:.12em}
+    .content{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:22px;margin-top:22px}.collection,.mintbox{border:1px solid var(--border);background:rgba(17,17,17,.94);border-radius:18px;padding:22px}.collection-head{display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:start}.avatar{width:150px;aspect-ratio:1;border-radius:22px;overflow:hidden;border:1px solid var(--border2);background:#090909;display:grid;place-items:center}.avatar img{width:100%;height:100%;object-fit:cover}.avatar-empty{font-family:Georgia,serif;font-size:34px;color:#555}.eyebrow{color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.collection h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(28px,4vw,42px);font-weight:500;line-height:1;margin:7px 0 10px}.desc{color:var(--muted);line-height:1.6;font-size:14px;white-space:pre-wrap}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}.stat{border:1px solid var(--border);border-radius:11px;padding:11px;background:#090909}.stat span,.stat strong{display:block}.stat span{color:var(--dim);text-transform:uppercase;font-size:8px;letter-spacing:.1em}.stat strong{margin-top:5px;font-size:13px}
+    .mintbox h2{font-family:Georgia,serif;font-size:25px;font-weight:500;margin:4px 0 6px}.mintbox>p{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 18px}.access{display:grid;gap:10px}.access-card{border:1px solid var(--border);border-radius:12px;padding:13px;background:#0a0a0a}.access-card.disabled{opacity:.48}.access-top{display:flex;justify-content:space-between;gap:12px}.access-top strong{font-size:12px}.access-top span{color:var(--muted);font-size:10px}.eligible{color:var(--good)!important}.not-eligible{color:var(--bad)!important}.qtyrow{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:14px}.qtyrow input{width:100%;background:#090909;border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:10px 11px}.btn{border:1px solid var(--border2);background:linear-gradient(180deg,#e7e7e7,#bdbdbd);color:#090909;font-weight:800;padding:10px 16px;border-radius:9px;cursor:pointer}.btn:disabled{opacity:.4;cursor:not-allowed}.btn.secondary{background:#111;color:var(--text)}.status{margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:11px;color:var(--muted);font-size:10px;line-height:1.5;min-height:38px}.contract{margin-top:16px;color:var(--dim);font-size:9px;overflow-wrap:anywhere}.contract a{color:#aaa}.forge-note{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;color:var(--dim);font-size:10px;line-height:1.5}.hidden{display:none!important}
+    @media(max-width:820px){.content{grid-template-columns:1fr}.collection-head{grid-template-columns:110px 1fr}.avatar{width:110px}.stats{grid-template-columns:1fr 1fr}.banner{aspect-ratio:2.6/1}.nav{height:68px}.brand small{display:none}}
+    @media(max-width:500px){.shell{padding:0 14px 32px}.collection,.mintbox{padding:16px}.collection-head{grid-template-columns:82px 1fr;gap:13px}.avatar{width:82px;border-radius:16px}.stats{grid-template-columns:1fr}.brand strong{font-size:13px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="nav">
+      <a class="brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><span><strong>RELIC FORGE</strong><small>Collection Mint</small></span></a>
+      <button class="wallet" id="connectBtn" type="button">Connect Wallet</button>
+    </header>
+    <div class="banner" id="mintBanner"><div class="banner-empty">RELIC FORGE</div></div>
+    <main class="content">
+      <section class="collection">
+        <div class="collection-head">
+          <div class="avatar" id="mintAvatar"><div class="avatar-empty">RF</div></div>
+          <div><div class="eyebrow">ONCHAIN COLLECTION</div><h1 id="collectionName">Loading collection…</h1><div class="desc" id="collectionDescription"></div></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>Minted</span><strong id="mintedStat">—</strong></div>
+          <div class="stat"><span>Public price</span><strong id="priceStat">—</strong></div>
+          <div class="stat"><span>Wallet limit</span><strong id="limitStat">—</strong></div>
+          <div class="stat"><span>Reveal</span><strong id="revealStat">—</strong></div>
+          <div class="stat"><span>Your mints</span><strong id="walletMintsStat">Connect wallet</strong></div>
+          <div class="stat"><span>Network</span><strong id="networkStat">Sepolia</strong></div>
+        </div>
+      </section>
+      <aside class="mintbox">
+        <div class="eyebrow">MINT</div><h2>Forge your relic</h2><p id="mintIntro">Connect a wallet to mint from this collection.</p>
+        <div class="access">
+          <div class="access-card" id="publicCard"><div class="access-top"><strong>Public Mint</strong><span id="publicPrice">—</span></div><div class="qtyrow"><input id="publicQty" min="1" step="1" type="number" value="1"/><button class="btn" id="publicMintBtn" disabled>Mint</button></div></div>
+          <div class="access-card" id="whitelistCard"><div class="access-top"><strong>Whitelist Mint</strong><span id="whitelistState">Checking…</span></div><div class="qtyrow"><input id="whitelistQty" min="1" step="1" type="number" value="1"/><button class="btn secondary" id="whitelistMintBtn" disabled>Whitelist Mint</button></div></div>
+        </div>
+        <div class="status" id="mintStatus">Loading contract…</div>
+        <div class="contract" id="contractInfo"></div>
+        <div class="forge-note">Forge Reveal requires only this mint signature from the collector. Production randomness fulfillment occurs automatically after the mint; Creator Reveal remains hidden until the collection creator triggers it from Studio.</div>
+      </aside>
+    </main>
+  </div>
+  <script>window.RELICFORGE_MINT_CONFIG = null;</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="./mint.js?v=10.6.0"></script>
+</body>
+</html>

@@ -94,3 +94,13 @@
 - [ ] Confirm current-state ownership scan completes without PublicNode archive access for a sequential/ERC721A collection.
 - [ ] Confirm the displayed snapshot block and holder count are populated.
 - [ ] Optional: paste an archive-capable RPC in Advanced snapshot RPC and verify historical fallback can be used.
+
+
+## V10.6.0 public mint page
+
+- Upload a collection image and banner in Step 5 and confirm the Studio preview updates.
+- Forge a collection (existing V10.5-compatible test infrastructure may be reused).
+- Open Mint Page and confirm the page reads name, description, supply, price, wallet cap and reveal mode from Sepolia.
+- Connect a non-owner wallet and public mint multiple NFTs. Confirm no creator-mint UI exists.
+- For a whitelist project, open/download the mint page with the whitelist embedded, connect an eligible wallet, and confirm Whitelist Mint succeeds with a locally derived Merkle proof.
+- Download Standalone Page, host/open it over HTTP(S), and confirm collection image/banner and mint controls work.

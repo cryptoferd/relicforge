@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.5.2" />
+  <link rel="stylesheet" href="./styles.css?v=10.6.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -397,6 +397,29 @@
   </div>
 
   <div class="forge-workbench-grid">
+    <article class="forge-workbench-card mint-page-builder-card">
+      <div class="forge-card-heading">
+        <div><span>PUBLIC MINT PAGE</span><h3>Customize the minter experience</h3></div>
+        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">Open Mint Page</button><button class="primary-btn" disabled id="downloadMintPageBtn" type="button">Download Standalone Page</button></div>
+      </div>
+      <div class="mint-page-builder-grid">
+        <div class="mint-page-media-settings">
+          <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">Square image recommended · PNG, JPG, WEBP, or SVG</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="mintPageImageInput" type="file"/></label>
+          <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">Wide image recommended · scales across the top</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="mintPageBannerInput" type="file"/></label>
+          <div class="prototype-note"><strong>Public mint only</strong><p>The generated page exposes Public Mint and Whitelist Mint when enabled. Creator Mint remains available only inside Studio.</p></div>
+          <div class="forge-inline-status" id="mintPageStatus">Customize the page now. After forging, Relic Forge can open the contract-driven mint page or export a standalone HTML file.</div>
+        </div>
+        <div class="mint-page-studio-preview">
+          <div class="mint-page-preview-banner" id="mintPagePreviewBanner"><span>BANNER</span></div>
+          <div class="mint-page-preview-content">
+            <div class="mint-page-preview-avatar" id="mintPagePreviewImage"><span>RF</span></div>
+            <div><small>ONCHAIN COLLECTION</small><strong id="mintPagePreviewTitle">Your Collection</strong><p id="mintPagePreviewDescription">A fully onchain collection forged with Relic Forge.</p></div>
+            <div class="mint-page-preview-action"><span>Mint</span><button type="button" disabled>Connect Wallet</button></div>
+          </div>
+        </div>
+      </div>
+    </article>
+
     <article class="forge-workbench-card forge-compiler-card">
       <div class="forge-card-heading">
         <div><span>ONCHAIN COMPILER</span><h3>Optimize + pack the finished collection</h3></div>
@@ -538,8 +561,8 @@
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.5.2" defer></script>
-  <script src="./forge.js?v=10.5.2" defer></script>
-  <script src="./project-storage.js?v=10.5.2" defer></script>
+  <script src="./app.js?v=10.6.0" defer></script>
+  <script src="./forge.js?v=10.6.0" defer></script>
+  <script src="./project-storage.js?v=10.6.0" defer></script>
 </body>
 </html>

@@ -129,6 +129,8 @@
       for (const trait of layer.traits || []) bytes += Number(trait.file?.size || 0);
     }
     bytes += Number(forge?.placeholderFile?.size || 0);
+    bytes += Number(forge?.mintPageImageFile?.size || 0);
+    bytes += Number(forge?.mintPageBannerFile?.size || 0);
     return bytes;
   }
 
@@ -305,7 +307,7 @@
   }
 
   window.RelicForgeProjects = {
-    version: '10.5.2',
+    version: '10.6.0',
     connectWallet,
     saveProject,
     openManager,

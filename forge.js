@@ -32,6 +32,8 @@
     viewerTotalMinted: 0,
     viewerMeta: null,
     whitelist: null,
+    mintPageImageFile: null,
+    mintPageBannerFile: null,
   };
 
   function bridge() {
@@ -46,6 +48,90 @@
   function shortAddr(value) {
     const text = String(value || '');
     return text && text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
+  }
+
+  function fileToDataUrl(file) {
+    if (!file) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Unable to read image file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setPreviewImage(hostId, dataUrl, fallback) {
+    const host = $(hostId);
+    if (!host) return;
+    host.innerHTML = dataUrl ? `<img src="${dataUrl}" alt=""/>` : `<span>${esc(fallback)}</span>`;
+  }
+
+  async function updateMintPagePreview() {
+    const title = $('launchName')?.value.trim() || bridge().getCoreState?.()?.collectionName || 'Your Collection';
+    const description = $('launchDescription')?.value.trim() || 'A fully onchain collection forged with Relic Forge.';
+    if ($('mintPagePreviewTitle')) $('mintPagePreviewTitle').textContent = title;
+    if ($('mintPagePreviewDescription')) $('mintPagePreviewDescription').textContent = description;
+    const [image, banner] = await Promise.all([fileToDataUrl(forgeState.mintPageImageFile), fileToDataUrl(forgeState.mintPageBannerFile)]);
+    setPreviewImage('mintPagePreviewImage', image, 'RF');
+    setPreviewImage('mintPagePreviewBanner', banner, 'BANNER');
+  }
+
+  async function buildMintPageConfig(collectionAddress = forgeState.collectionAddress) {
+    if (!collectionAddress || !window.ethers.isAddress(collectionAddress)) throw new Error('Forge a collection before generating its mint page.');
+    const [collectionImage, bannerImage] = await Promise.all([fileToDataUrl(forgeState.mintPageImageFile), fileToDataUrl(forgeState.mintPageBannerFile)]);
+    return {
+      schema: 'relic-forge/mint-page@1',
+      chainId: 11155111,
+      contract: collectionAddress,
+      collectionImage,
+      bannerImage,
+      whitelistEntries: forgeState.whitelist?.entries || [],
+      whitelistRoot: forgeState.whitelist?.root || null,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async function persistMintPageConfig(collectionAddress = forgeState.collectionAddress) {
+    const config = await buildMintPageConfig(collectionAddress);
+    const key = `relicforge_mint_page_${config.chainId}_${config.contract.toLowerCase()}`;
+    try { localStorage.setItem(key, JSON.stringify(config)); }
+    catch (_) { /* Large whitelists may exceed localStorage. Standalone export still works. */ }
+    return config;
+  }
+
+  async function openMintPage() {
+    try {
+      const config = await persistMintPageConfig();
+      window.open(`./mint.html?contract=${encodeURIComponent(config.contract)}&chain=${config.chainId}`, '_blank', 'noopener');
+      if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Mint page opened using the forged Sepolia contract.';
+    } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Mint page: ${error.message}`; }
+  }
+
+  function safeDownloadName(value) {
+    return String(value || 'relicforge').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'relicforge';
+  }
+
+  async function downloadStandaloneMintPage() {
+    try {
+      const config = await buildMintPageConfig();
+      const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.6.0', { cache: 'no-store' })]);
+      if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
+      let html = await templateRes.text();
+      const script = await scriptRes.text();
+      const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
+      html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
+      html = html.replace(/<script src="\.\/mint\.js\?v=10\.6\.0"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
+      html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
+      html = html.replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeDownloadName($('launchName')?.value)}-mint.html`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Standalone mint page downloaded. It contains the page media and whitelist entries needed to build wallet proofs.';
+    } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Mint page export: ${error.message}`; }
   }
 
   function whitelistSourceChainConfig() {
@@ -944,7 +1030,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.5.1');
+      const worker = new Worker('./js/solc-worker.js?v=10.6.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1110,6 +1196,9 @@ ${await file.text()}`;
       $('forgeCreatorMintBtn').disabled = false;
       $('forgeInspectBtn').disabled = false;
       $('forgeCreatorRevealBtn').disabled = c.core.revealMode !== 1;
+      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = false;
+      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = false;
+      persistMintPageConfig(collectionAddress).catch(() => {});
       log('forgeTestStatus', `Collection ready: ${collectionAddress}`, true);
       bridge().showStatus?.('Collection forged on Sepolia.', 'success');
       loadViewerCollection(true).catch(() => {});
@@ -1393,7 +1482,7 @@ ${await file.text()}`;
   function getForgeProjectState() {
     const wl = forgeState.whitelist;
     return {
-      schema: 'relic-forge/forge-settings@2',
+      schema: 'relic-forge/forge-settings@3',
       launchName: $('launchName')?.value || '',
       launchSymbol: $('launchSymbol')?.value || '',
       launchDescription: $('launchDescription')?.value || '',
@@ -1412,6 +1501,8 @@ ${await file.text()}`;
       whitelistCollectionAddress: $('whitelistCollectionAddress')?.value || '',
       whitelistSnapshotRpc: $('whitelistSnapshotRpc')?.value || '',
       whitelistCustomText: $('whitelistCustomText')?.value || '',
+      mintPageImageFile: forgeState.mintPageImageFile || null,
+      mintPageBannerFile: forgeState.mintPageBannerFile || null,
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
@@ -1426,7 +1517,7 @@ ${await file.text()}`;
   }
 
   function restoreForgeProjectState(saved) {
-    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2'].includes(saved.schema)) return;
+    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3'].includes(saved.schema)) return;
     const values = {
       launchName: saved.launchName,
       launchSymbol: saved.launchSymbol,
@@ -1456,6 +1547,11 @@ ${await file.text()}`;
     if (sourceRadio) sourceRadio.checked = true;
     forgeState.placeholderFile = saved.placeholderFile || null;
     if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, or SVG';
+    forgeState.mintPageImageFile = saved.mintPageImageFile || null;
+    forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
+    if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : 'Square image recommended · PNG, JPG, WEBP, or SVG';
+    if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : 'Wide image recommended · scales across the top';
+    updateMintPagePreview().catch(() => {});
     forgeState.whitelist = null;
     if (saved.whitelist?.entries?.length) {
       try {
@@ -1525,6 +1621,19 @@ ${await file.text()}`;
     $('forgeCreatorMintBtn')?.addEventListener('click', creatorMintTest);
     $('forgeCreatorRevealBtn')?.addEventListener('click', requestCreatorReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
+    $('previewMintPageBtn')?.addEventListener('click', () => updateMintPagePreview().catch(() => {}));
+    $('openMintPageBtn')?.addEventListener('click', openMintPage);
+    $('downloadMintPageBtn')?.addEventListener('click', downloadStandaloneMintPage);
+    $('mintPageImageInput')?.addEventListener('change', event => {
+      forgeState.mintPageImageFile = event.target.files?.[0] || null;
+      if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : 'Square image recommended · PNG, JPG, WEBP, or SVG';
+      updateMintPagePreview().catch(() => {});
+    });
+    $('mintPageBannerInput')?.addEventListener('change', event => {
+      forgeState.mintPageBannerFile = event.target.files?.[0] || null;
+      if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : 'Wide image recommended · scales across the top';
+      updateMintPagePreview().catch(() => {});
+    });
     $('viewerUseForgedBtn')?.addEventListener('click', () => { if (forgeState.collectionAddress && $('viewerCollectionAddress')) $('viewerCollectionAddress').value = forgeState.collectionAddress; });
     $('viewerLoadBtn')?.addEventListener('click', () => loadViewerCollection(true).catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }));
     $('viewerPrevBtn')?.addEventListener('click', () => { forgeState.viewerPage = Math.max(1, forgeState.viewerPage - 1); renderViewerPage().catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }); });
@@ -1562,8 +1671,10 @@ ${await file.text()}`;
     ['launchName', 'launchSymbol', 'launchDescription', 'mintPrice', 'maxPerWallet', 'royalty', 'royaltyWallet'].forEach(id => $(id)?.addEventListener('input', () => {
       if (forgeState.compiled && ['launchName', 'launchSymbol', 'launchDescription'].includes(id)) invalidateCompile('Collection metadata changed — recompile for onchain.');
     }));
+    ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
     restoreInfra();
     updateRevealUi();
+    updateMintPagePreview().catch(() => {});
     updateWhitelistUi();
     updateGweiUi();
   }
