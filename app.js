@@ -76,6 +76,7 @@
     compilerStatus: $('#compilerStatus'),
     previewControls: $('#previewControls'),
     collectionStats: $('#collectionStats'),
+    rarityAudit: $('#rarityAudit'),
     previewGrid: $('#previewGrid'),
     toLaunchBtn: $('#toLaunchBtn'),
     launchName: $('#launchName'),
@@ -226,6 +227,13 @@
     return layer.traits.reduce((sum, trait) => sum + (Number.parseFloat(trait.percentage || '0') || 0), 0);
   }
 
+  // Curated/manual and imported token recipes are overlays, not alternate rarity engines.
+  // Percentage rarity remains active for the unlocked remainder unless the creator explicitly
+  // switches to Exact Amounts mode.
+  function usesPercentageRarity(layer) {
+    return layer?.rarityMode === 'percentage' && state.buildMode !== 'exact';
+  }
+
 
   function updatePercentTotalUI(layerId) {
     const layer = getLayer(layerId);
@@ -299,9 +307,8 @@
 
   function validatePercentageLayers() {
     const errors = [];
-    if (state.buildMode !== 'auto') return errors;
     for (const layer of state.layers) {
-      if (layer.rarityMode !== 'percentage') continue;
+      if (!usesPercentageRarity(layer)) continue;
       const total = percentTotal(layer);
       if (Math.abs(total - 100) > 0.01) {
         errors.push(`${layer.name}: percentages must add up to 100% (currently ${formatPercent(total)}%).`);
@@ -510,7 +517,7 @@
 
     const showExact = state.buildMode === 'exact';
     const showTraitControls = state.buildMode !== 'manifest';
-    const autoMode = state.buildMode === 'auto';
+    const autoMode = state.buildMode === 'auto' || state.buildMode === 'manual';
     if (!showTraitControls) {
       el.traitSetup.innerHTML = `
         <div class="validation-box">
@@ -940,7 +947,7 @@
     const counts = new Map(layer.traits.map(trait => [trait.id, 0]));
     const notes = [];
 
-    if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+    if (usesPercentageRarity(layer)) {
       const total = percentTotal(layer);
       if (Math.abs(total - 100) > 0.01) notes.push(`${layer.name} percentages currently total ${formatPercent(total)}%, not 100%.`);
       for (const trait of layer.traits) {
@@ -1374,7 +1381,7 @@
         if (exact < locked) throw new Error(`${layer.name} → ${trait.name}: exact amount ${exact} is lower than ${locked} manually assigned token(s).`);
         targetCounts.set(trait.id, exact);
         exactTargetSum += exact;
-      } else if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+      } else if (usesPercentageRarity(layer)) {
         const pct = Number.parseFloat(trait.percentage || '0') || 0;
         percentageTraits.push({ id: trait.id, weight: pct });
       } else {
@@ -1387,7 +1394,7 @@
       throw new Error(`${layer.name}: exact amounts plus manually assigned traits exceed the collection size.`);
     }
 
-    if (state.buildMode === 'auto' && layer.rarityMode === 'percentage') {
+    if (usesPercentageRarity(layer)) {
       const totalPct = percentageTraits.reduce((sum, item) => sum + item.weight, 0);
       if (Math.abs(totalPct - 100) > 0.01) {
         throw new Error(`${layer.name}: percentages must add up to 100% before generating.`);
@@ -1730,6 +1737,39 @@
     return issues;
   }
 
+  function distributionValidation(tokens, targetCounts) {
+    const rows = [];
+    const issues = [];
+    const supply = tokens.length || 1;
+    for (const layer of state.layers) {
+      const layerTargets = targetCounts?.[layer.id] || {};
+      for (const trait of layer.traits) {
+        const expected = Number(layerTargets[trait.id] || 0);
+        const actual = tokens.reduce((count, token) => count + (token.traits[layer.id] === trait.id ? 1 : 0), 0);
+        let curated = 0;
+        for (const [tokenId, recipe] of state.manifestTokens.entries()) {
+          if (tokenId >= 1 && tokenId <= supply && recipe[layer.id] === trait.id) curated++;
+        }
+        const mode = trait.distribution === 'exact' ? 'Exact' : (usesPercentageRarity(layer) ? 'Percentage' : 'Rarity');
+        rows.push({
+          layerId: layer.id,
+          layerName: layer.name,
+          traitId: trait.id,
+          traitName: trait.name,
+          mode,
+          curated,
+          expected,
+          actual,
+          targetPercent: (expected / supply) * 100,
+          actualPercent: (actual / supply) * 100,
+          ok: expected === actual,
+        });
+        if (expected !== actual) issues.push(`${layer.name} → ${trait.name}: target ${expected}, generated ${actual}.`);
+      }
+    }
+    return { rows, issues };
+  }
+
   function compileCollection() {
     if (!state.layers.length) throw new Error('Upload artwork first.');
     const supply = getSupply();
@@ -1753,11 +1793,14 @@
     const ruleViolationDetails = getViolationDetails(tokens);
     const ruleConflictGroups = ruleConflictAnalysis(tokens, ruleViolationDetails);
     const exactIssues = exactCountValidation(tokens);
+    const targetCountTable = Object.fromEntries(Object.entries(targetCounts).map(([layerId, counts]) => [layerId, Object.fromEntries(counts.entries())]));
+    const distributionAudit = distributionValidation(tokens, targetCountTable);
     const duplicates = duplicateCount(tokens);
 
     return {
       tokens,
       report: {
+        compilerVersion: '10.8.3',
         supply,
         seed,
         manualTokens: lockedByToken.size,
@@ -1766,6 +1809,9 @@
         ruleViolationDetails,
         ruleConflictGroups,
         exactIssues,
+        targetCounts: targetCountTable,
+        distributionAudit: distributionAudit.rows,
+        distributionIssues: distributionAudit.issues,
         duplicates,
         repairPasses: repair.passes + deepRepair.passes,
       }
@@ -1788,7 +1834,7 @@
       renderCompilerReport();
       await renderPreviewGrid();
       el.previewControls.classList.remove('hidden');
-      el.toLaunchBtn.disabled = result.report.ruleViolations > 0 || result.report.exactIssues.length > 0;
+      el.toLaunchBtn.disabled = result.report.ruleViolations > 0 || result.report.exactIssues.length > 0 || result.report.distributionIssues.length > 0;
       if (!el.toLaunchBtn.disabled) showStatus('Collection compiled successfully.', 'success');
     } catch (error) {
       state.compiledTokens = [];
@@ -1801,13 +1847,15 @@
   function renderCompilerReport() {
     const r = state.compilerReport;
     if (!r) return;
-    const hardProblems = r.ruleViolations + r.exactIssues.length;
+    const distributionIssues = r.distributionIssues || [];
+    const hardProblems = r.ruleViolations + r.exactIssues.length + distributionIssues.length;
     const messages = [
       `${r.supply.toLocaleString()} token recipes created`,
-      `${r.manualTokens.toLocaleString()} token(s) use imported/manual layer choices`,
+      `${r.manualTokens.toLocaleString()} token(s) use imported/manual layer choices and consume their configured rarity targets`,
       `${r.rules} shared rule(s) checked`,
       r.ruleViolations ? `${r.ruleViolations} rule conflict(s) remain` : 'All active trait rules are satisfied',
       r.exactIssues.length ? `${r.exactIssues.length} exact-count issue(s) remain` : 'All exact trait counts are satisfied',
+      distributionIssues.length ? `${distributionIssues.length} rarity-distribution mismatch(es) remain` : 'Rarity audit passed — compiled trait totals match their targets',
       r.duplicates ? `${r.duplicates} duplicate combination(s) found — regenerate or adjust artwork/rarities if uniqueness is required` : 'No duplicate combinations found',
     ];
 
@@ -1849,6 +1897,8 @@
 
     el.compilerStatus.innerHTML = `<div class="compiler-box ${hardProblems ? 'error' : 'success'}"><strong>${hardProblems ? 'A few things still need attention.' : 'Collection recipe is valid.'}</strong><ul>${messages.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>${conflictUi}`;
 
+    renderRarityAudit(r);
+
     el.collectionStats.innerHTML = `
       <div class="stat"><span>Supply</span><strong>${r.supply.toLocaleString()}</strong></div>
       <div class="stat"><span>Layers</span><strong>${state.layers.length}</strong></div>
@@ -1856,6 +1906,30 @@
       <div class="stat"><span>Manual</span><strong>${r.manualTokens}</strong></div>
       <div class="stat"><span>Duplicates</span><strong>${r.duplicates}</strong></div>
     `;
+  }
+
+  function renderRarityAudit(report) {
+    if (!el.rarityAudit) return;
+    const rows = report?.distributionAudit || [];
+    if (!rows.length) {
+      el.rarityAudit.classList.add('hidden');
+      el.rarityAudit.innerHTML = '';
+      return;
+    }
+    const byLayer = new Map();
+    for (const row of rows) {
+      if (!byLayer.has(row.layerId)) byLayer.set(row.layerId, []);
+      byLayer.get(row.layerId).push(row);
+    }
+    el.rarityAudit.classList.remove('hidden');
+    el.rarityAudit.innerHTML = `<div class="rarity-audit-heading"><div><span>RARITY AUDIT</span><strong>Compiled totals vs. configured targets</strong></div><small>Curated tokens count toward these totals; Relic Forge only generates the remaining amount.</small></div>${[...byLayer.values()].map(layerRows => `
+      <div class="rarity-audit-layer">
+        <h4>${escapeHtml(layerRows[0].layerName)}</h4>
+        <div class="rarity-audit-table">
+          <div class="rarity-audit-row header"><span>Trait</span><span>Curated</span><span>Target</span><span>Actual</span><span>Target %</span><span>Actual %</span><span></span></div>
+          ${layerRows.map(row => `<div class="rarity-audit-row ${row.ok ? 'good' : 'bad'}"><span>${escapeHtml(row.traitName)}</span><span>${row.curated}</span><span>${row.expected}</span><span>${row.actual}</span><span>${formatPercent(row.targetPercent)}%</span><span>${formatPercent(row.actualPercent)}%</span><strong>${row.ok ? '✓' : '!'}</strong></div>`).join('')}
+        </div>
+      </div>`).join('')}`;
   }
 
   function relevantRuleLayers(rule) {
@@ -1903,10 +1977,13 @@
     state.compilerReport.ruleViolations = details.reduce((sum, item) => sum + item.count, 0);
     state.compilerReport.ruleConflictGroups = ruleConflictAnalysis(state.compiledTokens, details);
     state.compilerReport.exactIssues = exactCountValidation(state.compiledTokens);
+    const distributionAudit = distributionValidation(state.compiledTokens, state.compilerReport.targetCounts || {});
+    state.compilerReport.distributionAudit = distributionAudit.rows;
+    state.compilerReport.distributionIssues = distributionAudit.issues;
     state.compilerReport.duplicates = duplicateCount(state.compiledTokens);
     renderCompilerReport();
     renderPreviewGrid();
-    el.toLaunchBtn.disabled = state.compilerReport.ruleViolations > 0 || state.compilerReport.exactIssues.length > 0;
+    el.toLaunchBtn.disabled = state.compilerReport.ruleViolations > 0 || state.compilerReport.exactIssues.length > 0 || state.compilerReport.distributionIssues.length > 0;
     showStatus(changed ? `Applied ${changed} rule-priority adjustment(s).` : 'No safe automatic adjustment was available for this rule.', changed ? 'success' : 'warn');
   }
 
@@ -2265,8 +2342,10 @@
     state.targetSelected = new Set(saved.targetSelected || []);
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
-    state.compiledTokens = (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) } }));
-    state.compilerReport = saved.compilerReport || null;
+    const savedCompilerReport = saved.compilerReport || null;
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.8.3';
+    state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) } }));
+    state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
     state.imageHeight = Number(saved.imageHeight || state.layers[0]?.traits[0]?.height || 1000);
 
@@ -2287,7 +2366,8 @@
     if (state.compiledTokens.length) await renderPreviewGrid();
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
-    showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.8.3 rarity compiler before forging.`, 'warn');
+    else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
   function updateLaunchSummary() {
@@ -2378,7 +2458,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.8.0',
+    version: '10.8.3',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2391,7 +2471,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.8.0' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.8.3' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

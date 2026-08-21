@@ -1,3 +1,14 @@
+## V10.8.3 curated-token rarity regression test
+
+1. Create a percentage layer with an obvious distribution (for example 2% trait / 98% None).
+2. Switch to **Build it myself** and curate several token IDs, including at least one token using the rare trait.
+3. Leave some layers on Generate automatically.
+4. Build Collection.
+5. Confirm the Step 4 Rarity Audit reports exact Target = Actual totals.
+6. Confirm curated assignments are included in those totals rather than added on top.
+7. Confirm a curated count above a trait's allowed target produces a compiler error instead of silently changing the rarity.
+8. Forge a fresh collection using the existing shared test infrastructure and confirm minted tokens are drawn from the audited recipe pool.
+
 # Relic Forge v10 — Sepolia Test Checklist
 
 ## Studio regression
@@ -139,3 +150,15 @@
 - [ ] Confirm each token card shows its current owner in truncated form.
 - [ ] Confirm Current Holders lists truncated addresses and current NFT balances.
 - [ ] Transfer a test NFT, refresh holders, and confirm balances update.
+
+
+## V10.8.2 My NFTs (UI-only)
+
+- [ ] Open an existing compatible collection mint page; no infrastructure redeploy is required.
+- [ ] Connect a wallet that owns no NFTs and confirm **My NFTs** reports none owned.
+- [ ] Mint one or more NFTs and confirm they appear in **My NFTs** after confirmation.
+- [ ] Confirm owned cards use live onchain tokenURI artwork/reveal state.
+- [ ] If the wallet owns more than 10, confirm pagination works.
+- [ ] Transfer an NFT away, refresh ownership, and confirm it disappears from **My NFTs**.
+- [ ] Transfer an NFT into the connected wallet, refresh, and confirm it appears.
+- [ ] Confirm the downloaded standalone mint page contains the same **My NFTs** UI.

@@ -30,6 +30,8 @@
   const mintedPageSize = 10;
   let holders = [], holderPage = 1, holdersLoadedForMintCount = -1;
   const holderPageSize = 20;
+  let currentTokenOwners = new Map(), myNftIds = [], myNftPage = 1;
+  const myNftPageSize = 10;
 
   function shortAddr(v){return v && v.length>12?`${v.slice(0,6)}…${v.slice(-4)}`:(v||'—')}
   function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -148,15 +150,26 @@
       $('whitelistCard').classList.toggle('disabled',!wlEnabled); $('mintIntro').textContent=Number(reveal)===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.'; status(wallet?'Ready to mint.':'Collection loaded. Connect a wallet to mint.');
       updateExplorerControls();
       loadMintedGallery().catch(()=>{});
-      if(holdersLoadedForMintCount!==Number(totalMinted))loadHolders().catch(()=>{}); else renderHolders();
+      if(holdersLoadedForMintCount!==Number(totalMinted))loadHolders().catch(()=>{}); else {renderHolders();renderMyNfts().catch(()=>{});}
     }catch(e){status(`Contract error: ${e.message}`)}
   }
 
+  function captureReceiptOwnership(receipt){
+    for(const log of receipt?.logs||[]){
+      try{
+        if(String(log.address||'').toLowerCase()!==String(config.contract||'').toLowerCase())continue;
+        if(String(log.topics?.[0]||'').toLowerCase()!==TRANSFER_TOPIC.toLowerCase())continue;
+        const tokenId=topicTokenId(log.topics[3]),to=topicAddress(log.topics[2]);
+        if(tokenId>0)currentTokenOwners.set(tokenId,to);
+      }catch(_){}
+    }
+  }
+
   async function publicMint(){
-    try{if(!wallet)await connect();const q=clampQty('publicQty');if(q<1)throw new Error('No public mint allowance remains for this wallet.');status(`Submitting public mint for ${q} NFT${q===1?'':'s'}…`);const tx=await contract.mint(q,{value:contractState.mintPrice*BigInt(q)});status(`Mint submitted: ${tx.hash.slice(0,12)}… Waiting for confirmation…`);await tx.wait();status(`Mint confirmed. ${contractState.reveal===0?'Your relic is forging.':'Your placeholder NFT is minted.'}`);holdersLoadedForMintCount=-1;await refresh()}catch(e){status(`Mint error: ${e.shortMessage||e.message}`)}
+    try{if(!wallet)await connect();const q=clampQty('publicQty');if(q<1)throw new Error('No public mint allowance remains for this wallet.');status(`Submitting public mint for ${q} NFT${q===1?'':'s'}…`);const tx=await contract.mint(q,{value:contractState.mintPrice*BigInt(q)});status(`Mint submitted: ${tx.hash.slice(0,12)}… Waiting for confirmation…`);const receipt=await tx.wait();captureReceiptOwnership(receipt);await renderMyNfts().catch(()=>{});status(`Mint confirmed. ${contractState.reveal===0?'Your relic is forging.':'Your placeholder NFT is minted.'}`);holdersLoadedForMintCount=-1;await refresh()}catch(e){status(`Mint error: ${e.shortMessage||e.message}`)}
   }
   async function whitelistMint(){
-    try{if(!wallet)await connect();const entry=whitelistData?.by?.[wallet.toLowerCase()];if(!entry)throw new Error('This wallet does not have a whitelist proof on this mint page.');const q=clampQty('whitelistQty');if(q<1)throw new Error('No whitelist mint allowance remains for this wallet.');status(`Submitting whitelist mint for ${q}…`);const tx=await contract.whitelistMint(q,entry.allowance,entry.proof,{value:contractState.wlPrice*BigInt(q)});status(`Whitelist mint submitted: ${tx.hash.slice(0,12)}…`);await tx.wait();status('Whitelist mint confirmed.');holdersLoadedForMintCount=-1;await refresh()}catch(e){status(`Whitelist mint error: ${e.shortMessage||e.message}`)}
+    try{if(!wallet)await connect();const entry=whitelistData?.by?.[wallet.toLowerCase()];if(!entry)throw new Error('This wallet does not have a whitelist proof on this mint page.');const q=clampQty('whitelistQty');if(q<1)throw new Error('No whitelist mint allowance remains for this wallet.');status(`Submitting whitelist mint for ${q}…`);const tx=await contract.whitelistMint(q,entry.allowance,entry.proof,{value:contractState.wlPrice*BigInt(q)});status(`Whitelist mint submitted: ${tx.hash.slice(0,12)}…`);const receipt=await tx.wait();captureReceiptOwnership(receipt);await renderMyNfts().catch(()=>{});status('Whitelist mint confirmed.');holdersLoadedForMintCount=-1;await refresh()}catch(e){status(`Whitelist mint error: ${e.shortMessage||e.message}`)}
   }
 
   function updateExplorerControls(){
@@ -194,6 +207,32 @@
   function clearTokenSearch(){mintedSearchToken=null;$('mintedSearchInput').value='';loadMintedGallery()}
 
   function topicAddress(topic){try{return ethers.getAddress(`0x${String(topic).slice(-40)}`)}catch(_){return ethers.ZeroAddress}}
+  function topicTokenId(topic){try{return Number(BigInt(topic))}catch(_){return 0}}
+  function transferOrder(log){return [Number(log.blockNumber||0),Number(log.index??log.logIndex??0)]}
+  function isLaterTransfer(a,b){return !b||a[0]>b[0]||(a[0]===b[0]&&a[1]>b[1])}
+
+  async function renderMyNfts(){
+    const section=$('myNftsSection'),grid=$('myNftsGrid'),summary=$('myNftsSummary'),pager=$('myNftsPagination');
+    if(!section||!grid)return;
+    if(!wallet){section.classList.add('hidden');myNftIds=[];return}
+    section.classList.remove('hidden');
+    const lower=wallet.toLowerCase();
+    myNftIds=[...currentTokenOwners.entries()].filter(([,owner])=>String(owner||'').toLowerCase()===lower).map(([tokenId])=>Number(tokenId)).sort((a,b)=>a-b);
+    const expectedBalance=contractState?await (await readOnlyContract()).balanceOf(wallet).then(v=>Number(v)).catch(()=>myNftIds.length):myNftIds.length;
+    if(summary)summary.textContent=`${expectedBalance.toLocaleString()} NFT${expectedBalance===1?'':'s'} currently owned from this collection.`;
+    if(!myNftIds.length){
+      grid.innerHTML=`<div class="minted-empty">${expectedBalance>0?'Ownership token IDs are still loading. Use Refresh to rescan the collection.':'You do not currently own any NFTs from this collection.'}</div>`;
+      pager?.classList.add('hidden');
+      return;
+    }
+    const pages=Math.max(1,Math.ceil(myNftIds.length/myNftPageSize));myNftPage=Math.min(Math.max(1,myNftPage),pages);
+    const start=(myNftPage-1)*myNftPageSize,end=Math.min(myNftIds.length,start+myNftPageSize);
+    if($('myNftsPageInfo'))$('myNftsPageInfo').textContent=`${start+1}-${end} of ${myNftIds.length.toLocaleString()} · Page ${myNftPage} of ${pages}`;
+    if($('myNftsPrevBtn'))$('myNftsPrevBtn').disabled=myNftPage<=1;if($('myNftsNextBtn'))$('myNftsNextBtn').disabled=myNftPage>=pages;
+    pager?.classList.toggle('hidden',pages<=1);
+    grid.innerHTML='<div class="minted-empty">Loading your NFTs…</div>';
+    const c=await readOnlyContract();const cards=await Promise.all(myNftIds.slice(start,end).map(id=>tokenCard(c,id)));grid.innerHTML=cards.join('');
+  }
   async function getTransferHistory(totalMinted){
     if(totalMinted<1)return[];
     const provider=getReadProvider();const latest=await provider.getBlockNumber();let to=latest,chunk=100000,logs=[],mintsFound=0,attempts=0;
@@ -208,15 +247,21 @@
   }
   async function loadHolders(force=false){
     if(!contractState)return;const total=contractState.totalMinted;
-    if(!force&&holdersLoadedForMintCount===total){renderHolders();return}
-    if(!total){holders=[];holdersLoadedForMintCount=0;renderHolders();return}
+    if(!force&&holdersLoadedForMintCount===total){renderHolders();await renderMyNfts();return}
+    if(!total){holders=[];currentTokenOwners=new Map();holdersLoadedForMintCount=0;renderHolders();await renderMyNfts();return}
     try{
       $('holdersStatus').textContent='Building current holder balances from onchain Transfer events…';
-      const logs=await getTransferHistory(total);const balances=new Map();
-      for(const log of logs){const from=topicAddress(log.topics[1]).toLowerCase(),to=topicAddress(log.topics[2]).toLowerCase();if(from!==ZERO)balances.set(from,(balances.get(from)||0)-1);if(to!==ZERO)balances.set(to,(balances.get(to)||0)+1)}
+      const logs=await getTransferHistory(total);const balances=new Map(),latestOwners=new Map();
+      for(const log of logs){
+        const from=topicAddress(log.topics[1]).toLowerCase(),to=topicAddress(log.topics[2]).toLowerCase();
+        if(from!==ZERO)balances.set(from,(balances.get(from)||0)-1);if(to!==ZERO)balances.set(to,(balances.get(to)||0)+1);
+        const tokenId=topicTokenId(log.topics[3]),order=transferOrder(log),previous=latestOwners.get(tokenId);
+        if(tokenId>0&&isLaterTransfer(order,previous?.order))latestOwners.set(tokenId,{owner:to===ZERO?null:ethers.getAddress(to),order});
+      }
+      currentTokenOwners=new Map([...latestOwners.entries()].filter(([,state])=>state.owner).map(([tokenId,state])=>[tokenId,state.owner]));
       holders=[...balances.entries()].filter(([,count])=>count>0).map(([address,count])=>({address:ethers.getAddress(address),count})).sort((a,b)=>b.count-a.count||a.address.localeCompare(b.address));
-      holdersLoadedForMintCount=total;holderPage=1;renderHolders();
-    }catch(e){$('holdersStatus').textContent=`Unable to load holders: ${e.shortMessage||e.message}`}
+      holdersLoadedForMintCount=total;holderPage=1;myNftPage=1;renderHolders();await renderMyNfts();
+    }catch(e){$('holdersStatus').textContent=`Unable to load holders: ${e.shortMessage||e.message}`;await renderMyNfts().catch(()=>{})}
   }
   function renderHolders(){
     const list=$('holdersList'),statusNode=$('holdersStatus');if(!list)return;
@@ -232,7 +277,8 @@
     $('connectBtn').addEventListener('click',connect);$('publicMintBtn').addEventListener('click',publicMint);$('whitelistMintBtn').addEventListener('click',whitelistMint);bindStrictQty('publicQty');bindStrictQty('whitelistQty');
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
-    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
+    $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
+    if(window.ethereum){ethereum.on?.('accountsChanged',async a=>{wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }
   init();

@@ -1,3 +1,27 @@
+## V10.8.3 curated-token rarity fix + rarity audit (Studio compiler only)
+
+### What changed
+
+- Fixed a compiler bug where switching to **Build it myself** caused percentage-mode layers to fall back to rarity-tier weights during final generation.
+- Curated/manual tokens are now treated as locked overrides inside the normal collection compiler, not as a separate rarity engine.
+- Manual and imported token recipes consume the configured collection-wide trait targets. Example: if a trait target is 20 total and 3 curated tokens already use it, Relic Forge generates 17 more.
+- Partial curated tokens only consume targets for the layers they explicitly lock; all unlocked layers are generated normally.
+- Manual mode now keeps percentage/rarity controls visible so creators can curate tokens and configure the remainder in one workflow.
+- Added a Step 4 **Rarity Audit** showing Curated / Target / Actual / Target % / Actual % for every trait.
+- Studio blocks launch if the compiled token pool no longer matches its calculated trait targets.
+- No Solidity changes. Existing V10.8.x Factory/implementation infrastructure can be reused; a collection already forged with the incorrect recipe pool must be forged again because its finalized DNA is intentionally immutable.
+
+## V10.8.2 My NFTs mint-page update (UI only)
+
+### V10.8.2 changes
+
+- Added a **My NFTs** section to the public mint page for the connected wallet.
+- Shows NFTs the connected wallet currently owns from the collection, not merely historical mints.
+- Uses the collection's Transfer history/current ownership reconstruction and displays onchain token thumbnails and reveal state.
+- Shows 10 owned NFTs per page with Previous/Next controls.
+- Refreshes immediately after public/whitelist mint confirmation and can be manually refreshed.
+- No Solidity changes in this release; existing compatible test collections can be used.
+
 ## V10.8.1 mint-page activity + holder UI (no contract changes)
 
 ### V10.8.1 changes

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.8.0" />
+  <link rel="stylesheet" href="./styles.css?v=10.8.3" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -113,7 +113,7 @@
 <button class="build-card" data-build-mode="manual" type="button">
 <span class="build-icon">✎</span>
 <strong>Build it myself</strong>
-<small>Curate exact token IDs visually by choosing the uploaded layer used in each slot.</small>
+<small>Curate any token IDs you want. Your percentage/rarity settings automatically fill every unlocked slot.</small>
 </button>
 <button class="build-card" data-build-mode="manifest" type="button">
 <span class="build-icon">▦</span>
@@ -143,7 +143,7 @@
 <div class="subpanel-heading">
 <div>
 <h3>Curate an exact token</h3>
-<p>Pick a token number, then choose the uploaded trait used in each layer. Leave a layer on “Generate automatically” if you only want to lock part of the NFT.</p>
+<p>Pick a token number, then choose the uploaded trait used in each layer. Curated choices count toward your configured rarity totals; Relic Forge generates only the remaining amount. Leave a layer on “Generate automatically” to keep that layer unlocked.</p>
 </div>
 <div class="manual-token-count"><strong id="manualTokenCount">0</strong><span>curated tokens</span></div>
 </div>
@@ -277,6 +277,7 @@
 </div>
 <div class="preview-controls hidden" id="previewControls">
 <div class="stats-grid" id="collectionStats"></div>
+<div class="rarity-audit hidden" id="rarityAudit"></div>
 <div class="inline-actions">
 <button class="ghost-btn" id="exportManifestBtn" type="button">Export Final Manifest</button>
 <button class="ghost-btn" id="exportCsvBtn" type="button">Export CSV</button>
@@ -598,8 +599,8 @@
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.8.0" defer></script>
-  <script src="./forge.js?v=10.8.1" defer></script>
-  <script src="./project-storage.js?v=10.8.0" defer></script>
+  <script src="./app.js?v=10.8.3" defer></script>
+  <script src="./forge.js?v=10.8.3" defer></script>
+  <script src="./project-storage.js?v=10.8.3" defer></script>
 </body>
 </html>
