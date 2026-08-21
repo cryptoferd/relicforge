@@ -2297,6 +2297,7 @@
     const chain = $('#chainSelect')?.value || 'Ethereum Sepolia';
     const price = $('#mintPrice')?.value || '0';
     const royalty = $('#royalty')?.value || '0';
+    const maxPerWallet = $('#maxPerWallet')?.value || '0';
     const reveal = $('input[name="revealMode"]:checked')?.value === '1' ? 'Creator Reveal' : 'Forge Reveal';
     const report = state.compilerReport;
     el.launchSummaryDetails.innerHTML = `
@@ -2305,6 +2306,8 @@
         <div class="launch-summary-row"><span>Network</span><strong>${escapeHtml(chain)}</strong></div>
         <div class="launch-summary-row"><span>Reveal</span><strong>${escapeHtml(reveal)}</strong></div>
         <div class="launch-summary-row"><span>Mint price</span><strong>${escapeHtml(price)} ETH</strong></div>
+        <div class="launch-summary-row"><span>Wallet limit</span><strong>${Number(maxPerWallet) === 0 ? 'Unlimited' : escapeHtml(maxPerWallet)}</strong></div>
+        <div class="launch-summary-row"><span>Mint access</span><strong>${$('#whitelistEnabled')?.checked ? `Whitelist${$('#publicMintEnabled')?.checked ? ' + public' : ' only'}` : 'Public'}</strong></div>
         <div class="launch-summary-row"><span>Royalty</span><strong>${escapeHtml(royalty)}%</strong></div>
         <div class="launch-summary-row"><span>Studio compiler</span><strong>${report && !report.ruleViolations && !report.exactIssues.length ? 'Valid ✓' : 'Needs review'}</strong></div>
       </div>`;
@@ -2320,12 +2323,14 @@
         chain: $('#chainSelect').value,
         chainId: 11155111,
         mintPrice: $('#mintPrice').value,
+        maxPerWallet: $('#maxPerWallet')?.value || '0',
         royaltyPercent: $('#royalty').value,
         royaltyWallet: $('#royaltyWallet')?.value || '',
         revealMode: $('input[name="revealMode"]:checked')?.value === '1' ? 'creator' : 'forge',
       },
       manifest: manifestObject(),
       onchainCompile: window.RelicForgeForge?.getCompiledSummary?.() || null,
+      mintAccess: window.RelicForgeForge?.getWhitelistSummary?.() || null,
       note: 'GitHub-ready Sepolia test package. Creator wallet deploys/owns the collection. Test randomness is not production VRF.',
     };
     downloadText(`${slug(el.launchName.value || 'relic-collection')}-launch-package.json`, JSON.stringify(packageData, null, 2));
@@ -2373,7 +2378,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.3.0',
+    version: '10.5.0',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2386,7 +2391,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.3.0' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.5.0' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

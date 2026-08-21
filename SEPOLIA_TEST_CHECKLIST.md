@@ -69,3 +69,20 @@
 - [ ] attributes use `trait_type` + `value`.
 - [ ] contractURI returns onchain collection JSON.
 - [ ] royaltyInfo reports configured receiver/bps.
+
+## Whitelist / holder snapshot (V10.5)
+
+- Enable **Whitelist mint** in Step 5.
+- Snapshot test:
+  - enter an ERC-721 or ERC-1155 Sepolia collection address;
+  - click **Snapshot Current Holders**;
+  - confirm Studio reports a fixed snapshot block, eligible wallet count, and Merkle root.
+- Custom test:
+  - paste addresses or upload `.csv`, `.txt`, or `.json`;
+  - optional format: `address,allowance`;
+  - confirm duplicates are removed and the highest allowance for a duplicate address wins.
+- Forge a fresh collection with V10.5 infrastructure.
+- Confirm the collection exposes `whitelistRoot`, `whitelistSourceContract`, `whitelistSnapshotBlock`, and `whitelistSourceType`.
+- With an eligible connected wallet, use **Whitelist Mint** and verify the Merkle proof succeeds.
+- Attempt to exceed the wallet's whitelist allowance and confirm the transaction is rejected.
+- Confirm creator mint still bypasses mint price and public wallet limit.

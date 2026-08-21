@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.3.0" />
+  <link rel="stylesheet" href="./styles.css?v=10.5.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -306,8 +306,39 @@
       <label class="field"><span>Symbol</span><input id="launchSymbol" maxlength="12" type="text" value="RELIC"/></label>
       <label class="field"><span>Description</span><textarea id="launchDescription" rows="4">A fully onchain collection forged with Relic Forge.</textarea></label>
       <label class="field"><span>Mint price</span><div class="input-suffix"><input id="mintPrice" min="0" step="0.001" type="number" value="0.001"/><span>ETH</span></div></label>
+      <label class="field"><span>Max mints per wallet</span><input id="maxPerWallet" min="0" step="1" type="number" value="5"/><small>0 = unlimited. The collection creator bypasses this limit.</small></label>
       <label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" max="10" min="0" step="0.5" type="number" value="5"/><span>%</span></div></label>
       <label class="field"><span>Royalty wallet</span><input id="royaltyWallet" placeholder="Connected wallet by default" type="text"/></label>
+    </div>
+
+    <div class="launch-card whitelist-launch-card">
+      <h3>Mint Access / Whitelist</h3>
+      <label class="project-toggle-row"><span><strong>Public mint</strong><small>Allow normal public minting in addition to any whitelist mint.</small></span><input id="publicMintEnabled" type="checkbox" checked/></label>
+      <label class="project-toggle-row"><span><strong>Whitelist mint</strong><small>Commit an allowlist Merkle root to the collection.</small></span><input id="whitelistEnabled" type="checkbox"/></label>
+      <div class="whitelist-settings hidden" id="whitelistSettings">
+        <div class="whitelist-config-grid">
+          <label class="field"><span>Whitelist mint price</span><div class="input-suffix"><input id="whitelistMintPrice" min="0" step="0.001" type="number" value="0.001"/><span>ETH</span></div></label>
+          <label class="field"><span>Default allowance</span><input id="whitelistDefaultAllowance" min="1" step="1" type="number" value="2"/><small>Mints allowed per eligible address unless a custom file specifies otherwise.</small></label>
+        </div>
+        <div class="whitelist-source-tabs">
+          <label class="reveal-choice selected" data-whitelist-source-card="snapshot"><input checked name="whitelistSourceMode" type="radio" value="snapshot"/><span><strong>Collection snapshot</strong><small>Capture the current holders of an ERC-721 or ERC-1155 collection.</small></span></label>
+          <label class="reveal-choice" data-whitelist-source-card="custom"><input name="whitelistSourceMode" type="radio" value="custom"/><span><strong>Custom list</strong><small>Paste addresses or upload CSV, TXT, or JSON.</small></span></label>
+        </div>
+        <div id="whitelistSnapshotPanel">
+          <label class="field"><span>Collection contract</span><input id="whitelistCollectionAddress" placeholder="0x..." type="text"/></label>
+          <button class="ghost-btn" id="snapshotWhitelistBtn" type="button">Snapshot Current Holders</button>
+          <small class="forge-footnote">Test build scans the collection through the currently connected Sepolia RPC and freezes eligibility at the displayed snapshot block.</small>
+        </div>
+        <div class="hidden" id="whitelistCustomPanel">
+          <label class="field"><span>Addresses</span><textarea id="whitelistCustomText" rows="5" placeholder="0xabc...
+0xdef...,5"></textarea></label>
+          <label class="compact-upload" for="whitelistFileInput"><strong>Upload whitelist</strong><span id="whitelistFileName">CSV, TXT, or JSON</span><input accept=".csv,.txt,.json,text/csv,text/plain,application/json" id="whitelistFileInput" type="file"/></label>
+          <button class="ghost-btn" id="buildCustomWhitelistBtn" type="button">Build Custom Whitelist</button>
+        </div>
+        <div class="forge-inline-status" id="whitelistStatus">No whitelist compiled.</div>
+        <div class="forge-rows" id="whitelistSummary"></div>
+        <button class="ghost-btn hidden" id="downloadWhitelistBtn" type="button">Export Whitelist + Proofs</button>
+      </div>
     </div>
 
     <div class="launch-card">
@@ -378,6 +409,14 @@
     <article class="forge-workbench-card">
       <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated Sepolia deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
       <div class="forge-cost-total"><strong id="forgeEstimatedCost">—</strong><span id="forgeEstimatedGas">Compile first</span></div>
+      <div class="forge-gwei-control">
+        <div class="forge-gwei-head"><span>Gas price</span><strong id="forgeCurrentGwei">Current: —</strong></div>
+        <div class="forge-gwei-row">
+          <label class="reveal-choice selected" data-gwei-card="auto"><input checked name="gweiMode" type="radio" value="auto"/><span><strong>Current</strong><small>Use live Sepolia gwei</small></span></label>
+          <label class="reveal-choice" data-gwei-card="custom"><input name="gweiMode" type="radio" value="custom"/><span><strong>Custom</strong><small>Estimate at your own gwei</small></span></label>
+          <label class="field forge-gwei-input hidden" id="forgeCustomGweiWrap"><span>Custom gwei</span><input id="forgeCustomGwei" min="0" step="0.01" type="number" placeholder="e.g. 15"/></label>
+        </div>
+      </div>
       <div class="forge-rows" id="forgeCostBreakdown"></div>
       <small class="forge-footnote">Live ETH cost uses the connected wallet provider's current Sepolia fee data. Final wallet gas estimation remains authoritative.</small>
     </article>
@@ -401,11 +440,14 @@
 
     <article class="forge-workbench-card">
       <div class="forge-card-heading"><div><span>TEST THE RESULT</span><h3>Mint + reveal + inspect</h3></div></div>
-      <div class="inline-actions forge-test-actions">
-        <button class="ghost-btn" disabled id="forgeMintTestBtn" type="button">Mint Test NFT</button>
-        <button class="ghost-btn" disabled id="forgeFulfillBtn" type="button">Fulfill Test Randomness</button>
+      <div class="forge-mint-controls">
+        <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" step="1" type="number" value="1"/></label>
+        <button class="ghost-btn" disabled id="forgeMintTestBtn" type="button">Public Mint</button>
+        <button class="ghost-btn" disabled id="forgeWhitelistMintBtn" type="button">Whitelist Mint</button>
+        <button class="ghost-btn" disabled id="forgeCreatorMintBtn" type="button">Creator Mint</button>
         <button class="ghost-btn" disabled id="forgeCreatorRevealBtn" type="button">Trigger Creator Reveal</button>
       </div>
+      <div class="forge-inline-status">Forge Reveal test infrastructure auto-fulfills randomness inside the mint transaction. Production VRF will reveal by an automatic callback with no second wallet signature.</div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
       <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable test controls.</pre>
@@ -483,8 +525,8 @@
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.3.0" defer></script>
-  <script src="./forge.js?v=10.3.0" defer></script>
-  <script src="./project-storage.js?v=10.3.0" defer></script>
+  <script src="./app.js?v=10.5.0" defer></script>
+  <script src="./forge.js?v=10.5.0" defer></script>
+  <script src="./project-storage.js?v=10.5.0" defer></script>
 </body>
 </html>

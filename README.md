@@ -1,4 +1,27 @@
-## V10.3.0 testnet marketplace viewer
+## V10.5.0 whitelist / holder snapshot
+
+- Added optional whitelist minting using an onchain Merkle root.
+- Creators can snapshot current ERC-721 or ERC-1155 holders from a collection contract at a specific Sepolia block.
+- Creators can paste or upload CSV/TXT/JSON custom allowlists.
+- Custom lists support optional per-address mint allowances.
+- Snapshot/custom lists are deduplicated and saved with the local wallet-scoped Studio project.
+- Collection contract records the whitelist root, source collection, snapshot block, and source type.
+- Added whitelistMint() test path while preserving public mint and unlimited creator mint behavior.
+- Fixed duplicate "Use Forged Collection" viewer button.
+
+## V10.4.0 batch mint + wallet limits + gas controls + one-action Forge Reveal test
+
+### V10.4.0 changes
+
+- Cost estimator now shows live Sepolia gwei and supports a creator-entered custom gwei value.
+- Added collection-level max mints per wallet (0 = unlimited).
+- Public mint supports a quantity in one transaction and enforces the wallet cap.
+- Collection creator gets a creatorMint(quantity) path that bypasses price and wallet limits, bounded only by remaining supply and transaction gas.
+- Forge Reveal now batches token assignment by mint transaction. The Sepolia mock auto-fulfills inside the mint transaction so testing requires one wallet transaction. Production must use an asynchronous verifiable-randomness callback; the minter still signs only the mint transaction.
+- Large Forge Reveal batches are split into 25-token randomness chunks so a production VRF callback can stay within practical callback gas limits.
+- V10.4 requires newly deployed shared test infrastructure because the implementation/factory ABI changed.
+
+## V10.3.0 testnet marketplace viewer (previous)
 
 ### V10.3.0 changes
 
@@ -27,7 +50,7 @@ This build is based directly on **Relic Forge v9** and keeps the same flat, stat
 ## Drag/drop update for an existing GitHub repo
 
 1. Unzip this package.
-2. Open the `relic-forge-test-v10.3.0` folder.
+2. Open the `relic-forge-test-v10.5.0` folder.
 3. Drag **all files and folders inside it** into the root of the existing Relic Forge GitHub repository.
 4. Allow GitHub to replace the existing `index.html`, `studio.html`, `styles.css`, `app.js`, `README.md`, and `vercel.json` files.
 5. Keep the new `forge.js`, `project-storage.js`, `contracts/`, and `js/` paths.

@@ -68,6 +68,19 @@ library RFStrings {
     }
 }
 
+library RFMerkleProof {
+    function verify(bytes32[] calldata proof, bytes32 root, bytes32 leaf) internal pure returns (bool) {
+        bytes32 computedHash = leaf;
+        for (uint256 i; i < proof.length; ++i) {
+            bytes32 proofElement = proof[i];
+            computedHash = uint256(computedHash) <= uint256(proofElement)
+                ? keccak256(abi.encodePacked(computedHash, proofElement))
+                : keccak256(abi.encodePacked(proofElement, computedHash));
+        }
+        return computedHash == root;
+    }
+}
+
 contract RelicDataShard {
     constructor(bytes memory data) payable {
         bytes memory runtime = abi.encodePacked(hex"00", data);
@@ -94,6 +107,10 @@ interface IRelicRandomnessProvider {
     function requestRandomness(uint256 context) external returns (uint256 requestId);
 }
 
+interface IRelicTestAutoFulfill {
+    function fulfill(uint256 requestId) external returns (uint256 randomWord);
+}
+
 interface IERC721ReceiverRF {
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4);
 }
@@ -108,6 +125,10 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     event BatchMetadataUpdate(uint256 indexed fromTokenId, uint256 indexed toTokenId);
     event ContractURIUpdated();
     event ForgeRequested(uint256 indexed tokenId, uint256 indexed requestId);
+    event ForgeBatchRequested(uint256 indexed startTokenId, uint32 quantity, uint256 indexed requestId);
+    event MintLimitUpdated(uint32 maxPerWallet);
+    event MintAccessUpdated(bool publicMintEnabled, bool whitelistMintEnabled, bytes32 whitelistRoot, uint256 whitelistMintPrice);
+    event WhitelistSnapshotRecorded(address indexed sourceContract, uint64 snapshotBlock, uint8 sourceType);
     event CreatorRevealRequested(uint256 indexed requestId);
     event CreatorRevealCompleted(uint256 indexed requestId, uint256 seed);
     event DataFinalized(bytes32 indexed provenanceHash);
@@ -141,6 +162,15 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     uint256 public mintPrice;
     uint32 public maxSupply;
     uint32 public totalMinted;
+    uint32 public maxPerWallet;
+    bool public publicMintEnabled;
+    bool public whitelistMintEnabled;
+    bytes32 public whitelistRoot;
+    uint256 public whitelistMintPrice;
+    address public whitelistSourceContract;
+    uint64 public whitelistSnapshotBlock;
+    uint8 public whitelistSourceType; // 0 none, 1 collection snapshot, 2 custom list
+    bool public testAutoFulfill;
     uint16 public canvasWidth;
     uint16 public canvasHeight;
     uint8 public layerCount;
@@ -171,8 +201,11 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     mapping(uint256 => address) public getApproved;
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
+    struct ForgeBatch { uint32 startTokenId; uint32 quantity; }
     mapping(uint256 => uint256) public assignedRecipePlusOne;
-    mapping(uint256 => uint256) public requestToToken;
+    mapping(uint256 => ForgeBatch) public requestToBatch;
+    mapping(address => uint32) public mintedByWallet;
+    mapping(address => uint32) public whitelistMintedByWallet;
     mapping(uint256 => uint256) internal _poolSwapPlusOne;
 
     bool private _initialized;
@@ -197,8 +230,10 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         uint8 revealMode_,
         address randomnessProvider_,
         uint256 mintPrice_,
+        uint32 maxPerWallet_,
         address royaltyReceiver_,
-        uint96 royaltyBps_
+        uint96 royaltyBps_,
+        bool testAutoFulfill_
     ) external {
         require(!_initialized, "INITIALIZED");
         require(owner_ != address(0), "ZERO_OWNER");
@@ -218,6 +253,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         revealMode = revealMode_;
         randomnessProvider = randomnessProvider_;
         mintPrice = mintPrice_;
+        maxPerWallet = maxPerWallet_;
+        publicMintEnabled = true;
+        testAutoFulfill = testAutoFulfill_;
         royaltyReceiver = royaltyReceiver_ == address(0) ? owner_ : royaltyReceiver_;
         royaltyBps = royaltyBps_;
     }
@@ -325,23 +363,105 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     }
 
     function setMintPrice(uint256 price) external onlyOwner whenMutable { mintPrice = price; }
+    function setMaxPerWallet(uint32 limit) external onlyOwner whenMutable { maxPerWallet = limit; emit MintLimitUpdated(limit); }
+    function setMintAccess(
+        bool publicEnabled,
+        bool whitelistEnabled,
+        bytes32 root,
+        uint256 whitelistPrice,
+        address sourceContract,
+        uint64 snapshotBlock,
+        uint8 sourceType
+    ) external onlyOwner whenMutable {
+        require(sourceType <= 2, "BAD_SOURCE_TYPE");
+        if (whitelistEnabled) require(root != bytes32(0), "ZERO_WHITELIST_ROOT");
+        publicMintEnabled = publicEnabled;
+        whitelistMintEnabled = whitelistEnabled;
+        whitelistRoot = root;
+        whitelistMintPrice = whitelistPrice;
+        whitelistSourceContract = sourceContract;
+        whitelistSnapshotBlock = snapshotBlock;
+        whitelistSourceType = sourceType;
+        emit MintAccessUpdated(publicEnabled, whitelistEnabled, root, whitelistPrice);
+        emit WhitelistSnapshotRecorded(sourceContract, snapshotBlock, sourceType);
+    }
     function setRoyalty(address receiver, uint96 bps) external onlyOwner whenMutable { require(bps <= 10000, "BAD_ROYALTY"); royaltyReceiver = receiver; royaltyBps = bps; }
 
-    function mint() external payable nonReentrant returns (uint256 tokenId) {
+    function mint() external payable returns (uint256 tokenId) {
+        uint256 start = mint(1);
+        return start;
+    }
+
+    function mint(uint32 quantity) public payable nonReentrant returns (uint256 startTokenId) {
+        require(publicMintEnabled || msg.sender == owner, "PUBLIC_MINT_DISABLED");
+        require(quantity > 0, "ZERO_QUANTITY");
         require(dataFinalized, "NOT_READY");
-        require(totalMinted < maxSupply, "SOLD_OUT");
-        require(msg.value == mintPrice, "WRONG_PRICE");
-        tokenId = uint256(totalMinted) + 1;
-        totalMinted += 1;
-        _ownerOf[tokenId] = msg.sender;
-        _balanceOf[msg.sender] += 1;
-        emit Transfer(address(0), msg.sender, tokenId);
+        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
+        require(msg.value == mintPrice * quantity, "WRONG_PRICE");
+        if (maxPerWallet != 0 && msg.sender != owner) {
+            require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
+        }
+        mintedByWallet[msg.sender] += quantity;
+        startTokenId = _mintTokens(msg.sender, quantity);
+        _beginReveal(startTokenId, quantity);
+    }
+
+    function whitelistMint(uint32 quantity, uint32 allowance, bytes32[] calldata proof) external payable nonReentrant returns (uint256 startTokenId) {
+        require(whitelistMintEnabled, "WHITELIST_MINT_DISABLED");
+        require(quantity > 0, "ZERO_QUANTITY");
+        require(dataFinalized, "NOT_READY");
+        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
+        require(msg.value == whitelistMintPrice * quantity, "WRONG_PRICE");
+        bytes32 leaf = keccak256(abi.encodePacked(msg.sender, allowance));
+        require(RFMerkleProof.verify(proof, whitelistRoot, leaf), "NOT_WHITELISTED");
+        require(uint256(whitelistMintedByWallet[msg.sender]) + quantity <= allowance, "WHITELIST_ALLOWANCE");
+        if (maxPerWallet != 0 && msg.sender != owner) {
+            require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
+        }
+        whitelistMintedByWallet[msg.sender] += quantity;
+        mintedByWallet[msg.sender] += quantity;
+        startTokenId = _mintTokens(msg.sender, quantity);
+        _beginReveal(startTokenId, quantity);
+    }
+
+    function creatorMint(uint32 quantity) external onlyOwner nonReentrant returns (uint256 startTokenId) {
+        require(quantity > 0, "ZERO_QUANTITY");
+        require(dataFinalized, "NOT_READY");
+        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
+        mintedByWallet[msg.sender] += quantity;
+        startTokenId = _mintTokens(msg.sender, quantity);
+        _beginReveal(startTokenId, quantity);
+    }
+
+    function _mintTokens(address to, uint32 quantity) internal returns (uint256 startTokenId) {
+        startTokenId = uint256(totalMinted) + 1;
+        for (uint32 i; i < quantity; ++i) {
+            uint256 tokenId = startTokenId + i;
+            _ownerOf[tokenId] = to;
+            _balanceOf[to] += 1;
+            emit Transfer(address(0), to, tokenId);
+        }
+        totalMinted += quantity;
+    }
+
+    function _beginReveal(uint256 startTokenId, uint32 quantity) internal {
         if (revealMode == 0) {
-            uint256 requestId = IRelicRandomnessProvider(randomnessProvider).requestRandomness(tokenId);
-            requestToToken[requestId] = tokenId;
-            emit ForgeRequested(tokenId, requestId);
+            // Chunk large creator/public batches so production VRF callbacks stay bounded.
+            uint32 remaining = quantity;
+            uint32 cursor = uint32(startTokenId);
+            while (remaining > 0) {
+                uint32 chunk = remaining > 25 ? 25 : remaining;
+                uint256 context = (uint256(cursor) << 32) | uint256(chunk);
+                uint256 requestId = IRelicRandomnessProvider(randomnessProvider).requestRandomness(context);
+                requestToBatch[requestId] = ForgeBatch(cursor, chunk);
+                emit ForgeBatchRequested(cursor, chunk, requestId);
+                if (chunk == 1) emit ForgeRequested(cursor, requestId);
+                if (testAutoFulfill) IRelicTestAutoFulfill(randomnessProvider).fulfill(requestId);
+                cursor += chunk;
+                remaining -= chunk;
+            }
         } else if (creatorRevealSeed != 0) {
-            emit MetadataUpdate(tokenId);
+            emit BatchMetadataUpdate(startTokenId, startTokenId + quantity - 1);
         }
     }
 
@@ -352,6 +472,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         requestId = IRelicRandomnessProvider(randomnessProvider).requestRandomness(0);
         pendingCreatorRevealRequest = requestId;
         emit CreatorRevealRequested(requestId);
+        if (testAutoFulfill) IRelicTestAutoFulfill(randomnessProvider).fulfill(requestId);
     }
 
     function fulfillRandomness(uint256 requestId, uint256 randomWord) external override {
@@ -363,11 +484,16 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
             if (totalMinted > 0) emit BatchMetadataUpdate(1, totalMinted);
             return;
         }
-        uint256 tokenId = requestToToken[requestId];
-        require(tokenId != 0 && assignedRecipePlusOne[tokenId] == 0, "BAD_REQUEST");
-        delete requestToToken[requestId];
-        _assignForgeRecipe(tokenId, randomWord);
-        emit MetadataUpdate(tokenId);
+        ForgeBatch memory batch = requestToBatch[requestId];
+        require(batch.startTokenId != 0 && batch.quantity != 0, "BAD_REQUEST");
+        delete requestToBatch[requestId];
+        for (uint32 i; i < batch.quantity; ++i) {
+            uint256 tokenId = uint256(batch.startTokenId) + i;
+            require(assignedRecipePlusOne[tokenId] == 0, "ALREADY_REVEALED");
+            uint256 derivedWord = uint256(keccak256(abi.encodePacked(randomWord, requestId, tokenId, i)));
+            _assignForgeRecipe(tokenId, derivedWord);
+        }
+        emit BatchMetadataUpdate(batch.startTokenId, uint256(batch.startTokenId) + batch.quantity - 1);
     }
 
     function _poolValue(uint256 index) internal view returns (uint256) {
@@ -543,6 +669,7 @@ contract RelicForgeFactory {
     address public owner;
     address public implementation;
     address public randomnessProvider;
+    bool public testAutoFulfill;
     uint256 public collectionCount;
     mapping(address => bool) public isRelicForgeCollection;
     mapping(address => address[]) internal _collectionsByCreator;
@@ -553,11 +680,12 @@ contract RelicForgeFactory {
 
     modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
 
-    constructor(address implementation_, address randomnessProvider_) {
+    constructor(address implementation_, address randomnessProvider_, bool testAutoFulfill_) {
         require(implementation_.code.length > 0 && randomnessProvider_.code.length > 0, "BAD_INFRA");
         owner = msg.sender;
         implementation = implementation_;
         randomnessProvider = randomnessProvider_;
+        testAutoFulfill = testAutoFulfill_;
     }
 
     function setImplementation(address newImplementation) external onlyOwner { require(newImplementation.code.length > 0, "BAD_IMPL"); implementation = newImplementation; emit ImplementationUpdated(newImplementation); }
@@ -587,12 +715,13 @@ contract RelicForgeFactory {
         uint8 layerCount_,
         uint8 revealMode_,
         uint256 mintPrice_,
+        uint32 maxPerWallet_,
         address royaltyReceiver_,
         uint96 royaltyBps_
     ) external returns (address collection) {
         collection = _clone(implementation);
         RelicCollectionV1(collection).initialize(
-            name_, symbol_, description_, msg.sender, maxSupply_, canvasWidth_, canvasHeight_, layerCount_, revealMode_, randomnessProvider, mintPrice_, royaltyReceiver_, royaltyBps_
+            name_, symbol_, description_, msg.sender, maxSupply_, canvasWidth_, canvasHeight_, layerCount_, revealMode_, randomnessProvider, mintPrice_, maxPerWallet_, royaltyReceiver_, royaltyBps_, testAutoFulfill
         );
         collectionCount += 1;
         isRelicForgeCollection[collection] = true;

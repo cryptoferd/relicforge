@@ -1223,3 +1223,40 @@ body.modal-open { overflow: hidden; }
   .project-modal-actions { flex-direction: column-reverse; }
   .project-modal-actions button { width: 100%; }
 }
+
+/* V10.4 mint + gas controls */
+.forge-gwei-control { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #090909; }
+.forge-gwei-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 9px; }
+.forge-gwei-head span { color: var(--muted); font-size: 10px; }
+.forge-gwei-head strong { font-size: 10px; }
+.forge-gwei-row { display: grid; grid-template-columns: 1fr 1fr minmax(150px, .8fr); gap: 8px; align-items: stretch; }
+.forge-gwei-row .reveal-choice { margin: 0; }
+.forge-gwei-input { margin: 0; }
+.forge-mint-controls { display: grid; grid-template-columns: minmax(100px, 140px) repeat(3, minmax(130px, 1fr)); gap: 8px; align-items: end; margin-bottom: 10px; }
+.forge-mint-controls .field { margin: 0; }
+@media (max-width: 850px) {
+  .forge-gwei-row { grid-template-columns: 1fr; }
+  .forge-mint-controls { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .forge-mint-controls { grid-template-columns: 1fr; }
+}
+
+/* V10.5 whitelist builder */
+.whitelist-launch-card { grid-column: 1 / -1; }
+.project-toggle-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 11px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.project-toggle-row span, .project-toggle-row strong, .project-toggle-row small { display: block; }
+.project-toggle-row strong { font-size: 11px; }
+.project-toggle-row small { margin-top: 4px; color: var(--muted); line-height: 1.4; }
+.project-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }
+.whitelist-settings { margin-top: 14px; }
+.whitelist-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.whitelist-source-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+#whitelistSnapshotPanel, #whitelistCustomPanel { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #090909; }
+#whitelistSummary { margin-top: 10px; }
+@media (max-width: 800px) {
+  .whitelist-config-grid, .whitelist-source-tabs { grid-template-columns: 1fr; }
+}
