@@ -1,3 +1,14 @@
+## V10.7.0 Creator Dashboard for launched collections
+
+- Added **Launched Projects** to the Studio header and **Creator Dashboard** to the landing-page navigation.
+- The dashboard reconnects the creator wallet and discovers collections through `RelicForgeFactory.collectionsByCreator(wallet)`.
+- Previously used Sepolia Factory addresses are remembered locally so test deployments across Factory revisions can still be rediscovered; an older Factory or owned collection can also be pasted manually.
+- A launched collection dashboard shows supply, mint price, reveal mode, wallet limit, whitelist state, royalties, provenance, and sealed status directly from Sepolia.
+- Creator-only controls remain inside Studio: batch Creator Mint, Creator Reveal, mutable mint settings, royalties, and permanent sealing.
+- Public mint pages still expose only Public Mint and Whitelist Mint; `creatorMint()` remains absent from the public mint-page ABI/UI.
+- Saved editable projects now remember the deployed collection and Factory address when available.
+- No Solidity changes in V10.7.0; compatible V10.5.1/V10.5.2/V10.6 test infrastructure can be reused.
+
 ## V10.6.0 generated public mint page
 
 - Added `mint.html` + `mint.js`, a generic Relic Forge themed public mint interface driven by the deployed collection contract.

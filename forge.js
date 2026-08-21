@@ -7,6 +7,20 @@
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
   const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_5_1';
+  const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
+  const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
+  const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
+  const COLLECTION_DASHBOARD_ABI = [
+    'function name() view returns (string)','function symbol() view returns (string)','function description() view returns (string)','function owner() view returns (address)',
+    'function maxSupply() view returns (uint32)','function totalMinted() view returns (uint32)','function mintPrice() view returns (uint256)','function maxPerWallet() view returns (uint32)',
+    'function publicMintEnabled() view returns (bool)','function whitelistMintEnabled() view returns (bool)','function whitelistRoot() view returns (bytes32)','function whitelistMintPrice() view returns (uint256)',
+    'function whitelistSourceContract() view returns (address)','function whitelistSourceChainId() view returns (uint64)','function whitelistSnapshotBlock() view returns (uint64)','function whitelistSourceType() view returns (uint8)',
+    'function royaltyReceiver() view returns (address)','function royaltyBps() view returns (uint96)','function revealMode() view returns (uint8)','function creatorRevealSeed() view returns (uint256)',
+    'function dataFinalized() view returns (bool)','function isSealed() view returns (bool)','function provenanceHash() view returns (bytes32)',
+    'function setMintPrice(uint256 price)','function setMaxPerWallet(uint32 limit)','function setRoyalty(address receiver,uint96 bps)',
+    'function setMintAccess(bool publicEnabled,bool whitelistEnabled,bytes32 root,uint256 whitelistPrice,address sourceContract,uint64 sourceChainId,uint64 snapshotBlock,uint8 sourceType)',
+    'function creatorMint(uint32 quantity) returns (uint256)','function requestCreatorReveal() returns (uint256)','function sealCollection()'
+  ];
 
   const WHITELIST_SOURCE_CHAINS = {
     1: { chainId: 1, label: 'Ethereum Mainnet', rpc: 'https://ethereum-rpc.publicnode.com', historyRpc: 'https://eth.drpc.org' },
@@ -34,6 +48,8 @@
     whitelist: null,
     mintPageImageFile: null,
     mintPageBannerFile: null,
+    launchedCollections: [],
+    launchedSelected: null,
   };
 
   function bridge() {
@@ -114,7 +130,7 @@
   async function downloadStandaloneMintPage() {
     try {
       const config = await buildMintPageConfig();
-      const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.6.0', { cache: 'no-store' })]);
+      const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.7.0', { cache: 'no-store' })]);
       if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
       let html = await templateRes.text();
       const script = await scriptRes.text();
@@ -1030,7 +1046,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.6.0');
+      const worker = new Worker('./js/solc-worker.js?v=10.7.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1081,6 +1097,7 @@ ${await file.text()}`;
       const factory = await deployOne('RelicForgeFactory', [implementation, randomness, true]);
       forgeState.infra = { implementation, randomness, factory };
       localStorage.setItem(INFRA_KEY, JSON.stringify(forgeState.infra));
+      rememberFactory(factory);
       $('factoryAddress').value = factory;
       $('randomnessAddress').value = randomness;
       log('forgeInfraStatus', '✓ Infrastructure saved in this browser. Future Sepolia collections can reuse this factory.');
@@ -1096,6 +1113,7 @@ ${await file.text()}`;
       const infra = JSON.parse(raw);
       if (!infra.factory) return;
       forgeState.infra = infra;
+      rememberFactory(infra.factory);
       if (!$('factoryAddress').value.trim()) $('factoryAddress').value = infra.factory;
       if (!$('randomnessAddress').value.trim()) $('randomnessAddress').value = infra.randomness || '';
     } catch (_) {}
@@ -1121,6 +1139,7 @@ ${await file.text()}`;
       await compileContracts();
       const factoryAddress = $('factoryAddress').value.trim();
       if (!window.ethers.isAddress(factoryAddress)) throw new Error('Deploy or enter a valid Sepolia Factory address.');
+      rememberFactory(factoryAddress);
       const royaltyWallet = $('royaltyWallet').value.trim() || forgeState.wallet;
       if (!window.ethers.isAddress(royaltyWallet)) throw new Error('Royalty wallet is invalid.');
       const royaltyBps = Math.round(Number($('royalty').value || 0) * 100);
@@ -1479,10 +1498,297 @@ ${await file.text()}`;
     }
   }
 
+
+  function rememberFactory(address) {
+    if (!window.ethers?.isAddress(address || '')) return;
+    try {
+      const current = JSON.parse(localStorage.getItem(FACTORY_REGISTRY_KEY) || '[]');
+      const next = [...new Set([...current, window.ethers.getAddress(address)])];
+      localStorage.setItem(FACTORY_REGISTRY_KEY, JSON.stringify(next));
+    } catch (_) {}
+  }
+
+  function knownFactories() {
+    const out = [];
+    const push = value => {
+      if (!window.ethers?.isAddress(value || '')) return;
+      const normalized = window.ethers.getAddress(value);
+      if (!out.some(x => x.toLowerCase() === normalized.toLowerCase())) out.push(normalized);
+    };
+    try { (JSON.parse(localStorage.getItem(FACTORY_REGISTRY_KEY) || '[]') || []).forEach(push); } catch (_) {}
+    push(forgeState.infra?.factory);
+    push($('factoryAddress')?.value.trim());
+    push($('launchedFactoryInput')?.value.trim());
+    return out;
+  }
+
+  function manualLaunchKey() {
+    return `${MANUAL_LAUNCH_KEY_PREFIX}_${String(forgeState.wallet || '').toLowerCase()}`;
+  }
+
+  function manualLaunches() {
+    if (!forgeState.wallet) return [];
+    try { return JSON.parse(localStorage.getItem(manualLaunchKey()) || '[]') || []; }
+    catch (_) { return []; }
+  }
+
+  function rememberManualLaunch(address) {
+    if (!forgeState.wallet || !window.ethers.isAddress(address || '')) return;
+    try {
+      const current = manualLaunches();
+      const normalized = window.ethers.getAddress(address);
+      const next = [...new Set([...current, normalized])];
+      localStorage.setItem(manualLaunchKey(), JSON.stringify(next));
+    } catch (_) {}
+  }
+
+  function launchedModal(open) {
+    $('launchedDashboardModal')?.classList.toggle('hidden', !open);
+    document.body.classList.toggle('modal-open', !!open);
+  }
+
+  async function openLaunchedDashboard() {
+    launchedModal(true);
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = 'Connect your creator wallet to rediscover launched collections.';
+    try {
+      await connectWallet();
+      await loadLaunchedProjects();
+    } catch (error) {
+      if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`;
+    }
+  }
+
+  async function collectionDashboardSnapshot(address, runner = forgeState.provider) {
+    const c = new window.ethers.Contract(address, COLLECTION_DASHBOARD_ABI, runner);
+    const [name, symbol, description, owner, maxSupply, totalMinted, mintPrice, maxPerWallet, publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId, snapshotBlock, sourceType, royaltyReceiver, royaltyBps, revealMode, creatorRevealSeed, finalized, sealed, provenance] = await Promise.all([
+      c.name(), c.symbol(), c.description(), c.owner(), c.maxSupply(), c.totalMinted(), c.mintPrice(), c.maxPerWallet(), c.publicMintEnabled(), c.whitelistMintEnabled(), c.whitelistRoot(), c.whitelistMintPrice(),
+      c.whitelistSourceContract(), c.whitelistSourceChainId(), c.whitelistSnapshotBlock(), c.whitelistSourceType(), c.royaltyReceiver(), c.royaltyBps(), c.revealMode(), c.creatorRevealSeed(), c.dataFinalized(), c.isSealed(), c.provenanceHash()
+    ]);
+    return {
+      address, name, symbol, description, owner,
+      maxSupply: Number(maxSupply), totalMinted: Number(totalMinted), mintPrice, maxPerWallet: Number(maxPerWallet),
+      publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId: Number(sourceChainId), snapshotBlock: Number(snapshotBlock), sourceType: Number(sourceType),
+      royaltyReceiver, royaltyBps: Number(royaltyBps), revealMode: Number(revealMode), creatorRevealSeed: BigInt(creatorRevealSeed), finalized, sealed, provenance,
+    };
+  }
+
+  async function loadLaunchedProjects() {
+    if (!forgeState.signer) await connectWallet();
+    const wallet = forgeState.wallet;
+    if ($('launchedDashboardWallet')) $('launchedDashboardWallet').textContent = `${wallet.slice(0, 6)}…${wallet.slice(-4)} · Sepolia`;
+    const extra = $('launchedFactoryInput')?.value.trim();
+    if (extra) {
+      if (!window.ethers.isAddress(extra)) throw new Error('Additional Factory address is invalid.');
+      rememberFactory(extra);
+    }
+    const factories = knownFactories();
+    const addresses = new Set(manualLaunches().map(x => x.toLowerCase()));
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Searching ${factories.length} known Factor${factories.length === 1 ? 'y' : 'ies'} for ${shortAddr(wallet)}…`;
+    for (const factoryAddress of factories) {
+      try {
+        const code = await forgeState.provider.getCode(factoryAddress);
+        if (!code || code === '0x') continue;
+        const factory = new window.ethers.Contract(factoryAddress, FACTORY_DASHBOARD_ABI, forgeState.provider);
+        const found = await factory.collectionsByCreator(wallet);
+        found.forEach(address => addresses.add(String(address).toLowerCase()));
+      } catch (_) {}
+    }
+    const snapshots = [];
+    for (const raw of addresses) {
+      try {
+        const address = window.ethers.getAddress(raw);
+        const snap = await collectionDashboardSnapshot(address);
+        if (String(snap.owner).toLowerCase() === wallet.toLowerCase()) snapshots.push(snap);
+      } catch (_) {}
+    }
+    snapshots.sort((a, b) => b.totalMinted - a.totalMinted || a.name.localeCompare(b.name));
+    forgeState.launchedCollections = snapshots;
+    const list = $('launchedCollectionList');
+    if (list) {
+      list.innerHTML = snapshots.length ? snapshots.map(item => `
+        <button class="launched-collection-item${forgeState.launchedSelected?.toLowerCase() === item.address.toLowerCase() ? ' selected' : ''}" data-launched-address="${esc(item.address)}" type="button">
+          <strong>${esc(item.name || 'Unnamed collection')}</strong>
+          <span>${esc(item.symbol || '')} · ${item.totalMinted.toLocaleString()} / ${item.maxSupply.toLocaleString()} minted</span>
+          <small>${esc(shortAddr(item.address))}${item.sealed ? ' · SEALED' : ''}</small>
+        </button>`).join('') : '<div class="forge-market-empty">No launched collections found for this wallet with the known Sepolia factories.</div>';
+      list.querySelectorAll('[data-launched-address]').forEach(button => button.addEventListener('click', () => openLaunchedCollection(button.dataset.launchedAddress)));
+    }
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = snapshots.length ? `Found ${snapshots.length} launched collection${snapshots.length === 1 ? '' : 's'}.` : 'No launched collections found. You can paste an older Factory or collection address below.';
+    if (snapshots.length) {
+      const selectedExists = snapshots.some(x => x.address.toLowerCase() === String(forgeState.launchedSelected || '').toLowerCase());
+      await openLaunchedCollection(selectedExists ? forgeState.launchedSelected : snapshots[0].address);
+    } else if ($('launchedCollectionDetail')) {
+      $('launchedCollectionDetail').innerHTML = '<div class="forge-market-empty">Choose a launched collection to open its creator controls.</div>';
+    }
+  }
+
+  async function openLaunchedCollection(address) {
+    try {
+      if (!forgeState.signer) await connectWallet();
+      const snap = await collectionDashboardSnapshot(address, forgeState.signer);
+      forgeState.launchedSelected = snap.address;
+      $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button => button.classList.toggle('selected', button.dataset.launchedAddress.toLowerCase() === snap.address.toLowerCase()));
+      const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
+      const mutableDisabled = snap.sealed || !isOwner;
+      const creatorRevealReady = snap.revealMode === 1 && snap.creatorRevealSeed === 0n && snap.totalMinted > 0 && isOwner;
+      const detail = $('launchedCollectionDetail');
+      if (!detail) return;
+      detail.innerHTML = `
+        <div class="launched-detail-head">
+          <div><span class="eyebrow">DEPLOYED COLLECTION</span><h3>${esc(snap.name)}</h3><p>${esc(snap.address)}</p></div>
+          <span class="launched-badge ${snap.sealed ? 'warn' : 'good'}">${snap.sealed ? 'SEALED' : 'CREATOR CONTROL ACTIVE'}</span>
+        </div>
+        ${isOwner ? '' : '<div class="launched-owner-warning">The connected wallet is not the owner of this collection. Creator actions are disabled.</div>'}
+        <div class="launched-stats">
+          <div><span>Supply</span><strong>${snap.totalMinted.toLocaleString()} / ${snap.maxSupply.toLocaleString()}</strong></div>
+          <div><span>Public price</span><strong>${esc(window.ethers.formatEther(snap.mintPrice))} ETH</strong></div>
+          <div><span>Reveal</span><strong>${snap.revealMode === 0 ? 'Forge Reveal' : (snap.creatorRevealSeed !== 0n ? 'Creator Revealed' : 'Creator Reveal')}</strong></div>
+          <div><span>Wallet limit</span><strong>${snap.maxPerWallet || 'Unlimited'}</strong></div>
+        </div>
+        <div class="launched-actions">
+          <button class="ghost-btn" data-dashboard-action="mintpage" type="button">Open Public Mint Page</button>
+          <button class="ghost-btn" data-dashboard-action="viewer" type="button">Open Testnet Viewer</button>
+          <a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/${esc(snap.address)}" rel="noreferrer" target="_blank">View on Etherscan</a>
+        </div>
+
+        <div class="launched-section">
+          <h4>Creator Mint</h4>
+          <div class="inline-actions">
+            <label class="field"><span>Quantity</span><input id="dashboardCreatorMintQty" min="1" max="${Math.max(1, snap.maxSupply - snap.totalMinted)}" type="number" value="1"/></label>
+            <button class="primary-btn" data-dashboard-action="creatormint" ${!isOwner || snap.totalMinted >= snap.maxSupply ? 'disabled' : ''} type="button">Creator Mint</button>
+          </div>
+          <small class="forge-footnote">Creator Mint remains available only inside Relic Forge Studio and bypasses public mint price / wallet limits while respecting remaining supply.</small>
+        </div>
+
+        <div class="launched-section">
+          <h4>Mint Settings</h4>
+          ${snap.sealed ? '<div class="forge-check warn">This collection is sealed. Mutable mint and royalty settings are locked.</div>' : ''}
+          <div class="launched-controls-grid">
+            <label class="field"><span>Public mint price</span><div class="input-suffix"><input id="dashboardMintPrice" type="number" min="0" step="0.001" value="${esc(window.ethers.formatEther(snap.mintPrice))}" ${mutableDisabled ? 'disabled' : ''}/><span>ETH</span></div></label>
+            <label class="field"><span>Max per wallet</span><input id="dashboardMaxPerWallet" type="number" min="0" value="${snap.maxPerWallet}" ${mutableDisabled ? 'disabled' : ''}/><small>0 = unlimited</small></label>
+            <label class="field"><span>Whitelist price</span><div class="input-suffix"><input id="dashboardWhitelistPrice" type="number" min="0" step="0.001" value="${esc(window.ethers.formatEther(snap.whitelistPrice))}" ${mutableDisabled ? 'disabled' : ''}/><span>ETH</span></div></label>
+            <label class="field"><span>Royalty</span><div class="input-suffix"><input id="dashboardRoyalty" type="number" min="0" max="10" step="0.5" value="${(snap.royaltyBps / 100).toFixed(2).replace(/\.00$/, '')}" ${mutableDisabled ? 'disabled' : ''}/><span>%</span></div></label>
+            <label class="field"><span>Royalty wallet</span><input id="dashboardRoyaltyWallet" type="text" value="${esc(snap.royaltyReceiver)}" ${mutableDisabled ? 'disabled' : ''}/></label>
+          </div>
+          <div class="launched-access-row">
+            <label><input id="dashboardPublicEnabled" type="checkbox" ${snap.publicEnabled ? 'checked' : ''} ${mutableDisabled ? 'disabled' : ''}/> Public mint enabled</label>
+            <label><input id="dashboardWhitelistEnabled" type="checkbox" ${snap.whitelistEnabled ? 'checked' : ''} ${mutableDisabled || snap.root === window.ethers.ZeroHash ? 'disabled' : ''}/> Whitelist mint enabled</label>
+          </div>
+          <div class="launched-actions">
+            <button class="primary-btn" data-dashboard-action="savesettings" ${mutableDisabled ? 'disabled' : ''} type="button">Save Onchain Settings</button>
+          </div>
+        </div>
+
+        ${snap.revealMode === 1 ? `<div class="launched-section"><h4>Creator Reveal</h4><p class="forge-footnote">${snap.creatorRevealSeed !== 0n ? 'This collection has already been revealed.' : 'Trigger the collection-wide reveal when you are ready.'}</p><button class="ghost-btn" data-dashboard-action="reveal" ${creatorRevealReady ? '' : 'disabled'} type="button">Trigger Creator Reveal</button></div>` : ''}
+
+        <div class="launched-section">
+          <h4>Collection Integrity</h4>
+          <div class="forge-rows">
+            <div class="forge-row"><span>Finalized</span><strong>${snap.finalized ? 'Yes' : 'No'}</strong></div>
+            <div class="forge-row"><span>Provenance</span><strong>${esc(shortAddr(snap.provenance))}</strong></div>
+            <div class="forge-row"><span>Whitelist root</span><strong>${snap.root === window.ethers.ZeroHash ? 'None' : esc(shortAddr(snap.root))}</strong></div>
+          </div>
+          ${!snap.sealed && isOwner ? '<div class="launched-actions"><button class="ghost-btn danger-btn" data-dashboard-action="seal" type="button">Seal Collection Permanently</button></div>' : ''}
+        </div>
+        <div class="launched-tx-status" id="launchedTxStatus">Ready.</div>`;
+      detail.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => handleLaunchedAction(button.dataset.dashboardAction, snap)));
+    } catch (error) {
+      if ($('launchedCollectionDetail')) $('launchedCollectionDetail').innerHTML = `<div class="forge-market-empty">Unable to load collection: ${esc(error.message)}</div>`;
+    }
+  }
+
+  function launchedStatus(message) {
+    if ($('launchedTxStatus')) $('launchedTxStatus').textContent = message;
+  }
+
+  async function handleLaunchedAction(action, snap) {
+    try {
+      if (!forgeState.signer) await connectWallet();
+      const contract = new window.ethers.Contract(snap.address, COLLECTION_DASHBOARD_ABI, forgeState.signer);
+      if (action === 'mintpage') {
+        window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
+        return;
+      }
+      if (action === 'viewer') {
+        if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = snap.address;
+        launchedModal(false);
+        await loadViewerCollection(true);
+        $('viewerCollectionAddress')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the collection owner.');
+      if (action === 'creatormint') {
+        const quantity = Math.max(1, Math.floor(Number($('dashboardCreatorMintQty')?.value || 1)));
+        launchedStatus(`Creator minting ${quantity} NFT${quantity === 1 ? '' : 's'}…`);
+        const tx = await contract.creatorMint(quantity);
+        launchedStatus(`Creator Mint submitted · ${tx.hash.slice(0, 12)}…`);
+        await tx.wait();
+        launchedStatus('Creator Mint confirmed.');
+      } else if (action === 'savesettings') {
+        if (snap.sealed) throw new Error('Collection is sealed.');
+        const newMintPrice = window.ethers.parseEther(String(Math.max(0, Number($('dashboardMintPrice')?.value || 0))));
+        const newLimit = Math.max(0, Math.floor(Number($('dashboardMaxPerWallet')?.value || 0)));
+        const newWhitelistPrice = window.ethers.parseEther(String(Math.max(0, Number($('dashboardWhitelistPrice')?.value || 0))));
+        const royaltyWallet = $('dashboardRoyaltyWallet')?.value.trim() || forgeState.wallet;
+        if (!window.ethers.isAddress(royaltyWallet)) throw new Error('Royalty wallet is invalid.');
+        const royaltyBps = Math.round(Math.max(0, Math.min(10, Number($('dashboardRoyalty')?.value || 0))) * 100);
+        const publicEnabled = !!$('dashboardPublicEnabled')?.checked;
+        const whitelistEnabled = !!$('dashboardWhitelistEnabled')?.checked;
+        if (whitelistEnabled && snap.root === window.ethers.ZeroHash) throw new Error('This collection does not have a whitelist root. Reopen its saved Studio project to build one.');
+        const calls = [];
+        if (newMintPrice !== snap.mintPrice) calls.push(['mint price', () => contract.setMintPrice(newMintPrice)]);
+        if (newLimit !== snap.maxPerWallet) calls.push(['wallet limit', () => contract.setMaxPerWallet(newLimit)]);
+        if (window.ethers.getAddress(royaltyWallet) !== window.ethers.getAddress(snap.royaltyReceiver) || royaltyBps !== snap.royaltyBps) calls.push(['royalty', () => contract.setRoyalty(royaltyWallet, royaltyBps)]);
+        if (publicEnabled !== snap.publicEnabled || whitelistEnabled !== snap.whitelistEnabled || newWhitelistPrice !== snap.whitelistPrice) {
+          calls.push(['mint access', () => contract.setMintAccess(publicEnabled, whitelistEnabled, snap.root, newWhitelistPrice, snap.sourceContract, snap.sourceChainId, snap.snapshotBlock, snap.sourceType)]);
+        }
+        if (!calls.length) { launchedStatus('No onchain settings changed.'); return; }
+        for (let i = 0; i < calls.length; i++) {
+          launchedStatus(`Updating ${calls[i][0]} · ${i + 1}/${calls.length}…`);
+          const tx = await calls[i][1]();
+          await tx.wait();
+        }
+        launchedStatus('Onchain settings updated.');
+      } else if (action === 'reveal') {
+        launchedStatus('Requesting Creator Reveal…');
+        const tx = await contract.requestCreatorReveal();
+        await tx.wait();
+        launchedStatus('Creator Reveal request confirmed.');
+      } else if (action === 'seal') {
+        const ok = window.confirm('Seal this collection permanently? Mint price, wallet limit, mint access, and royalty settings will become immutable. This cannot be undone.');
+        if (!ok) return;
+        launchedStatus('Sealing collection…');
+        const tx = await contract.sealCollection();
+        await tx.wait();
+        launchedStatus('Collection sealed permanently.');
+      }
+      await loadLaunchedProjects();
+      await openLaunchedCollection(snap.address);
+    } catch (error) {
+      launchedStatus(`Dashboard error: ${error.shortMessage || error.message}`);
+    }
+  }
+
+  async function addManualLaunchedCollection() {
+    try {
+      if (!forgeState.signer) await connectWallet();
+      const address = $('launchedManualCollection')?.value.trim() || '';
+      if (!window.ethers.isAddress(address)) throw new Error('Collection address is invalid.');
+      const snap = await collectionDashboardSnapshot(address);
+      if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the owner of this collection.');
+      rememberManualLaunch(address);
+      if ($('launchedManualCollection')) $('launchedManualCollection').value = '';
+      await loadLaunchedProjects();
+      await openLaunchedCollection(address);
+    } catch (error) {
+      if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Add collection: ${error.message}`;
+    }
+  }
+
   function getForgeProjectState() {
     const wl = forgeState.whitelist;
     return {
-      schema: 'relic-forge/forge-settings@3',
+      schema: 'relic-forge/forge-settings@4',
       launchName: $('launchName')?.value || '',
       launchSymbol: $('launchSymbol')?.value || '',
       launchDescription: $('launchDescription')?.value || '',
@@ -1503,6 +1809,8 @@ ${await file.text()}`;
       whitelistCustomText: $('whitelistCustomText')?.value || '',
       mintPageImageFile: forgeState.mintPageImageFile || null,
       mintPageBannerFile: forgeState.mintPageBannerFile || null,
+      collectionAddress: forgeState.collectionAddress || null,
+      factoryAddress: $('factoryAddress')?.value.trim() || forgeState.infra?.factory || null,
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
@@ -1517,7 +1825,7 @@ ${await file.text()}`;
   }
 
   function restoreForgeProjectState(saved) {
-    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3'].includes(saved.schema)) return;
+    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4'].includes(saved.schema)) return;
     const values = {
       launchName: saved.launchName,
       launchSymbol: saved.launchSymbol,
@@ -1551,6 +1859,16 @@ ${await file.text()}`;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
     if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : 'Square image recommended · PNG, JPG, WEBP, or SVG';
     if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : 'Wide image recommended · scales across the top';
+    if (saved.factoryAddress && window.ethers?.isAddress(saved.factoryAddress)) { rememberFactory(saved.factoryAddress); if ($('factoryAddress') && !$('factoryAddress').value.trim()) $('factoryAddress').value = saved.factoryAddress; }
+    if (saved.collectionAddress && window.ethers?.isAddress(saved.collectionAddress)) {
+      forgeState.collectionAddress = saved.collectionAddress;
+      if ($('forgedCollectionAddress')) $('forgedCollectionAddress').textContent = saved.collectionAddress;
+      if ($('forgedEtherscanLink')) $('forgedEtherscanLink').href = `https://sepolia.etherscan.io/address/${saved.collectionAddress}`;
+      $('forgeResult')?.classList.remove('hidden');
+      if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = saved.collectionAddress;
+      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = false;
+      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = false;
+    }
     updateMintPagePreview().catch(() => {});
     forgeState.whitelist = null;
     if (saved.whitelist?.entries?.length) {
@@ -1639,6 +1957,12 @@ ${await file.text()}`;
     $('viewerPrevBtn')?.addEventListener('click', () => { forgeState.viewerPage = Math.max(1, forgeState.viewerPage - 1); renderViewerPage().catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }); });
     $('viewerNextBtn')?.addEventListener('click', () => { forgeState.viewerPage += 1; renderViewerPage().catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }); });
     $('viewerContractUriBtn')?.addEventListener('click', readViewerContractUri);
+    $('launchedProjectsBtn')?.addEventListener('click', openLaunchedDashboard);
+    $('launchedDashboardCloseBtn')?.addEventListener('click', () => launchedModal(false));
+    $('launchedDashboardBackdrop')?.addEventListener('click', () => launchedModal(false));
+    $('launchedConnectBtn')?.addEventListener('click', () => connectWallet().then(loadLaunchedProjects).catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
+    $('launchedRefreshBtn')?.addEventListener('click', () => loadLaunchedProjects().catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
+    $('launchedManualAddBtn')?.addEventListener('click', addManualLaunchedCollection);
     $('whitelistEnabled')?.addEventListener('change', updateWhitelistUi);
     $('publicMintEnabled')?.addEventListener('change', updateWhitelistUi);
     document.querySelectorAll('input[name="whitelistSourceMode"]').forEach(input => input.addEventListener('change', () => {
@@ -1677,6 +2001,7 @@ ${await file.text()}`;
     updateMintPagePreview().catch(() => {});
     updateWhitelistUi();
     updateGweiUi();
+    if (new URLSearchParams(window.location.search).get('dashboard') === '1') setTimeout(openLaunchedDashboard, 0);
   }
 
   window.RelicForgeForge = { getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState };

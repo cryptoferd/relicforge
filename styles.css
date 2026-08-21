@@ -1278,3 +1278,42 @@ body.modal-open { overflow: hidden; }
 .mint-page-preview-action span { color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.1em; }
 .mint-page-preview-action button { border:1px solid var(--border-strong); background:#d7d7d7; color:#090909; padding:9px 10px; border-radius:8px; font-size:9px; font-weight:800; }
 @media (max-width:900px){.mint-page-builder-grid{grid-template-columns:1fr}.mint-page-preview-content{grid-template-columns:80px 1fr}.mint-page-preview-avatar{width:80px}.mint-page-preview-action{grid-column:1/-1;border-left:0;border-top:1px solid var(--border);padding:10px 0 0}}
+
+/* V10.7 creator dashboard */
+.launched-dashboard-panel { width: min(1180px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.launched-discovery-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; margin: 16px 0 10px; }
+.launched-dashboard-layout { display: grid; grid-template-columns: minmax(240px, .34fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; min-height: 360px; }
+.launched-list, .launched-detail { border: 1px solid var(--border); border-radius: 12px; background: #090909; min-width: 0; }
+.launched-list { padding: 8px; display: grid; gap: 7px; align-content: start; }
+.launched-collection-item { width: 100%; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: #0c0c0c; color: var(--text); padding: 11px; cursor: pointer; display: grid; gap: 5px; }
+.launched-collection-item:hover, .launched-collection-item.selected { border-color: var(--border-strong); background: var(--panel-2); }
+.launched-collection-item strong { font-size: 12px; }
+.launched-collection-item span, .launched-collection-item small { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.launched-detail { padding: 16px; }
+.launched-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.launched-detail-head h3 { margin: 2px 0 4px; font-size: 20px; }
+.launched-detail-head p { margin: 0; color: var(--muted); font-size: 10px; }
+.launched-badge { border: 1px solid var(--border); border-radius: 999px; padding: 6px 9px; font-size: 9px; color: var(--muted); white-space: nowrap; }
+.launched-badge.good { color: var(--success); }
+.launched-badge.warn { color: var(--warn); }
+.launched-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+.launched-stats > div { border: 1px solid var(--border); border-radius: 9px; padding: 9px; background: #080808; }
+.launched-stats span, .launched-stats strong { display: block; }
+.launched-stats span { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+.launched-stats strong { margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.launched-section { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+.launched-section h4 { margin: 0 0 10px; font-size: 12px; }
+.launched-controls-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.launched-access-row { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+.launched-access-row label { color: var(--muted); font-size: 10px; display: inline-flex; gap: 7px; align-items: center; }
+.launched-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.launched-manual-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-top: 14px; }
+.launched-owner-warning { border: 1px solid var(--danger); color: var(--danger); border-radius: 9px; padding: 10px; font-size: 10px; margin-bottom: 12px; }
+.launched-tx-status { margin-top: 10px; min-height: 20px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .launched-discovery-bar, .launched-dashboard-layout, .launched-manual-add { grid-template-columns: 1fr; }
+  .launched-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .launched-controls-grid, .launched-stats { grid-template-columns: 1fr; }
+}

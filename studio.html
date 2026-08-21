@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.6.0" />
+  <link rel="stylesheet" href="./styles.css?v=10.7.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -22,6 +22,7 @@
 <button class="ghost-btn project-wallet-btn" id="projectWalletBtn" type="button">Connect Wallet</button>
 <button class="ghost-btn" disabled id="saveProjectBtn" type="button">Save Project</button>
 <button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
+<button class="ghost-btn" id="launchedProjectsBtn" type="button">Launched Projects</button>
 <button class="ghost-btn" id="exportProjectBtn" type="button">Export Project</button>
 </div>
 </header>
@@ -560,9 +561,45 @@
   </section>
 </div>
 
+<div class="project-modal hidden launched-dashboard-modal" id="launchedDashboardModal" role="dialog" aria-modal="true" aria-labelledby="launchedDashboardTitle">
+  <div class="project-modal-backdrop" id="launchedDashboardBackdrop"></div>
+  <section class="project-modal-panel launched-dashboard-panel">
+    <div class="project-modal-heading">
+      <div>
+        <div class="eyebrow">CREATOR DASHBOARD</div>
+        <h2 id="launchedDashboardTitle">Launched Projects</h2>
+        <p>Reconnect your creator wallet to rediscover and manage collections launched through Relic Forge.</p>
+      </div>
+      <button class="icon-btn" id="launchedDashboardCloseBtn" type="button" aria-label="Close creator dashboard">×</button>
+    </div>
+    <div class="project-wallet-strip">
+      <span>Creator wallet</span>
+      <strong id="launchedDashboardWallet">Connect wallet to load launches</strong>
+    </div>
+    <div class="launched-discovery-bar">
+      <label class="field"><span>Older / additional Factory (optional)</span><input id="launchedFactoryInput" placeholder="0x..." type="text"/><small>Current and previously used Sepolia factories saved in this browser are searched automatically.</small></label>
+      <div class="inline-actions">
+        <button class="ghost-btn" id="launchedConnectBtn" type="button">Connect Wallet</button>
+        <button class="primary-btn" id="launchedRefreshBtn" type="button">Refresh Launched Projects</button>
+      </div>
+    </div>
+    <div class="forge-inline-status" id="launchedDashboardStatus">No collections loaded.</div>
+    <div class="launched-dashboard-layout">
+      <aside class="launched-list" id="launchedCollectionList"></aside>
+      <section class="launched-detail" id="launchedCollectionDetail">
+        <div class="forge-market-empty">Choose a launched collection to open its creator controls.</div>
+      </section>
+    </div>
+    <div class="launched-manual-add">
+      <label class="field"><span>Can't find an older launch?</span><input id="launchedManualCollection" placeholder="Paste collection address" type="text"/><small>Relic Forge verifies that the connected wallet owns the collection before adding it to this dashboard.</small></label>
+      <button class="ghost-btn" id="launchedManualAddBtn" type="button">Add Collection</button>
+    </div>
+  </section>
+</div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.6.0" defer></script>
-  <script src="./forge.js?v=10.6.0" defer></script>
-  <script src="./project-storage.js?v=10.6.0" defer></script>
+  <script src="./app.js?v=10.7.0" defer></script>
+  <script src="./forge.js?v=10.7.0" defer></script>
+  <script src="./project-storage.js?v=10.7.0" defer></script>
 </body>
 </html>

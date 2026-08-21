@@ -104,3 +104,16 @@
 - Connect a non-owner wallet and public mint multiple NFTs. Confirm no creator-mint UI exists.
 - For a whitelist project, open/download the mint page with the whitelist embedded, connect an eligible wallet, and confirm Whitelist Mint succeeds with a locally derived Merkle proof.
 - Download Standalone Page, host/open it over HTTP(S), and confirm collection image/banner and mint controls work.
+
+
+## V10.7.0 creator dashboard
+
+- Launch at least one collection through the current Factory.
+- Reload Studio and click **Launched Projects**.
+- Confirm the connected creator wallet rediscovers the collection through the Factory.
+- Confirm supply, mint price, reveal mode, wallet limit, whitelist state, royalties, provenance, and sealed state match the contract.
+- Use **Creator Mint** from the dashboard and confirm no creator-mint control appears on `mint.html`.
+- Change an unsealed mint setting and confirm the updated value reads back onchain.
+- Open the public mint page and testnet viewer from the dashboard.
+- Test manual recovery by pasting an owned collection address.
+- Do not test **Seal Collection Permanently** on a collection you still need to modify unless you explicitly intend to lock it.
