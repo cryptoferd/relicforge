@@ -128,7 +128,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     event ForgeBatchRequested(uint256 indexed startTokenId, uint32 quantity, uint256 indexed requestId);
     event MintLimitUpdated(uint32 maxPerWallet);
     event MintAccessUpdated(bool publicMintEnabled, bool whitelistMintEnabled, bytes32 whitelistRoot, uint256 whitelistMintPrice);
-    event WhitelistSnapshotRecorded(address indexed sourceContract, uint64 snapshotBlock, uint8 sourceType);
+    event WhitelistSnapshotRecorded(address indexed sourceContract, uint64 sourceChainId, uint64 snapshotBlock, uint8 sourceType);
     event CreatorRevealRequested(uint256 indexed requestId);
     event CreatorRevealCompleted(uint256 indexed requestId, uint256 seed);
     event DataFinalized(bytes32 indexed provenanceHash);
@@ -168,6 +168,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     bytes32 public whitelistRoot;
     uint256 public whitelistMintPrice;
     address public whitelistSourceContract;
+    uint64 public whitelistSourceChainId;
     uint64 public whitelistSnapshotBlock;
     uint8 public whitelistSourceType; // 0 none, 1 collection snapshot, 2 custom list
     bool public testAutoFulfill;
@@ -370,6 +371,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         bytes32 root,
         uint256 whitelistPrice,
         address sourceContract,
+        uint64 sourceChainId,
         uint64 snapshotBlock,
         uint8 sourceType
     ) external onlyOwner whenMutable {
@@ -380,10 +382,11 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         whitelistRoot = root;
         whitelistMintPrice = whitelistPrice;
         whitelistSourceContract = sourceContract;
+        whitelistSourceChainId = sourceChainId;
         whitelistSnapshotBlock = snapshotBlock;
         whitelistSourceType = sourceType;
         emit MintAccessUpdated(publicEnabled, whitelistEnabled, root, whitelistPrice);
-        emit WhitelistSnapshotRecorded(sourceContract, snapshotBlock, sourceType);
+        emit WhitelistSnapshotRecorded(sourceContract, sourceChainId, snapshotBlock, sourceType);
     }
     function setRoyalty(address receiver, uint96 bps) external onlyOwner whenMutable { require(bps <= 10000, "BAD_ROYALTY"); royaltyReceiver = receiver; royaltyBps = bps; }
 

@@ -6,7 +6,12 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_5_0';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_5_1';
+
+  const WHITELIST_SOURCE_CHAINS = {
+    1: { chainId: 1, label: 'Ethereum Mainnet', rpc: 'https://ethereum-rpc.publicnode.com' },
+    11155111: { chainId: 11155111, label: 'Ethereum Sepolia', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
+  };
 
   const forgeState = {
     compiled: null,
@@ -41,6 +46,16 @@
   function shortAddr(value) {
     const text = String(value || '');
     return text && text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
+  }
+
+  function whitelistSourceChainConfig() {
+    const chainId = Number($('whitelistSourceChain')?.value || 1);
+    return WHITELIST_SOURCE_CHAINS[chainId] || WHITELIST_SOURCE_CHAINS[1];
+  }
+
+  function whitelistSourceProvider() {
+    const config = whitelistSourceChainConfig();
+    return new window.ethers.JsonRpcProvider(config.rpc, config.chainId, { staticNetwork: true });
   }
 
   function currentWhitelistSourceMode() {
@@ -125,7 +140,7 @@
     target.innerHTML = [
       ['Eligible wallets', wl.entries.length.toLocaleString()],
       ['Merkle root', `<code>${esc(wl.root.slice(0, 10))}…${esc(wl.root.slice(-8))}</code>`],
-      ['Source', wl.sourceType === 1 ? `Collection snapshot · block ${Number(wl.snapshotBlock).toLocaleString()}` : 'Custom whitelist'],
+      ['Source', wl.sourceType === 1 ? `${esc(wl.sourceChainLabel || `Chain ${wl.sourceChainId}`)} · block ${Number(wl.snapshotBlock).toLocaleString()}` : 'Custom whitelist'],
       ['Allowance', wl.uniformAllowance ? `${wl.uniformAllowance} per wallet` : 'Per-wallet allowances'],
     ].map(([label, value]) => `<div class="forge-row"><span>${label}</span><strong>${value}</strong></div>`).join('');
   }
@@ -142,7 +157,7 @@
     if (!wl) throw new Error('Build a whitelist first.');
     const data = {
       schema: 'relic-forge/whitelist@1',
-      chainId: 11155111,
+      chainId: wl.sourceChainId || 11155111,
       root: wl.root,
       sourceType: wl.sourceType === 1 ? 'collection-snapshot' : 'custom',
       sourceContract: wl.sourceContract,
@@ -179,14 +194,14 @@
     return normalizeWhitelistEntries(out, fallbackAllowance);
   }
 
-  async function findDeploymentBlock(address, latestBlock) {
+  async function findDeploymentBlock(provider, address, latestBlock) {
     let lo = 0, hi = latestBlock;
     try {
-      const currentCode = await forgeState.provider.getCode(address, latestBlock);
+      const currentCode = await provider.getCode(address, latestBlock);
       if (!currentCode || currentCode === '0x') throw new Error('No contract code at that address.');
       while (lo < hi) {
         const mid = Math.floor((lo + hi) / 2);
-        const code = await forgeState.provider.getCode(address, mid);
+        const code = await provider.getCode(address, mid);
         if (code && code !== '0x') hi = mid; else lo = mid + 1;
       }
       return lo;
@@ -195,14 +210,14 @@
     }
   }
 
-  async function getLogsChunked(filterBase, fromBlock, toBlock, onProgress) {
+  async function getLogsChunked(provider, filterBase, fromBlock, toBlock, onProgress) {
     const logs = [];
     let cursor = fromBlock;
     let chunk = 50000;
     while (cursor <= toBlock) {
       let end = Math.min(toBlock, cursor + chunk - 1);
       try {
-        const part = await forgeState.provider.getLogs({ ...filterBase, fromBlock: cursor, toBlock: end });
+        const part = await provider.getLogs({ ...filterBase, fromBlock: cursor, toBlock: end });
         logs.push(...part);
         cursor = end + 1;
         if (chunk < 100000) chunk = Math.min(100000, Math.floor(chunk * 1.5));
@@ -217,24 +232,28 @@
 
   async function snapshotCollectionHolders() {
     try {
-      if (!forgeState.provider) await connectWallet();
       const source = $('whitelistCollectionAddress')?.value.trim() || '';
       if (!window.ethers.isAddress(source)) throw new Error('Enter a valid collection contract address.');
       const allowance = whitelistDefaultAllowance();
-      const snapshotBlock = await forgeState.provider.getBlockNumber();
-      const contract = new window.ethers.Contract(source, ['function supportsInterface(bytes4) view returns(bool)'], forgeState.provider);
+      const chain = whitelistSourceChainConfig();
+      const provider = whitelistSourceProvider();
+      $('whitelistStatus').textContent = `Connecting to ${chain.label}…`;
+      const snapshotBlock = await provider.getBlockNumber();
+      const code = await provider.getCode(source, snapshotBlock);
+      if (!code || code === '0x') throw new Error(`No contract exists at this address on ${chain.label}. Check the Source network selection.`);
+      const contract = new window.ethers.Contract(source, ['function supportsInterface(bytes4) view returns(bool)'], provider);
       let is1155 = false, is721 = false;
       try { is1155 = await contract.supportsInterface('0xd9b67a26'); } catch (_) {}
       try { is721 = await contract.supportsInterface('0x80ac58cd'); } catch (_) {}
-      if (!is721 && !is1155) throw new Error('Contract does not report ERC-721 or ERC-1155 support.');
-      const deploymentBlock = await findDeploymentBlock(source, snapshotBlock);
-      $('whitelistStatus').textContent = `Scanning ${is1155 ? 'ERC-1155' : 'ERC-721'} transfers from block ${deploymentBlock.toLocaleString()} to ${snapshotBlock.toLocaleString()}…`;
+      if (!is721 && !is1155) throw new Error(`A contract exists on ${chain.label}, but it does not report ERC-721 or ERC-1155 support through ERC-165.`);
+      const deploymentBlock = await findDeploymentBlock(provider, source, snapshotBlock);
+      $('whitelistStatus').textContent = `Scanning ${is1155 ? 'ERC-1155' : 'ERC-721'} on ${chain.label} · blocks ${deploymentBlock.toLocaleString()}-${snapshotBlock.toLocaleString()}…`;
       const zero = window.ethers.ZeroAddress.toLowerCase();
       let addresses = [];
       if (is1155) {
         const singleTopic = window.ethers.id('TransferSingle(address,address,address,uint256,uint256)');
         const batchTopic = window.ethers.id('TransferBatch(address,address,address,uint256[],uint256[])');
-        const logs = await getLogsChunked({ address: source, topics: [[singleTopic, batchTopic]] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
+        const logs = await getLogsChunked(provider, { address: source, topics: [[singleTopic, batchTopic]] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
           $('whitelistStatus').textContent = `Scanning ERC-1155 · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfer events`;
         });
         const totals = new Map();
@@ -258,7 +277,7 @@
         addresses = [...totals.entries()].filter(([, balance]) => balance > 0n).map(([address]) => window.ethers.getAddress(address));
       } else {
         const topic = window.ethers.id('Transfer(address,address,uint256)');
-        const logs = await getLogsChunked({ address: source, topics: [topic] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
+        const logs = await getLogsChunked(provider, { address: source, topics: [topic] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
           $('whitelistStatus').textContent = `Scanning ERC-721 · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfers`;
         });
         const owners = new Map();
@@ -272,7 +291,7 @@
       }
       const entries = normalizeWhitelistEntries(addresses, allowance);
       const tree = buildMerkleWhitelist(entries);
-      setWhitelistResult({ ...tree, sourceType: 1, sourceContract: window.ethers.getAddress(source), snapshotBlock, tokenStandard: is1155 ? 'ERC-1155' : 'ERC-721', uniformAllowance: allowance });
+      setWhitelistResult({ ...tree, sourceType: 1, sourceContract: window.ethers.getAddress(source), sourceChainId: chain.chainId, sourceChainLabel: chain.label, snapshotBlock, tokenStandard: is1155 ? 'ERC-1155' : 'ERC-721', uniformAllowance: allowance });
     } catch (error) {
       $('whitelistStatus').textContent = `Snapshot error: ${error.message}`;
     }
@@ -288,7 +307,7 @@ ${await file.text()}`;
       const entries = parseCustomWhitelistText(text, allowance);
       const tree = buildMerkleWhitelist(entries);
       const uniformAllowance = entries.every(entry => entry.allowance === entries[0].allowance) ? entries[0].allowance : null;
-      setWhitelistResult({ ...tree, sourceType: 2, sourceContract: window.ethers.ZeroAddress, snapshotBlock: 0, tokenStandard: 'custom', uniformAllowance });
+      setWhitelistResult({ ...tree, sourceType: 2, sourceContract: window.ethers.ZeroAddress, sourceChainId: 0, sourceChainLabel: 'Custom list', snapshotBlock: 0, tokenStandard: 'custom', uniformAllowance });
     } catch (error) {
       $('whitelistStatus').textContent = `Whitelist error: ${error.message}`;
     }
@@ -830,7 +849,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.5.0');
+      const worker = new Worker('./js/solc-worker.js?v=10.5.1');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -986,6 +1005,7 @@ ${await file.text()}`;
         whitelistEnabled ? wl.root : window.ethers.ZeroHash,
         whitelistMintPrice,
         whitelistEnabled ? wl.sourceContract : window.ethers.ZeroAddress,
+        whitelistEnabled ? BigInt(wl.sourceChainId || 0) : 0n,
         whitelistEnabled ? BigInt(wl.snapshotBlock || 0) : 0n,
         whitelistEnabled ? wl.sourceType : 0
       ), steps, si++);
@@ -1293,12 +1313,15 @@ ${await file.text()}`;
       whitelistMintPrice: $('whitelistMintPrice')?.value || '0',
       whitelistDefaultAllowance: $('whitelistDefaultAllowance')?.value || '1',
       whitelistSourceMode: currentWhitelistSourceMode(),
+      whitelistSourceChain: $('whitelistSourceChain')?.value || '1',
       whitelistCollectionAddress: $('whitelistCollectionAddress')?.value || '',
       whitelistCustomText: $('whitelistCustomText')?.value || '',
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
         sourceContract: wl.sourceContract,
+        sourceChainId: wl.sourceChainId || 0,
+        sourceChainLabel: wl.sourceChainLabel || '',
         snapshotBlock: wl.snapshotBlock,
         tokenStandard: wl.tokenStandard,
         uniformAllowance: wl.uniformAllowance,
@@ -1318,6 +1341,7 @@ ${await file.text()}`;
       royaltyWallet: saved.royaltyWallet,
       whitelistMintPrice: saved.whitelistMintPrice,
       whitelistDefaultAllowance: saved.whitelistDefaultAllowance,
+      whitelistSourceChain: saved.whitelistSourceChain || String(saved.whitelist?.sourceChainId || 1),
       whitelistCollectionAddress: saved.whitelistCollectionAddress,
       whitelistCustomText: saved.whitelistCustomText,
     };
@@ -1363,6 +1387,7 @@ ${await file.text()}`;
       eligibleWallets: enabled && wl ? wl.entries.length : 0,
       sourceType: enabled && wl ? wl.sourceType : 0,
       sourceContract: enabled && wl ? wl.sourceContract : null,
+      sourceChainId: enabled && wl ? (wl.sourceChainId || 0) : 0,
       snapshotBlock: enabled && wl ? wl.snapshotBlock : 0,
       defaultAllowance: $('whitelistDefaultAllowance')?.value || '1',
     };
@@ -1428,7 +1453,7 @@ ${await file.text()}`;
       renderWhitelistSummary();
       $('downloadWhitelistBtn')?.classList.add('hidden');
     });
-    ['whitelistDefaultAllowance', 'whitelistCollectionAddress', 'whitelistCustomText'].forEach(id => $(id)?.addEventListener('input', () => {
+    ['whitelistDefaultAllowance', 'whitelistSourceChain', 'whitelistCollectionAddress', 'whitelistCustomText'].forEach(id => $(id)?.addEventListener('input', () => {
       if (!forgeState.whitelist) return;
       forgeState.whitelist = null;
       if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist settings changed — rebuild the whitelist.';

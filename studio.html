@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.5.0" />
+  <link rel="stylesheet" href="./styles.css?v=10.5.1" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -325,9 +325,18 @@
           <label class="reveal-choice" data-whitelist-source-card="custom"><input name="whitelistSourceMode" type="radio" value="custom"/><span><strong>Custom list</strong><small>Paste addresses or upload CSV, TXT, or JSON.</small></span></label>
         </div>
         <div id="whitelistSnapshotPanel">
-          <label class="field"><span>Collection contract</span><input id="whitelistCollectionAddress" placeholder="0x..." type="text"/></label>
+          <div class="whitelist-config-grid">
+            <label class="field"><span>Source network</span>
+              <select id="whitelistSourceChain">
+                <option value="1">Ethereum Mainnet</option>
+                <option value="11155111">Ethereum Sepolia</option>
+              </select>
+              <small>The whitelist source can be different from the network where you deploy the new collection.</small>
+            </label>
+            <label class="field"><span>Collection contract</span><input id="whitelistCollectionAddress" placeholder="0x..." type="text"/></label>
+          </div>
           <button class="ghost-btn" id="snapshotWhitelistBtn" type="button">Snapshot Current Holders</button>
-          <small class="forge-footnote">Test build scans the collection through the currently connected Sepolia RPC and freezes eligibility at the displayed snapshot block.</small>
+          <small class="forge-footnote">Relic Forge reads the selected source network, freezes eligibility at an exact block, and compiles only the resulting Merkle root for the mint contract.</small>
         </div>
         <div class="hidden" id="whitelistCustomPanel">
           <label class="field"><span>Addresses</span><textarea id="whitelistCustomText" rows="5" placeholder="0xabc...
@@ -525,8 +534,8 @@
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.5.0" defer></script>
-  <script src="./forge.js?v=10.5.0" defer></script>
-  <script src="./project-storage.js?v=10.5.0" defer></script>
+  <script src="./app.js?v=10.5.1" defer></script>
+  <script src="./forge.js?v=10.5.1" defer></script>
+  <script src="./project-storage.js?v=10.5.1" defer></script>
 </body>
 </html>

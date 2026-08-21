@@ -1,3 +1,10 @@
+## V10.5.1 cross-network whitelist snapshot fix
+
+- Whitelist snapshots now select their own source network independently of the Sepolia deployment wallet.
+- Added Ethereum Mainnet and Ethereum Sepolia source options.
+- Snapshot scanner uses a read-only source-chain RPC and stores source chain ID + exact snapshot block with the Merkle commitment.
+- Improved wrong-network error messages so an Ethereum mainnet NFT is no longer reported as a non-NFT merely because Studio is connected to Sepolia.
+
 ## V10.5.0 whitelist / holder snapshot
 
 - Added optional whitelist minting using an onchain Merkle root.
@@ -50,7 +57,7 @@ This build is based directly on **Relic Forge v9** and keeps the same flat, stat
 ## Drag/drop update for an existing GitHub repo
 
 1. Unzip this package.
-2. Open the `relic-forge-test-v10.5.0` folder.
+2. Open the `relic-forge-test-v10.5.1` folder.
 3. Drag **all files and folders inside it** into the root of the existing Relic Forge GitHub repository.
 4. Allow GitHub to replace the existing `index.html`, `studio.html`, `styles.css`, `app.js`, `README.md`, and `vercel.json` files.
 5. Keep the new `forge.js`, `project-storage.js`, `contracts/`, and `js/` paths.
