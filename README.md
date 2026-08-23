@@ -1,4 +1,4 @@
-# Relic Forge Studio V11.0.1 — Cloud + Alchemy + Render Modes
+# Relic Forge Studio V11.0.2 — Cloud + Alchemy + Render Modes
 
 V11 is the first cloud-backed RelicForge build. It keeps the existing static Studio/mint frontend, adds a Railway API under `/server`, moves cross-device project/mint-page persistence to PostgreSQL + Railway Bucket storage, and routes production blockchain reads through a server-side Alchemy connection.
 
@@ -25,7 +25,7 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - A flattened PNG renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
 ### Alchemy — one private key
-The Alchemy key stays **only on Railway**. V11.0.1 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+The Alchemy key stays **only on Railway**. V11.0.2 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
 The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 

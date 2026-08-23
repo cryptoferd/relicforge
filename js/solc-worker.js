@@ -22,7 +22,7 @@ self.onmessage = (event) => {
       language: 'Solidity',
       sources: { 'RelicForgeTest.sol': { content: source } },
       settings: {
-        optimizer: { enabled: true, runs: 200 },
+        optimizer: { enabled: true, runs: 1 },
         viaIR: true,
         evmVersion: 'cancun',
         outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object'] } }

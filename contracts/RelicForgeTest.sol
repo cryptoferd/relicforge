@@ -115,6 +115,72 @@ interface IERC721ReceiverRF {
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4);
 }
 
+// Compact custom errors keep the shared implementation under EIP-170 without removing features.
+error RF_AlreadyRevealed();
+error RF_Bad1of1Index();
+error RF_Bad1of1Layer();
+error RF_BadDnaShard();
+error RF_BadEncoding();
+error RF_BadImpl();
+error RF_BadInfra();
+error RF_BadLayer();
+error RF_BadLayerFlags();
+error RF_BadLayerNames();
+error RF_BadPlaceholder();
+error RF_BadProvider();
+error RF_BadRecipe();
+error RF_BadRenderMode();
+error RF_BadRequest();
+error RF_BadRevealMode();
+error RF_BadRoyalty();
+error RF_BadRps();
+error RF_BadShard();
+error RF_BadShardSize();
+error RF_BadSourceType();
+error RF_CloneFailed();
+error RF_DataFinalized();
+error RF_DnaNotConfigured();
+error RF_FlattenedDisabled();
+error RF_Initialized();
+error RF_Missing1of1();
+error RF_MissingData();
+error RF_MissingPlaceholder();
+error RF_MissingRenderer();
+error RF_MissingTrait();
+error RF_NotAuth();
+error RF_NotCreatorReveal();
+error RF_NotFinalized();
+error RF_NotMinted();
+error RF_NotOwner();
+error RF_NotReady();
+error RF_NotRevealed();
+error RF_NotTokenOwner();
+error RF_NotWhitelisted();
+error RF_No1of1Layer();
+error RF_NoRecipes();
+error RF_OnlyRandomness();
+error RF_PublicMintDisabled();
+error RF_RecipesLtSupply();
+error RF_Reentrant();
+error RF_RevealStarted();
+error RF_Sealed();
+error RF_SoldOut();
+error RF_UnsafeRecipient();
+error RF_WalletLimit();
+error RF_WhitelistAllowance();
+error RF_WhitelistMintDisabled();
+error RF_WithdrawFailed();
+error RF_WrongFrom();
+error RF_WrongPrice();
+error RF_Zero();
+error RF_ZeroLayers();
+error RF_ZeroOwner();
+error RF_ZeroQuantity();
+error RF_ZeroSupply();
+error RF_ZeroTo();
+error RF_ZeroTrait();
+error RF_ZeroWhitelistRoot();
+
 contract RelicCollectionV2 is IRelicRandomnessConsumer {
     using RFStrings for uint256;
 
@@ -240,10 +306,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     bool private _initialized;
     uint256 private _entered;
 
-    modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
-    modifier whenMutable() { require(!isSealed, "SEALED"); _; }
-    modifier beforeFinalized() { require(!dataFinalized, "DATA_FINALIZED"); _; }
-    modifier nonReentrant() { require(_entered == 0, "REENTRANT"); _entered = 1; _; _entered = 0; }
+    modifier onlyOwner() { if (!(msg.sender == owner)) revert RF_NotOwner(); _; }
+    modifier whenMutable() { if (!(!isSealed)) revert RF_Sealed(); _; }
+    modifier beforeFinalized() { if (!(!dataFinalized)) revert RF_DataFinalized(); _; }
+    modifier nonReentrant() { if (!(_entered == 0)) revert RF_Reentrant(); _entered = 1; _; _entered = 0; }
 
     constructor() { _initialized = true; }
 
@@ -264,12 +330,12 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         uint96 royaltyBps_,
         bool testAutoFulfill_
     ) external {
-        require(!_initialized, "INITIALIZED");
-        require(owner_ != address(0), "ZERO_OWNER");
-        require(maxSupply_ > 0, "ZERO_SUPPLY");
-        require(layerCount_ > 0, "ZERO_LAYERS");
-        require(revealMode_ <= 1, "BAD_REVEAL_MODE");
-        require(royaltyBps_ <= 10000, "BAD_ROYALTY");
+        if (!(!_initialized)) revert RF_Initialized();
+        if (!(owner_ != address(0))) revert RF_ZeroOwner();
+        if (!(maxSupply_ > 0)) revert RF_ZeroSupply();
+        if (!(layerCount_ > 0)) revert RF_ZeroLayers();
+        if (!(revealMode_ <= 1)) revert RF_BadRevealMode();
+        if (!(royaltyBps_ <= 10000)) revert RF_BadRoyalty();
         _initialized = true;
         name = name_;
         symbol = symbol_;
@@ -293,12 +359,12 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         return interfaceId == 0x01ffc9a7 || interfaceId == 0x80ac58cd || interfaceId == 0x5b5e139f || interfaceId == 0x2a55205a || interfaceId == 0x49064906;
     }
 
-    function balanceOf(address holder) external view returns (uint256) { require(holder != address(0), "ZERO"); return _balanceOf[holder]; }
-    function ownerOf(uint256 tokenId) public view returns (address) { address holder = _ownerOf[tokenId]; require(holder != address(0), "NOT_MINTED"); return holder; }
+    function balanceOf(address holder) external view returns (uint256) { if (!(holder != address(0))) revert RF_Zero(); return _balanceOf[holder]; }
+    function ownerOf(uint256 tokenId) public view returns (address) { address holder = _ownerOf[tokenId]; if (!(holder != address(0))) revert RF_NotMinted(); return holder; }
 
     function approve(address to, uint256 tokenId) external {
         address holder = ownerOf(tokenId);
-        require(msg.sender == holder || isApprovedForAll[holder][msg.sender], "NOT_AUTH");
+        if (!(msg.sender == holder || isApprovedForAll[holder][msg.sender])) revert RF_NotAuth();
         getApproved[tokenId] = to;
         emit Approval(holder, to, tokenId);
     }
@@ -309,10 +375,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function transferFrom(address from, address to, uint256 tokenId) public {
-        require(to != address(0), "ZERO_TO");
+        if (!(to != address(0))) revert RF_ZeroTo();
         address holder = ownerOf(tokenId);
-        require(holder == from, "WRONG_FROM");
-        require(msg.sender == holder || msg.sender == getApproved[tokenId] || isApprovedForAll[holder][msg.sender], "NOT_AUTH");
+        if (!(holder == from)) revert RF_WrongFrom();
+        if (!(msg.sender == holder || msg.sender == getApproved[tokenId] || isApprovedForAll[holder][msg.sender])) revert RF_NotAuth();
         delete getApproved[tokenId];
         unchecked { _balanceOf[from]--; _balanceOf[to]++; }
         _ownerOf[tokenId] = to;
@@ -323,24 +389,24 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public {
         transferFrom(from, to, tokenId);
         if (to.code.length != 0) {
-            require(IERC721ReceiverRF(to).onERC721Received(msg.sender, from, tokenId, data) == IERC721ReceiverRF.onERC721Received.selector, "UNSAFE_RECIPIENT");
+            if (!(IERC721ReceiverRF(to).onERC721Received(msg.sender, from, tokenId, data) == IERC721ReceiverRF.onERC721Received.selector)) revert RF_UnsafeRecipient();
         }
     }
 
     function addArtShard(bytes calldata data) external onlyOwner beforeFinalized returns (address pointer) {
-        require(data.length > 0 && data.length <= 23000, "BAD_SHARD_SIZE");
+        if (!(data.length > 0 && data.length <= 23000)) revert RF_BadShardSize();
         pointer = address(new RelicDataShard(data));
         artShards.push(pointer);
     }
 
     function addDnaShard(bytes calldata data) external onlyOwner beforeFinalized returns (address pointer) {
-        require(data.length > 0 && data.length <= 23000, "BAD_SHARD_SIZE");
+        if (!(data.length > 0 && data.length <= 23000)) revert RF_BadShardSize();
         pointer = address(new RelicDataShard(data));
         dnaShards.push(pointer);
     }
 
     function setPlaceholder(bytes calldata svgFragment) external onlyOwner beforeFinalized {
-        require(svgFragment.length > 0 && svgFragment.length <= 23000, "BAD_PLACEHOLDER");
+        if (!(svgFragment.length > 0 && svgFragment.length <= 23000)) revert RF_BadPlaceholder();
         placeholderShard = address(new RelicDataShard(svgFragment));
         placeholderLength = uint32(svgFragment.length);
     }
@@ -348,10 +414,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     function addTraits(TraitInput[] calldata inputs) external onlyOwner beforeFinalized {
         for (uint256 i; i < inputs.length; ++i) {
             TraitInput calldata input = inputs[i];
-            require(input.layer < layerCount, "BAD_LAYER");
-            require(input.shard < artShards.length, "BAD_SHARD");
-            require(input.length > 0, "ZERO_TRAIT");
-            require(input.encoding <= 3, "BAD_ENCODING");
+            if (!(input.layer < layerCount)) revert RF_BadLayer();
+            if (!(input.shard < artShards.length)) revert RF_BadShard();
+            if (!(input.length > 0)) revert RF_ZeroTrait();
+            if (!(input.encoding <= 3)) revert RF_BadEncoding();
             _traits[input.layer][input.index] = Trait(
                 input.name, input.shard, input.offset, input.length, input.encoding, input.hiddenFromMetadata, true
             );
@@ -362,25 +428,25 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function setLayerNames(string[] calldata names_) external onlyOwner beforeFinalized {
-        require(names_.length == layerCount, "BAD_LAYER_NAMES");
+        if (!(names_.length == layerCount)) revert RF_BadLayerNames();
         for (uint8 i; i < layerCount; ++i) layerNames[i] = names_[i];
     }
 
     function setLayerMetadataVisibility(bool[] calldata hidden_) external onlyOwner beforeFinalized {
-        require(hidden_.length == layerCount, "BAD_LAYER_FLAGS");
+        if (!(hidden_.length == layerCount)) revert RF_BadLayerFlags();
         for (uint8 i; i < layerCount; ++i) layerHiddenFromMetadata[i] = hidden_[i];
     }
 
     function setOneOfOneLayer(uint8 layer) external onlyOwner beforeFinalized {
-        require(layer < layerCount, "BAD_1OF1_LAYER");
+        if (!(layer < layerCount)) revert RF_Bad1of1Layer();
         oneOfOneLayerPlusOne = layer + 1;
     }
 
     function setOneOfOneMetadata(OneOfOneMetadataInput[] calldata inputs) external onlyOwner beforeFinalized {
-        require(oneOfOneLayerPlusOne != 0, "NO_1OF1_LAYER");
+        if (!(oneOfOneLayerPlusOne != 0)) revert RF_No1of1Layer();
         for (uint256 i; i < inputs.length; ++i) {
             OneOfOneMetadataInput calldata input = inputs[i];
-            require(input.index != 0, "BAD_1OF1_INDEX");
+            if (!(input.index != 0)) revert RF_Bad1of1Index();
             _oneOfOneMetadata[input.index] = OneOfOneMetadata(
                 input.tokenName, input.tokenDescription, input.attributesJson, true
             );
@@ -390,16 +456,16 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     function traitDetails(uint8 layer, uint8 index) external view returns (Trait memory) { return _traits[layer][index]; }
 
     function setDNAConfig(uint32 recipeCount_, uint16 recipesPerShard_) external onlyOwner beforeFinalized {
-        require(recipeCount_ >= maxSupply, "RECIPES_LT_SUPPLY");
-        require(recipesPerShard_ > 0, "BAD_RPS");
+        if (!(recipeCount_ >= maxSupply)) revert RF_RecipesLtSupply();
+        if (!(recipesPerShard_ > 0)) revert RF_BadRps();
         recipeCount = recipeCount_;
         recipesPerShard = recipesPerShard_;
     }
 
     function finalizeData(bytes32 provenanceHash_) external onlyOwner beforeFinalized {
-        require(recipeCount >= maxSupply, "DNA_NOT_CONFIGURED");
-        require(dnaShards.length > 0 && artShards.length > 0, "MISSING_DATA");
-        require(placeholderShard != address(0), "MISSING_PLACEHOLDER");
+        if (!(recipeCount >= maxSupply)) revert RF_DnaNotConfigured();
+        if (!(dnaShards.length > 0 && artShards.length > 0)) revert RF_MissingData();
+        if (!(placeholderShard != address(0))) revert RF_MissingPlaceholder();
         provenanceHash = provenanceHash_;
         dataFinalized = true;
         emit DataFinalized(provenanceHash_);
@@ -407,7 +473,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function sealCollection() external onlyOwner {
-        require(dataFinalized, "NOT_FINALIZED");
+        if (!(dataFinalized)) revert RF_NotFinalized();
         isSealed = true;
         emit CollectionSealed();
     }
@@ -424,8 +490,8 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         uint64 snapshotBlock,
         uint8 sourceType
     ) external onlyOwner whenMutable {
-        require(sourceType <= 2, "BAD_SOURCE_TYPE");
-        if (whitelistEnabled) require(root != bytes32(0), "ZERO_WHITELIST_ROOT");
+        if (!(sourceType <= 2)) revert RF_BadSourceType();
+        if (whitelistEnabled) if (!(root != bytes32(0))) revert RF_ZeroWhitelistRoot();
         publicMintEnabled = publicEnabled;
         whitelistMintEnabled = whitelistEnabled;
         whitelistRoot = root;
@@ -437,11 +503,11 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         emit MintAccessUpdated(publicEnabled, whitelistEnabled, root, whitelistPrice);
         emit WhitelistSnapshotRecorded(sourceContract, sourceChainId, snapshotBlock, sourceType);
     }
-    function setRoyalty(address receiver, uint96 bps) external onlyOwner whenMutable { require(bps <= 10000, "BAD_ROYALTY"); royaltyReceiver = receiver; royaltyBps = bps; }
+    function setRoyalty(address receiver, uint96 bps) external onlyOwner whenMutable { if (!(bps <= 10000)) revert RF_BadRoyalty(); royaltyReceiver = receiver; royaltyBps = bps; }
 
     function setRenderConfig(string calldata baseURI, bool holderEnabled, uint8 defaultMode) external onlyOwner whenMutable {
-        require(defaultMode <= 1, "BAD_RENDER_MODE");
-        if (defaultMode == 1) require(bytes(baseURI).length != 0, "MISSING_RENDERER");
+        if (!(defaultMode <= 1)) revert RF_BadRenderMode();
+        if (defaultMode == 1) if (!(bytes(baseURI).length != 0)) revert RF_MissingRenderer();
         flattenedRenderBaseURI = baseURI;
         holderRenderModeEnabled = holderEnabled;
         defaultRenderMode = defaultMode;
@@ -457,19 +523,19 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
 
     function flattenedImageURI(uint256 tokenId) public view returns (string memory) {
         ownerOf(tokenId);
-        require(bytes(flattenedRenderBaseURI).length != 0, "MISSING_RENDERER");
+        if (!(bytes(flattenedRenderBaseURI).length != 0)) revert RF_MissingRenderer();
         return string(abi.encodePacked(flattenedRenderBaseURI, tokenId.toString(), ".png"));
     }
 
     function setRenderMode(uint256 tokenId, uint8 mode) external {
         address holder = ownerOf(tokenId);
-        require(msg.sender == holder, "NOT_TOKEN_OWNER");
-        require(mode <= 1, "BAD_RENDER_MODE");
+        if (!(msg.sender == holder)) revert RF_NotTokenOwner();
+        if (!(mode <= 1)) revert RF_BadRenderMode();
         // Holders can always return to the canonical onchain SVG. Flattened mode
         // is available only when the creator enabled it before sealing.
         if (mode == 1) {
-            require(holderRenderModeEnabled, "FLATTENED_DISABLED");
-            require(bytes(flattenedRenderBaseURI).length != 0, "MISSING_RENDERER");
+            if (!(holderRenderModeEnabled)) revert RF_FlattenedDisabled();
+            if (!(bytes(flattenedRenderBaseURI).length != 0)) revert RF_MissingRenderer();
         }
         _renderModeOverridePlusOne[tokenId] = mode + 1;
         emit RenderModeUpdated(tokenId, mode);
@@ -482,13 +548,13 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function mint(uint32 quantity) public payable nonReentrant returns (uint256 startTokenId) {
-        require(publicMintEnabled || msg.sender == owner, "PUBLIC_MINT_DISABLED");
-        require(quantity > 0, "ZERO_QUANTITY");
-        require(dataFinalized, "NOT_READY");
-        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
-        require(msg.value == mintPrice * quantity, "WRONG_PRICE");
+        if (!(publicMintEnabled || msg.sender == owner)) revert RF_PublicMintDisabled();
+        if (!(quantity > 0)) revert RF_ZeroQuantity();
+        if (!(dataFinalized)) revert RF_NotReady();
+        if (!(uint256(totalMinted) + quantity <= maxSupply)) revert RF_SoldOut();
+        if (!(msg.value == mintPrice * quantity)) revert RF_WrongPrice();
         if (maxPerWallet != 0) {
-            require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
+            if (!(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet)) revert RF_WalletLimit();
         }
         mintedByWallet[msg.sender] += quantity;
         startTokenId = _mintTokens(msg.sender, quantity);
@@ -496,16 +562,16 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function whitelistMint(uint32 quantity, uint32 allowance, bytes32[] calldata proof) external payable nonReentrant returns (uint256 startTokenId) {
-        require(whitelistMintEnabled, "WHITELIST_MINT_DISABLED");
-        require(quantity > 0, "ZERO_QUANTITY");
-        require(dataFinalized, "NOT_READY");
-        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
-        require(msg.value == whitelistMintPrice * quantity, "WRONG_PRICE");
+        if (!(whitelistMintEnabled)) revert RF_WhitelistMintDisabled();
+        if (!(quantity > 0)) revert RF_ZeroQuantity();
+        if (!(dataFinalized)) revert RF_NotReady();
+        if (!(uint256(totalMinted) + quantity <= maxSupply)) revert RF_SoldOut();
+        if (!(msg.value == whitelistMintPrice * quantity)) revert RF_WrongPrice();
         bytes32 leaf = keccak256(abi.encodePacked(msg.sender, allowance));
-        require(RFMerkleProof.verify(proof, whitelistRoot, leaf), "NOT_WHITELISTED");
-        require(uint256(whitelistMintedByWallet[msg.sender]) + quantity <= allowance, "WHITELIST_ALLOWANCE");
+        if (!(RFMerkleProof.verify(proof, whitelistRoot, leaf))) revert RF_NotWhitelisted();
+        if (!(uint256(whitelistMintedByWallet[msg.sender]) + quantity <= allowance)) revert RF_WhitelistAllowance();
         if (maxPerWallet != 0) {
-            require(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet, "WALLET_LIMIT");
+            if (!(uint256(mintedByWallet[msg.sender]) + quantity <= maxPerWallet)) revert RF_WalletLimit();
         }
         whitelistMintedByWallet[msg.sender] += quantity;
         mintedByWallet[msg.sender] += quantity;
@@ -514,9 +580,9 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function creatorMint(uint32 quantity) external onlyOwner nonReentrant returns (uint256 startTokenId) {
-        require(quantity > 0, "ZERO_QUANTITY");
-        require(dataFinalized, "NOT_READY");
-        require(uint256(totalMinted) + quantity <= maxSupply, "SOLD_OUT");
+        if (!(quantity > 0)) revert RF_ZeroQuantity();
+        if (!(dataFinalized)) revert RF_NotReady();
+        if (!(uint256(totalMinted) + quantity <= maxSupply)) revert RF_SoldOut();
         mintedByWallet[msg.sender] += quantity;
         startTokenId = _mintTokens(msg.sender, quantity);
         _beginReveal(startTokenId, quantity);
@@ -555,9 +621,9 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function requestCreatorReveal() external onlyOwner returns (uint256 requestId) {
-        require(revealMode == 1, "NOT_CREATOR_REVEAL");
-        require(dataFinalized, "NOT_READY");
-        require(creatorRevealSeed == 0 && pendingCreatorRevealRequest == 0, "REVEAL_STARTED");
+        if (!(revealMode == 1)) revert RF_NotCreatorReveal();
+        if (!(dataFinalized)) revert RF_NotReady();
+        if (!(creatorRevealSeed == 0 && pendingCreatorRevealRequest == 0)) revert RF_RevealStarted();
         requestId = IRelicRandomnessProvider(randomnessProvider).requestRandomness(0);
         pendingCreatorRevealRequest = requestId;
         emit CreatorRevealRequested(requestId);
@@ -565,7 +631,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function fulfillRandomness(uint256 requestId, uint256 randomWord) external override {
-        require(msg.sender == randomnessProvider, "ONLY_RANDOMNESS");
+        if (!(msg.sender == randomnessProvider)) revert RF_OnlyRandomness();
         if (revealMode == 1 && requestId == pendingCreatorRevealRequest) {
             creatorRevealSeed = randomWord == 0 ? 1 : randomWord;
             pendingCreatorRevealRequest = 0;
@@ -574,11 +640,11 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
             return;
         }
         ForgeBatch memory batch = requestToBatch[requestId];
-        require(batch.startTokenId != 0 && batch.quantity != 0, "BAD_REQUEST");
+        if (!(batch.startTokenId != 0 && batch.quantity != 0)) revert RF_BadRequest();
         delete requestToBatch[requestId];
         for (uint32 i; i < batch.quantity; ++i) {
             uint256 tokenId = uint256(batch.startTokenId) + i;
-            require(assignedRecipePlusOne[tokenId] == 0, "ALREADY_REVEALED");
+            if (!(assignedRecipePlusOne[tokenId] == 0)) revert RF_AlreadyRevealed();
             uint256 derivedWord = uint256(keccak256(abi.encodePacked(randomWord, requestId, tokenId, i)));
             _assignForgeRecipe(tokenId, derivedWord);
         }
@@ -592,7 +658,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
 
     function _assignForgeRecipe(uint256 tokenId, uint256 randomWord) internal {
         uint256 remaining = uint256(recipeCount) - uint256(forgeAssignments);
-        require(remaining > 0, "NO_RECIPES");
+        if (!(remaining > 0)) revert RF_NoRecipes();
         uint256 pick = randomWord % remaining;
         uint256 selected = _poolValue(pick);
         uint256 last = _poolValue(remaining - 1);
@@ -622,10 +688,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         ownerOf(tokenId);
         if (revealMode == 0) {
             uint256 p = assignedRecipePlusOne[tokenId];
-            require(p != 0, "NOT_REVEALED");
+            if (!(p != 0)) revert RF_NotRevealed();
             return p - 1;
         }
-        require(creatorRevealSeed != 0, "NOT_REVEALED");
+        if (!(creatorRevealSeed != 0)) revert RF_NotRevealed();
         return _creatorRecipe(tokenId);
     }
 
@@ -635,10 +701,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     }
 
     function _readRecipe(uint256 recipeId) internal view returns (bytes memory) {
-        require(recipeId < recipeCount, "BAD_RECIPE");
+        if (!(recipeId < recipeCount)) revert RF_BadRecipe();
         uint256 shardIndex = recipeId / recipesPerShard;
         uint256 local = recipeId % recipesPerShard;
-        require(shardIndex < dnaShards.length, "BAD_DNA_SHARD");
+        if (!(shardIndex < dnaShards.length)) revert RF_BadDnaShard();
         return RFDataReader.read(dnaShards[shardIndex], local * layerCount, layerCount);
     }
 
@@ -659,7 +725,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
         if (t.encoding == 1) mime = "image/png";
         else if (t.encoding == 2) mime = "image/jpeg";
         else if (t.encoding == 3) mime = "image/webp";
-        else revert("BAD_ENCODING");
+        else revert RF_BadEncoding();
 
         return abi.encodePacked(
             '<image x="0" y="0" width="', uint256(canvasWidth).toString(),
@@ -678,7 +744,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
             uint8 specialIndex = uint8(dna[specialLayer]);
             if (specialIndex != 0) {
                 Trait storage specialTrait = _traits[specialLayer][specialIndex];
-                require(specialTrait.exists, "MISSING_1OF1");
+                if (!(specialTrait.exists)) revert RF_Missing1of1();
                 return string(abi.encodePacked(svg, _renderTrait(specialTrait), "</svg>"));
             }
         }
@@ -686,7 +752,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
             if (oneOfOneLayerPlusOne != 0 && layer == oneOfOneLayerPlusOne - 1) continue;
             uint8 traitIndex = uint8(dna[layer]);
             Trait storage t = _traits[layer][traitIndex];
-            require(t.exists, "MISSING_TRAIT");
+            if (!(t.exists)) revert RF_MissingTrait();
             svg = abi.encodePacked(svg, _renderTrait(t));
         }
         return string(abi.encodePacked(svg, "</svg>"));
@@ -780,7 +846,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
 
     function withdraw() external onlyOwner nonReentrant {
         (bool ok,) = payable(owner).call{value: address(this).balance}("");
-        require(ok, "WITHDRAW_FAILED");
+        if (!(ok)) revert RF_WithdrawFailed();
     }
 }
 
@@ -800,7 +866,7 @@ contract RelicRandomnessMock is IRelicRandomnessProvider {
     // TEST ONLY: public pseudo-random fulfillment. Replace with VRF in production.
     function fulfill(uint256 requestId) external returns (uint256 randomWord) {
         Request storage r = requests[requestId];
-        require(r.consumer != address(0) && !r.fulfilled, "BAD_REQUEST");
+        if (!(r.consumer != address(0) && !r.fulfilled)) revert RF_BadRequest();
         r.fulfilled = true;
         randomWord = uint256(keccak256(abi.encodePacked(block.prevrandao, blockhash(block.number - 1), requestId, r.consumer, r.context, msg.sender)));
         if (randomWord == 0) randomWord = 1;
@@ -822,18 +888,18 @@ contract RelicForgeFactory {
     event ImplementationUpdated(address indexed implementation);
     event RandomnessProviderUpdated(address indexed provider);
 
-    modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
+    modifier onlyOwner() { if (!(msg.sender == owner)) revert RF_NotOwner(); _; }
 
     constructor(address implementation_, address randomnessProvider_, bool testAutoFulfill_) {
-        require(implementation_.code.length > 0 && randomnessProvider_.code.length > 0, "BAD_INFRA");
+        if (!(implementation_.code.length > 0 && randomnessProvider_.code.length > 0)) revert RF_BadInfra();
         owner = msg.sender;
         implementation = implementation_;
         randomnessProvider = randomnessProvider_;
         testAutoFulfill = testAutoFulfill_;
     }
 
-    function setImplementation(address newImplementation) external onlyOwner { require(newImplementation.code.length > 0, "BAD_IMPL"); implementation = newImplementation; emit ImplementationUpdated(newImplementation); }
-    function setRandomnessProvider(address newProvider) external onlyOwner { require(newProvider.code.length > 0, "BAD_PROVIDER"); randomnessProvider = newProvider; emit RandomnessProviderUpdated(newProvider); }
+    function setImplementation(address newImplementation) external onlyOwner { if (!(newImplementation.code.length > 0)) revert RF_BadImpl(); implementation = newImplementation; emit ImplementationUpdated(newImplementation); }
+    function setRandomnessProvider(address newProvider) external onlyOwner { if (!(newProvider.code.length > 0)) revert RF_BadProvider(); randomnessProvider = newProvider; emit RandomnessProviderUpdated(newProvider); }
     function collectionsByCreator(address creator) external view returns (address[] memory) { return _collectionsByCreator[creator]; }
 
     function _clone(address target) internal returns (address instance) {
@@ -846,7 +912,7 @@ contract RelicForgeFactory {
         assembly ("memory-safe") {
             instance := create(0, add(code, 0x20), mload(code))
         }
-        require(instance != address(0), "CLONE_FAILED");
+        if (!(instance != address(0))) revert RF_CloneFailed();
     }
 
     function createCollection(

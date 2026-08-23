@@ -226,12 +226,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.1', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.2', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, version: '11.0.1' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, version: '11.0.2' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -1216,7 +1216,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.0.1');
+      const worker = new Worker('./js/solc-worker.js?v=11.0.2');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1239,8 +1239,14 @@ ${await file.text()}`;
       RelicForgeFactory: pick('RelicForgeFactory'),
     };
     const runtimeSizes = Object.fromEntries(Object.entries(forgeState.contractArtifacts).map(([name, artifact]) => [name, (artifact.deployedBytecode.length - 2) / 2]));
-    if (runtimeSizes.RelicCollectionV2 > 24576) throw new Error(`RelicCollectionV2 runtime is ${runtimeSizes.RelicCollectionV2} bytes, above the EIP-170 limit.`);
-    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${runtimeSizes.RelicCollectionV2} bytes runtime\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime\n✓ Ready for Sepolia test deployment.`);
+    const eip170Limit = 24576;
+    const collectionSize = runtimeSizes.RelicCollectionV2;
+    const collectionMargin = eip170Limit - collectionSize;
+    const collectionUsage = ((collectionSize / eip170Limit) * 100).toFixed(1);
+    if (collectionSize > eip170Limit) {
+      throw new Error(`RelicCollectionV2 runtime is ${collectionSize} bytes (${collectionUsage}% of EIP-170), ${Math.abs(collectionMargin)} bytes over the ${eip170Limit}-byte limit. The shared implementation must deploy successfully before the clone factory can be deployed.`);
+    }
+    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${collectionSize} / ${eip170Limit} bytes (${collectionUsage}%, ${collectionMargin} bytes free)\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime${collectionMargin < 1024 ? '\nWARNING: Implementation is deployable but has less than 1 KB of EIP-170 headroom.' : ''}\n✓ Ready for Sepolia test deployment.`);
     return forgeState.contractArtifacts;
   }
 
