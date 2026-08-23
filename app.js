@@ -180,6 +180,20 @@
       bitmap.close();
       if (meta.width && meta.height) return meta;
     } catch (_) {}
+    // Animated GIFs are decoded as images by browsers even when createImageBitmap support varies.
+    if (file && (/^image\/(png|webp|jpeg|gif)$/i.test(file.type || '') || /\.(png|webp|jpe?g|gif)$/i.test(file.name || ''))) {
+      try {
+        const url = URL.createObjectURL(file);
+        const meta = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+          img.onerror = reject;
+          img.src = url;
+        });
+        URL.revokeObjectURL(url);
+        if (meta.width && meta.height) return meta;
+      } catch (_) {}
+    }
     if (/\.svg$/i.test(file?.name || '') || /svg\+xml/i.test(file?.type || '')) {
       try {
         const text = await file.text();
@@ -200,7 +214,32 @@
   }
 
   function isArtworkFile(file) {
-    return !!file && (/^image\/(png|webp|jpeg|svg\+xml)$/i.test(file.type || '') || /\.(png|webp|jpe?g|svg)$/i.test(file.name || ''));
+    return !!file && (/^image\/(png|webp|jpeg|gif|svg\+xml)$/i.test(file.type || '') || /\.(png|webp|jpe?g|gif|svg)$/i.test(file.name || ''));
+  }
+
+  const ONCHAIN_SINGLE_ASSET_LIMIT = 22000;
+
+  function isGifFile(file) {
+    return !!file && (/^image\/gif$/i.test(file.type || '') || /\.gif$/i.test(file.name || ''));
+  }
+
+  function estimatedGifOnchainBytes(file) {
+    const bytes = Number(file?.size || 0);
+    return 4 * Math.ceil(bytes / 3) + 240; // base64 plus the enclosing SVG <image> fragment
+  }
+
+  const artworkDataUrlCache = new WeakMap();
+  function artworkDataUrl(file) {
+    if (!file) return Promise.resolve('');
+    if (!artworkDataUrlCache.has(file)) {
+      artworkDataUrlCache.set(file, new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Unable to read animated artwork.'));
+        reader.readAsDataURL(file);
+      }));
+    }
+    return artworkDataUrlCache.get(file);
   }
 
   function freshLayerId(name = 'Layer') {
@@ -265,7 +304,7 @@
     const layer = getLayer(layerId);
     if (!layer) throw new Error('Layer not found.');
     const valid = [...files].filter(isArtworkFile);
-    if (!valid.length) throw new Error('Choose PNG, WEBP, JPG, or SVG trait artwork.');
+    if (!valid.length) throw new Error('Choose PNG, WEBP, JPG, GIF, or SVG trait artwork.');
     valid.sort((a, b) => naturalSort(a.name, b.name));
     for (const file of valid) layer.traits.push(await traitFromFile(layer, file));
     const firstReal = allTraits().find(t => !t.isNone && t.width && t.height);
@@ -547,7 +586,7 @@
   async function loadArtwork(files) {
     const imageFiles = [...files].filter(isArtworkFile);
     if (!imageFiles.length) {
-      showStatus('No PNG, WEBP, JPG, or SVG artwork was found in that folder.', 'error');
+      showStatus('No PNG, WEBP, JPG, GIF, or SVG artwork was found in that folder.', 'error');
       return;
     }
 
@@ -634,9 +673,13 @@
 
     const traits = allTraits();
     const mismatchCount = traits.filter(t => t.width !== state.imageWidth || t.height !== state.imageHeight).length;
+    const gifCount = traits.filter(t => !t.isNone && isGifFile(t.file)).length;
+    const largeGifCount = traits.filter(t => !t.isNone && isGifFile(t.file) && estimatedGifOnchainBytes(t.file) > ONCHAIN_SINGLE_ASSET_LIMIT).length;
     el.artworkSummary.innerHTML = `
       <span class="summary-pill"><strong>${state.layers.length}</strong> layers</span>
       <span class="summary-pill"><strong>${traits.length}</strong> traits</span>
+      ${gifCount ? `<span class="summary-pill"><strong>${gifCount}</strong> animated GIF${gifCount === 1 ? '' : 's'}</span>` : ''}
+      ${largeGifCount ? `<span class="summary-pill warning"><strong>${largeGifCount}</strong> GIF${largeGifCount === 1 ? '' : 's'} over onchain limit</span>` : ''}
       <span class="summary-pill"><strong>${state.imageWidth}×${state.imageHeight}</strong> canvas</span>
       <span class="summary-pill"><strong>${mismatchCount}</strong> size mismatch${mismatchCount === 1 ? '' : 'es'}</span>
       <span class="summary-pill"><strong>Drag & drop</strong> reorder layers</span>
@@ -672,7 +715,7 @@
         </div>
         <div class="layer-upload-row">
           <label class="ghost-btn small-btn file-button" for="layer-traits-${escapeHtml(layer.id)}">Add Trait Artwork</label>
-          <input class="layer-trait-input" id="layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
+          <input class="layer-trait-input" id="layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" multiple type="file"/>
           <small>Upload one trait or an entire category batch directly into this layer.</small>
         </div>
       </article>
@@ -692,10 +735,16 @@
       el.step1Hint.textContent = `Add trait artwork to ${emptyLayers.map(layer => layer.name).join(', ')} before continuing.`;
       return;
     }
-    const mismatchCount = allTraits().filter(t => t.width !== state.imageWidth || t.height !== state.imageHeight).length;
-    el.step1Hint.textContent = mismatchCount
-      ? `${mismatchCount} file(s) use a different canvas size. You can continue, but check alignment in Preview.`
-      : 'Artwork looks ready.';
+    const traits = allTraits();
+    const mismatchCount = traits.filter(t => t.width !== state.imageWidth || t.height !== state.imageHeight).length;
+    const largeGifCount = traits.filter(t => !t.isNone && isGifFile(t.file) && estimatedGifOnchainBytes(t.file) > ONCHAIN_SINGLE_ASSET_LIMIT).length;
+    if (largeGifCount) {
+      el.step1Hint.textContent = `${largeGifCount} animated GIF${largeGifCount === 1 ? '' : 's'} exceed the current 22 KB compiled-artwork onchain limit after animation-preserving embedding. They can be previewed and saved, but must be optimized before Forge compilation.`;
+    } else {
+      el.step1Hint.textContent = mismatchCount
+        ? `${mismatchCount} file(s) use a different canvas size. You can continue, but check alignment in Preview.`
+        : 'Artwork looks ready.';
+    }
   }
 
   function moveLayer(layerId, dir) {
@@ -748,7 +797,7 @@
             <div class="trait-header-controls">
               <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''}/> Hide category from metadata</label>
               <label class="ghost-btn small-btn file-button rarity-add-trait-btn" for="rarity-layer-traits-${escapeHtml(layer.id)}">+ Add Trait Artwork</label>
-              <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
+              <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" multiple type="file"/>
             </div>
           </div>
           <div class="trait-config-grid">
@@ -782,7 +831,7 @@
             <label class="inline-check"><input class="none-layer-toggle" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.allowNone ? 'checked' : ''} /> Allow None</label>
             <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''} /> Hide category from metadata</label>
             <label class="ghost-btn small-btn file-button rarity-add-trait-btn" for="rarity-layer-traits-${escapeHtml(layer.id)}">+ Add Trait Artwork</label>
-            <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" multiple type="file"/>
+            <input class="rarity-layer-trait-input" id="rarity-layer-traits-${escapeHtml(layer.id)}" data-layer-id="${escapeHtml(layer.id)}" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" multiple type="file"/>
             ${autoMode ? `
               <label class="mini-select">Rarity input
                 <select class="layer-rarity-mode" data-layer-id="${escapeHtml(layer.id)}">
@@ -2257,6 +2306,13 @@
     if (!trait || trait.isNone) return '';
     if (trait.svgFragment != null) return trait.svgFragment;
 
+    // GIF must remain raster. Drawing it to canvas would capture only one frame.
+    // Embed the original bytes in the SVG so animation survives layered previews and onchain rendering.
+    if (isGifFile(trait.file)) {
+      const dataUrl = await artworkDataUrl(trait.file);
+      return `<image x="0" y="0" width="${state.imageWidth || trait.width || 1}" height="${state.imageHeight || trait.height || 1}" preserveAspectRatio="none" style="image-rendering:pixelated" href="${dataUrl}"/>`;
+    }
+
     const bitmap = await createImageBitmap(trait.file);
     const width = bitmap.width;
     const height = bitmap.height;
@@ -2835,7 +2891,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.0.5',
+    version: '11.0.7',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2848,7 +2904,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.5' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.7' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
@@ -3273,7 +3329,10 @@
   });
 
   // Project + launch exports
-  $('#exportProjectBtn').addEventListener('click', () => downloadText(`${slug(el.collectionName.value)}-project.json`, JSON.stringify(projectConfig(), null, 2)));
+  $('#exportProjectBtn').addEventListener('click', () => {
+    if (window.RelicForgeProjects?.downloadCurrentProjectBackup) window.RelicForgeProjects.downloadCurrentProjectBackup().catch(error => showStatus(error.message, 'error'));
+    else downloadText(`${slug(el.collectionName.value)}-project.json`, JSON.stringify(projectConfig(), null, 2));
+  });
   $('#exportLaunchPackageBtn').addEventListener('click', exportLaunchPackage);
   ['chainSelect', 'mintPrice', 'royalty', 'launchName'].forEach(id => $(`#${id}`)?.addEventListener('input', updateLaunchSummary));
   $$('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateLaunchSummary));

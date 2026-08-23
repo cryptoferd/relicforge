@@ -1,7 +1,21 @@
-# Relic Forge Studio V11.0.5 — Cloud + Alchemy + Render Modes
+# Relic Forge V11.0.7
+
+## Global Projects + portable backups
+- Projects sync privately by connected wallet through Railway/Postgres + Railway Bucket storage.
+- Hard limit: 10 active cloud projects per wallet (server-enforced).
+- Deleting a cloud project removes unreferenced project artwork from the Bucket to free space.
+- Project backups use a self-contained `.relicforge` JSON package containing the complete editable Studio + Forge state and embedded artwork binaries.
+- Backups can be imported later and saved as a new cloud project.
+- Mint-page collection image and banner: 2 MB maximum each; any image MIME type is accepted, including animated GIF.
+
+# Relic Forge Studio V11.0.7 — Cloud + Alchemy + Render Modes
 
 
-## V11.0.5 mint RPC policy
+## Animated GIF artwork (V11.0.7)
+
+Studio accepts animated GIFs as normal layered traits, standalone 1/1 artwork, Creator Reveal placeholders, and custom mint-page images/banners. GIF animation is preserved by embedding the original GIF bytes as a `data:image/gif;base64,...` image inside the canonical onchain SVG. This deliberately uses the existing SVG-fragment encoding (`0`), so GIF projects remain compatible with already-deployed V11 factory/implementation contracts and do **not** require a factory redeployment. The existing 22 KB per-trait onchain shard limit applies to the compiled SVG fragment; base64 overhead means the practical source-GIF limit is somewhat below 22 KB. Flattened PNG presentation mode is intentionally static and will capture a frame rather than preserve animation.
+
+## V11.0.7 mint RPC policy
 
 Public mint pages now use direct public JSON-RPC endpoints first for normal collection reads and use a public-only RPC pool for holder `eth_getLogs` scans. Railway remains responsible for global mint-page configuration, whitelist proofs, assets, and other Cloud persistence. The Railway/Alchemy RPC relay is preserved as a fallback for ordinary mint reads and remains the Studio/backend architecture.
 
@@ -38,7 +52,7 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - A flattened PNG renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
 ### Alchemy — one private key
-The Alchemy key stays **only on Railway**. V11.0.5 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+The Alchemy key stays **only on Railway**. V11.0.7 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
 The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 

@@ -1,8 +1,8 @@
-# Relic Forge V11.0.5 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.0.7 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.0.5" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.0.7" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -106,3 +106,20 @@
 - [ ] Load test public mint config/state/whitelist/render paths.
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
+
+## Animated GIF acceptance (V11.0.7)
+
+- [ ] Upload an animated GIF as a normal trait using folder import.
+- [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
+- [ ] Confirm the trait thumbnail remains animated.
+- [ ] Confirm Manual Builder and generated preview cards remain animated when the GIF trait is selected.
+- [ ] Save the project locally, reopen it, and confirm the GIF still animates.
+- [ ] Sync the project to Cloud, open it on another browser/device, and confirm the GIF still animates.
+- [ ] Compile a GIF trait smaller than 22 KB and confirm Forge reports it as an animated GIF preserved as raw animation.
+- [ ] Confirm a GIF larger than 22 KB produces the specific onchain-size warning instead of silently flattening it.
+- [ ] Forge a small GIF test collection using the existing V11 factory and confirm `renderToken(tokenId)` contains `data:image/gif;base64,` (no factory redeployment required).
+- [ ] Confirm `tokenURI(tokenId)` renders the animation in the Studio inspector / compatible browser viewer.
+- [ ] Upload an animated full 1/1 and confirm its onchain render remains animated.
+- [ ] Upload GIF mint-page collection art/banner and confirm Cloud/Railway restores and serves it on another device.
+- [ ] If Creator Reveal is used, upload a small GIF placeholder and confirm the unrevealed token animation is preserved.
+- [ ] Confirm holder-selected flattened PNG mode is static by design and does not replace the canonical animated `renderToken()` output.

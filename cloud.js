@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const TOKEN_KEY = 'relicforge_cloud_session_v1';
+  const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
   let session = null;
 
   function apiBase() {
@@ -62,7 +63,16 @@
   async function uploadAsset(file, { projectId = null, purpose = 'project' } = {}) {
     if (!(file instanceof Blob)) return null;
     const filename = file.name || 'asset.bin';
-    const contentType = file.type || 'application/octet-stream';
+    let contentType = file.type || 'application/octet-stream';
+    if (purpose === 'mint-page') {
+      if (file.size > MINT_PAGE_MAX_BYTES) throw new Error(`${filename} exceeds the 2 MB mint-page image limit.`);
+      if (!String(contentType).toLowerCase().startsWith('image/')) {
+        const ext = String(filename).split('.').pop()?.toLowerCase() || '';
+        const imageTypes = { apng:'image/apng', avif:'image/avif', bmp:'image/bmp', gif:'image/gif', heic:'image/heic', heif:'image/heif', ico:'image/x-icon', jfif:'image/jpeg', jpeg:'image/jpeg', jpg:'image/jpeg', png:'image/png', svg:'image/svg+xml', tif:'image/tiff', tiff:'image/tiff', webp:'image/webp' };
+        contentType = imageTypes[ext] || contentType;
+      }
+      if (!String(contentType).toLowerCase().startsWith('image/')) throw new Error(`${filename} is not recognized as an image.`);
+    }
     const hash = await sha256(file);
     const prepared = await json('/api/assets/presign', {
       method: 'POST', body: JSON.stringify({ filename, contentType, size: file.size, sha256: hash, purpose, projectId })
@@ -120,11 +130,15 @@
     }
     return value;
   }
+  async function listProjectsMeta() { return await json('/api/projects', {}, true); }
   async function saveProject({ id, name, studio, forge }) {
+    const meta = await listProjectsMeta();
+    const exists = (meta.projects || []).some(project => String(project.id) === String(id));
+    if (!exists && Number(meta.count ?? (meta.projects || []).length) >= Number(meta.limit || 10)) throw new Error(`Cloud project limit reached (${meta.limit || 10}/${meta.limit || 10}). Delete a project before saving another.`);
     const snapshot = await encodeValue({ schema: 'relic-forge/cloud-project@1', studio, forge }, { projectId: id, purpose: 'project' });
     return json(`/api/projects/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name, snapshot }) }, true);
   }
-  async function listProjects() { return (await json('/api/projects', {}, true)).projects || []; }
+  async function listProjects() { return (await listProjectsMeta()).projects || []; }
   async function loadProject(id) {
     const response = await json(`/api/projects/${encodeURIComponent(id)}`, {}, true);
     const decoded = await decodeValue(response.project.snapshot);
@@ -158,7 +172,7 @@
   function publicUrl(path) { return `${apiBase()}${path}`; }
 
   window.RelicForgeCloud = {
-    version: '11.0.5', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
-    uploadAsset, encodeValue, decodeValue, saveProject, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
+    version: '11.0.7', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();

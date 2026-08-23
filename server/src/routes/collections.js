@@ -1,6 +1,9 @@
-import { db } from '../lib/db.js';
+import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
 import { verifyCollectionOwner, collectionFor } from '../lib/rpc.js';
+import { deleteObjects } from '../lib/storage.js';
+
+const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 
 function normAddress(value) { return String(value || '').toLowerCase(); }
 
@@ -19,9 +22,12 @@ export default async function collectionRoutes(app) {
     try { await verifyCollectionOwner(chainId, contract, request.user.wallet); }
     catch (error) { return reply.code(403).send({ error: error.message }); }
     const config = request.body?.config || {};
+    const previous = await one('SELECT mint_page FROM collections WHERE chain_id=$1 AND contract_address=$2 AND owner_wallet=$3', [chainId, contract, request.user.wallet]);
     for (const assetId of [config.collectionImageAssetId, config.bannerImageAssetId].filter(Boolean)) {
-      const check = await db.query('SELECT 1 FROM assets WHERE id=$1 AND owner_wallet=$2 AND status=$3', [assetId, request.user.wallet, 'ready']);
-      if (!check.rowCount) return reply.code(400).send({ error: 'Mint page asset is missing or belongs to another wallet.' });
+      const asset = await one('SELECT id,object_key,content_type,size_bytes,purpose FROM assets WHERE id=$1 AND owner_wallet=$2 AND status=$3', [assetId, request.user.wallet, 'ready']);
+      if (!asset) return reply.code(400).send({ error: 'Mint page asset is missing or belongs to another wallet.' });
+      if (asset.purpose !== 'mint-page' || !String(asset.content_type || '').toLowerCase().startsWith('image/')) return reply.code(400).send({ error: 'Mint page media must be an uploaded image.' });
+      if (Number(asset.size_bytes || 0) > MINT_PAGE_MAX_BYTES) return reply.code(400).send({ error: 'Mint-page images are limited to 2 MB each.' });
     }
     await db.query(
       `INSERT INTO collections(chain_id,contract_address,owner_wallet,project_id,mint_page)
@@ -29,6 +35,30 @@ export default async function collectionRoutes(app) {
        ON CONFLICT(chain_id,contract_address) DO UPDATE SET owner_wallet=EXCLUDED.owner_wallet,project_id=COALESCE(EXCLUDED.project_id,collections.project_id),mint_page=EXCLUDED.mint_page,updated_at=now()`,
       [chainId, contract, request.user.wallet, request.body?.projectId || null, JSON.stringify(config)]
     );
+
+    // Replacing a banner/image should not leak old objects into the Bucket forever.
+    // Keep shared deduplicated mint-page assets while another collection still references them.
+    const oldIds = new Set([previous?.mint_page?.collectionImageAssetId, previous?.mint_page?.bannerImageAssetId].filter(Boolean).map(String));
+    const newIds = new Set([config.collectionImageAssetId, config.bannerImageAssetId].filter(Boolean).map(String));
+    for (const oldId of oldIds) {
+      if (newIds.has(oldId)) continue;
+      try {
+        const stillUsed = await one(
+          `SELECT 1 FROM collections
+           WHERE owner_wallet=$1 AND NOT (chain_id=$2 AND contract_address=$3)
+             AND ((mint_page->>'collectionImageAssetId')=$4 OR (mint_page->>'bannerImageAssetId')=$4)
+           LIMIT 1`,
+          [request.user.wallet, chainId, contract, oldId]
+        );
+        if (stillUsed) continue;
+        const oldAsset = await one("SELECT object_key FROM assets WHERE id=$1 AND owner_wallet=$2 AND purpose='mint-page'", [oldId, request.user.wallet]);
+        if (!oldAsset) continue;
+        await deleteObjects([oldAsset.object_key]);
+        await db.query("DELETE FROM assets WHERE id=$1 AND owner_wallet=$2 AND purpose='mint-page'", [oldId, request.user.wallet]);
+      } catch (error) {
+        app.log.warn({ err: error, assetId: oldId }, 'Mint page updated but replaced asset cleanup failed');
+      }
+    }
     return { ok: true, publishedAt: new Date().toISOString() };
   });
 

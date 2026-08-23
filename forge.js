@@ -5,6 +5,7 @@
   const enc = new TextEncoder();
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
+  const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
   const INFRA_KEY = 'relicforge_sepolia_test_infra_v11_0_1';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
@@ -134,6 +135,16 @@
     });
   }
 
+  function validateMintPageMedia(file, label = 'Mint-page image') {
+    if (!file) return null;
+    if (Number(file.size || 0) > MINT_PAGE_MAX_BYTES) throw new Error(`${label} exceeds the 2 MB limit.`);
+    const type = String(file.type || '').toLowerCase();
+    const ext = String(file.name || '').split('.').pop()?.toLowerCase() || '';
+    const knownImageExt = new Set(['apng','avif','bmp','gif','heic','heif','ico','jfif','jpeg','jpg','png','svg','tif','tiff','webp']);
+    if (!type.startsWith('image/') && !knownImageExt.has(ext)) throw new Error(`${label} must be an image file.`);
+    return file;
+  }
+
   function setPreviewImage(hostId, dataUrl, fallback) {
     const host = $(hostId);
     if (!host) return;
@@ -257,12 +268,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.5', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.7', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.0.5' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.0.7' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -718,13 +729,26 @@ ${await file.text()}`;
 
     const sourceData = new Uint8Array(await source.file.arrayBuffer());
     const raster = rasterEncoding(source.file);
+    const isGif = String(source.file.type || '').toLowerCase() === 'image/gif' || /\.gif$/i.test(source.file.name || '');
     let chosenData = sourceData;
     let encodingCode = raster?.code ?? 0;
     let encoding = raster ? `raw-${raster.label}` : 'svg-fragment';
 
+    // Keep GIF animation intact while remaining compatible with already-deployed V11 factories.
+    // Encoding 0 is an SVG fragment, so the existing implementation can render an embedded GIF
+    // without any Solidity change or factory redeployment.
+    if (isGif) {
+      const fragment = `<image x="0" y="0" width="${bridge().getState().imageWidth || source.width || 1}" height="${bridge().getState().imageHeight || source.height || 1}" preserveAspectRatio="none" style="image-rendering:pixelated" href="data:image/gif;base64,${bytesToBase64(sourceData)}"/>`;
+      chosenData = enc.encode(fragment);
+      encodingCode = 0;
+      encoding = 'animated-gif-svg';
+      if (chosenData.length > MAX_TRAIT_BYTES) {
+        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.0.7 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
+      }
+    }
     // PNG is already highly compressed. Vectorizing every pixel can be much larger,
     // so compare lossless representations and store whichever is smallest.
-    if (raster?.code === 1) {
+    else if (raster?.code === 1) {
       let smallestPng = sourceData;
       try {
         const recompressed = await canvasPngBytes(source.file);
@@ -785,6 +809,13 @@ ${await file.text()}`;
     if ($('forgeCompiledSummary')) $('forgeCompiledSummary').textContent = 'Compile for onchain before deployment.';
   }
 
+  function bytesToBase64(bytes) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    return btoa(binary);
+  }
+
   async function compilePlaceholderFile(file, expectedWidth, expectedHeight) {
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext === 'svg') {
@@ -809,6 +840,22 @@ ${await file.text()}`;
       }
       const fragment = root.innerHTML.replace(/<!--([\s\S]*?)-->/g, '').replace(/>\s+</g, '><').replace(/\s{2,}/g, ' ').trim() || '<g/>';
       return { fragment, encoding: 'native-svg' };
+    }
+
+    if (ext === 'gif' || String(file.type || '').toLowerCase() === 'image/gif') {
+      const bitmap = await createImageBitmap(file);
+      if (bitmap.width !== expectedWidth || bitmap.height !== expectedHeight) {
+        const dims = `${bitmap.width}×${bitmap.height}`;
+        bitmap.close();
+        throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}×${expectedHeight}.`);
+      }
+      bitmap.close();
+      const raw = new Uint8Array(await file.arrayBuffer());
+      const data = bytesToBase64(raw);
+      return {
+        fragment: `<image x="0" y="0" width="${expectedWidth}" height="${expectedHeight}" preserveAspectRatio="none" style="image-rendering:pixelated" href="data:image/gif;base64,${data}"/>`,
+        encoding: 'animated-gif'
+      };
     }
 
     const bitmap = await createImageBitmap(file);
@@ -1120,6 +1167,7 @@ ${await file.text()}`;
       `<div class="forge-check good">✓ ${c.recipeCount} exact recipes compiled from Step 4</div>`,
       `<div class="forge-check good">✓ ${c.traits.filter(t => t.deduped).length} exact duplicate art asset(s) deduplicated</div>`,
       `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 1).length} PNG trait(s) stored as compressed raster because that was smaller than SVG</div>`,
+      `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 4).length} animated GIF trait(s) preserved as raw animation</div>`,
       `<div class="forge-check good">✓ ${c.artShards.length + c.dnaShards.length + 1} data shard(s) including placeholder</div>`,
       `<div class="forge-check good">✓ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Creator Reveal'} configured</div>`,
       ...warnings.map(w => `<div class="forge-check warn">⚠ ${esc(w)}</div>`),
@@ -1247,7 +1295,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.0.5');
+      const worker = new Worker('./js/solc-worker.js?v=11.0.7');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1906,8 +1954,8 @@ ${await file.text()}`;
           <p class="forge-footnote">Update the collection image and banner for this launched collection. These page assets are offchain presentation settings and do not change the NFT artwork or metadata.</p>
           <div class="mint-page-builder-grid dashboard-mint-page-builder">
             <div class="mint-page-media-settings">
-              <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : 'Square image recommended · PNG, JPG, WEBP, or SVG'}</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="dashboardMintPageImageInput" type="file"/></label>
-              <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : 'Wide image recommended · scales across the top'}</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="dashboardMintPageBannerInput" type="file"/></label>
+              <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file"/></label>
+              <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file"/></label>
               <div class="launched-actions">
                 <button class="primary-btn" data-dashboard-action="savemintpage" ${!isOwner ? 'disabled' : ''} type="button">Save Mint Page</button>
                 <button class="ghost-btn" data-dashboard-action="downloadmintpage" type="button">Download Updated Page</button>
@@ -1978,16 +2026,26 @@ ${await file.text()}`;
         <div class="launched-tx-status" id="launchedTxStatus">Ready.</div>`;
       detail.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => handleLaunchedAction(button.dataset.dashboardAction, snap)));
       $('dashboardMintPageImageInput')?.addEventListener('change', async event => {
-        forgeState.dashboardMintPageImageFile = event.target.files?.[0] || null;
-        if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile ? forgeState.dashboardMintPageImageFile.name : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : 'Square image recommended · PNG, JPG, WEBP, or SVG');
-        const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
-        setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
+        try {
+          forgeState.dashboardMintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
+          if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile ? `${forgeState.dashboardMintPageImageFile.name} · ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported');
+          const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
+          setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
+        } catch (error) {
+          event.target.value = ''; forgeState.dashboardMintPageImageFile = null;
+          if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = `Image rejected: ${error.message}`;
+        }
       });
       $('dashboardMintPageBannerInput')?.addEventListener('change', async event => {
-        forgeState.dashboardMintPageBannerFile = event.target.files?.[0] || null;
-        if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile ? forgeState.dashboardMintPageBannerFile.name : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : 'Wide image recommended · scales across the top');
-        const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
-        setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
+        try {
+          forgeState.dashboardMintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
+          if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile ? `${forgeState.dashboardMintPageBannerFile.name} · ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported');
+          const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
+          setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
+        } catch (error) {
+          event.target.value = ''; forgeState.dashboardMintPageBannerFile = null;
+          if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = `Banner rejected: ${error.message}`;
+        }
       });
     } catch (error) {
       if ($('launchedCollectionDetail')) $('launchedCollectionDetail').innerHTML = `<div class="forge-market-empty">Unable to load collection: ${esc(error.message)}</div>`;
@@ -2203,11 +2261,11 @@ ${await file.text()}`;
     const sourceRadio = document.querySelector(`input[name="whitelistSourceMode"][value="${sourceMode}"]`);
     if (sourceRadio) sourceRadio.checked = true;
     forgeState.placeholderFile = saved.placeholderFile || null;
-    if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, or SVG';
+    if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
     forgeState.mintPageImageFile = saved.mintPageImageFile || null;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
-    if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : 'Square image recommended · PNG, JPG, WEBP, or SVG';
-    if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : 'Wide image recommended · scales across the top';
+    if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max · any image format · animated GIF supported';
+    if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : '2 MB max · any image format · animated GIF supported';
     if (saved.factoryAddress && window.ethers?.isAddress(saved.factoryAddress)) { rememberFactory(saved.factoryAddress); if ($('factoryAddress') && !$('factoryAddress').value.trim()) $('factoryAddress').value = saved.factoryAddress; }
     if (saved.collectionAddress && window.ethers?.isAddress(saved.collectionAddress)) {
       forgeState.collectionAddress = saved.collectionAddress;
@@ -2275,7 +2333,7 @@ ${await file.text()}`;
     document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateRevealUi));
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
-      $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, or SVG';
+      $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
       invalidateCompile('Placeholder changed — recompile for onchain.');
     });
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
@@ -2294,14 +2352,24 @@ ${await file.text()}`;
     $('openMintPageBtn')?.addEventListener('click', openMintPage);
     $('downloadMintPageBtn')?.addEventListener('click', downloadStandaloneMintPage);
     $('mintPageImageInput')?.addEventListener('change', event => {
-      forgeState.mintPageImageFile = event.target.files?.[0] || null;
-      if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : 'Square image recommended · PNG, JPG, WEBP, or SVG';
-      updateMintPagePreview().catch(() => {});
+      try {
+        forgeState.mintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
+        if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? `${forgeState.mintPageImageFile.name} · ${(forgeState.mintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max · any image format · animated GIF supported';
+        updateMintPagePreview().catch(() => {});
+      } catch (error) {
+        event.target.value = ''; forgeState.mintPageImageFile = null;
+        if ($('mintPageImageName')) $('mintPageImageName').textContent = `Image rejected: ${error.message}`;
+      }
     });
     $('mintPageBannerInput')?.addEventListener('change', event => {
-      forgeState.mintPageBannerFile = event.target.files?.[0] || null;
-      if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : 'Wide image recommended · scales across the top';
-      updateMintPagePreview().catch(() => {});
+      try {
+        forgeState.mintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
+        if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? `${forgeState.mintPageBannerFile.name} · ${(forgeState.mintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max · any image format · animated GIF supported';
+        updateMintPagePreview().catch(() => {});
+      } catch (error) {
+        event.target.value = ''; forgeState.mintPageBannerFile = null;
+        if ($('mintPageBannerName')) $('mintPageBannerName').textContent = `Banner rejected: ${error.message}`;
+      }
     });
     $('viewerUseForgedBtn')?.addEventListener('click', () => { if (forgeState.collectionAddress && $('viewerCollectionAddress')) $('viewerCollectionAddress').value = forgeState.collectionAddress; });
     $('viewerLoadBtn')?.addEventListener('click', () => loadViewerCollection(true).catch(error => { $('viewerStatus').textContent = `Viewer error: ${error.message}`; }));

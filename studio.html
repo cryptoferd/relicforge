@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=11.0.5" />
+  <link rel="stylesheet" href="./styles.css?v=11.0.7" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -23,10 +23,12 @@
 <button class="ghost-btn" disabled id="saveProjectBtn" type="button">Save Project</button>
 <button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
 <button class="ghost-btn" id="launchedProjectsBtn" type="button">Launched Projects</button>
-<button class="ghost-btn" id="exportProjectBtn" type="button">Export Project</button>
+<button class="ghost-btn" id="importProjectBtn" type="button">Import Backup</button>
+<button class="ghost-btn" id="exportProjectBtn" type="button">Download Backup</button>
+<input class="hidden" id="projectBackupInput" accept=".relicforge,.json,application/json,application/vnd.relicforge.project+json" type="file"/>
 </div>
 </header>
-<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save locally. With RelicForge Cloud configured, the same save also syncs across devices.</div>
+<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save globally. Up to 10 active cloud projects per wallet; download backups anytime to free a slot safely.</div>
 <main>
 <section class="hero-panel studio-hero-panel">
 <div>
@@ -36,7 +38,7 @@
 </div>
 <div class="goal-card studio-mark-card">
 <img alt="" aria-hidden="true" src="./relic-forge-logo.svg"/>
-<div><span>Local-first prototype</span><strong>Your artwork stays in your browser</strong></div>
+<div><span>Local workspace + private cloud saves</span><strong>Projects follow your wallet across devices</strong></div>
 </div>
 </section>
 <nav aria-label="Collection builder steps" class="stepper">
@@ -69,8 +71,8 @@
 <label class="upload-zone" for="folderInput" id="uploadZone">
 <div class="upload-icon">＋</div>
 <strong>Choose your artwork folder</strong>
-<span>PNG, WEBP, JPG, SVG · transparent PNG recommended</span>
-<input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" directory="" id="folderInput" multiple="" type="file" webkitdirectory=""/>
+<span>PNG, WEBP, JPG, GIF, SVG · transparent PNG recommended</span>
+<input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" directory="" id="folderInput" multiple="" type="file" webkitdirectory=""/>
 </label>
 <div class="artwork-or"><span>or build the layers yourself</span></div>
 <div class="manual-artwork-tools">
@@ -82,11 +84,11 @@
     </div>
   </div>
   <div class="manual-art-card">
-    <div><strong>Upload a trait category</strong><small>Name the category and choose one or many PNG, WEBP, JPG, or SVG trait files.</small></div>
+    <div><strong>Upload a trait category</strong><small>Name the category and choose one or many PNG, WEBP, JPG, GIF, or SVG trait files.</small></div>
     <div class="inline-actions category-upload-row">
       <input id="categoryName" maxlength="80" placeholder="e.g. Hats" type="text"/>
       <label class="ghost-btn file-button" for="categoryTraitInput">Choose Traits</label>
-      <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="categoryTraitInput" multiple type="file"/>
+      <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="categoryTraitInput" multiple type="file"/>
       <span id="categoryTraitFileCount">No files selected</span>
       <button class="primary-btn" id="addCategoryBtn" type="button">Add Category</button>
     </div>
@@ -200,8 +202,8 @@
   </div>
   <label class="compact-upload" for="oneOfOneInput">
     <strong>Upload full 1/1 artwork</strong>
-    <span>PNG, WEBP, JPG, SVG · use the same canvas dimensions as the collection</span>
-    <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="oneOfOneInput" multiple type="file"/>
+    <span>PNG, WEBP, JPG, GIF, SVG · use the same canvas dimensions as the collection</span>
+    <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="oneOfOneInput" multiple type="file"/>
   </label>
   <div class="oneofone-list" id="oneOfOneList"></div>
 </div>
@@ -414,8 +416,8 @@
       </label>
       <label class="compact-upload forge-placeholder-upload hidden" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
         <strong>Upload reveal placeholder</strong>
-        <span id="creatorPlaceholderName">PNG, WEBP, JPG, or SVG</span>
-        <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="creatorPlaceholderInput" type="file"/>
+        <span id="creatorPlaceholderName">PNG, WEBP, JPG, GIF, or SVG</span>
+        <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="creatorPlaceholderInput" type="file"/>
       </label>
       <div class="prototype-note">
         <strong>Fair assignment</strong>
@@ -459,8 +461,8 @@
       </div>
       <div class="mint-page-builder-grid">
         <div class="mint-page-media-settings">
-          <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">Square image recommended · PNG, JPG, WEBP, or SVG</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="mintPageImageInput" type="file"/></label>
-          <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">Wide image recommended · scales across the top</span><input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="mintPageBannerInput" type="file"/></label>
+          <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageImageInput" type="file"/></label>
+          <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageBannerInput" type="file"/></label>
           <div class="prototype-note"><strong>Public mint only</strong><p>The generated page exposes Public Mint and Whitelist Mint when enabled. Creator Mint remains available only inside Studio.</p></div>
           <div class="forge-inline-status" id="mintPageStatus">Customize the page now. After forging, Relic Forge can open the contract-driven mint page or export a standalone HTML file.</div>
         </div>
@@ -582,8 +584,8 @@
 </section>
 </main>
 <footer>
-<span>Relic Forge Studio · local-first collection compiler + Sepolia Forge test</span>
-<span>No artwork leaves your browser in this build.</span>
+<span>Relic Forge Studio · wallet-synced collection compiler + Sepolia Forge test</span>
+<span>Saved projects sync privately to RelicForge Cloud; deployed collection artwork remains onchain.</span>
 </footer>
 </div>
 
@@ -594,7 +596,7 @@
       <div>
         <div class="eyebrow">WALLET PROJECTS</div>
         <h2 id="projectManagerTitle">My Projects</h2>
-        <p>Full editable Studio saves are stored locally in this browser and scoped to the connected wallet.</p>
+        <p>Full editable Studio projects sync through RelicForge Cloud and follow the connected wallet across computers.</p>
       </div>
       <button class="icon-btn" id="projectManagerCloseBtn" type="button" aria-label="Close project manager">×</button>
     </div>
@@ -603,12 +605,13 @@
       <strong id="projectManagerWallet">No wallet connected</strong>
     </div>
     <div class="project-local-note">
-      <strong>Local-first save</strong>
-      <span>Artwork, layer settings, rules, compiled recipes, and launch settings stay in this browser. Use Export Project for a settings backup and keep your original artwork folder. Wallet saves are not cloud-synced yet.</span>
+      <strong>Global wallet projects · 10 active max</strong>
+      <span>Artwork, layers, rarity settings, rules, compiled recipes, reveal/launch settings, whitelist settings, and mint-page media sync to RelicForge Cloud. Download a self-contained backup before deleting a project; deleting frees its unused project artwork from the Railway Bucket.</span>
     </div>
     <div class="saved-project-list" id="projectList"></div>
     <div class="project-storage-estimate" id="projectStorageEstimate"></div>
     <div class="project-modal-actions">
+      <button class="ghost-btn" id="projectManagerImportBtn" type="button">Import Backup</button>
       <button class="ghost-btn" id="projectManagerSaveAsBtn" type="button">Save As New</button>
       <button class="primary-btn" id="projectManagerSaveBtn" type="button">Save Current Project</button>
     </div>
@@ -651,11 +654,11 @@
   </section>
 </div>
 
-  <script src="./relicforge-config.js?v=11.0.5"></script>
+  <script src="./relicforge-config.js?v=11.0.7"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./cloud.js?v=11.0.5" defer></script>
-  <script src="./app.js?v=11.0.5" defer></script>
-  <script src="./forge.js?v=11.0.5" defer></script>
-  <script src="./project-storage.js?v=11.0.5" defer></script>
+  <script src="./cloud.js?v=11.0.7" defer></script>
+  <script src="./app.js?v=11.0.7" defer></script>
+  <script src="./forge.js?v=11.0.7" defer></script>
+  <script src="./project-storage.js?v=11.0.7" defer></script>
 </body>
 </html>

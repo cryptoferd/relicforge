@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const endpoint = process.env.AWS_ENDPOINT_URL || process.env.BUCKET_ENDPOINT || process.env.ENDPOINT;
@@ -41,4 +41,16 @@ export async function getBuffer(key) {
 }
 export async function putBuffer(key, body, contentType) {
   await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable' }));
+}
+
+
+export async function deleteObjects(keys = []) {
+  const unique = [...new Set((keys || []).filter(Boolean))];
+  for (let i = 0; i < unique.length; i += 1000) {
+    const batch = unique.slice(i, i + 1000);
+    if (!batch.length) continue;
+    const result = await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch.map(Key => ({ Key })), Quiet: true } }));
+    if (result.Errors?.length) throw new Error(`Railway Bucket failed to delete ${result.Errors.length} object(s).`);
+  }
+  return unique.length;
 }
