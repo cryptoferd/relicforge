@@ -17,13 +17,17 @@
     11155111: ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://rpc.sepolia.org'],
     1: ['https://ethereum-rpc.publicnode.com','https://eth.drpc.org']
   };
+  const MINT_RPC_MODE = String(window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first').toLowerCase();
   function rpcCandidates(chainId){
     const id=Number(chainId);
-    // When V11 Cloud is configured, every mapped EVM network uses the same
-    // Railway safe-RPC endpoint. Railway selects the Alchemy hostname and
-    // appends the private ALCHEMY_API_KEY server-side.
-    if(API_BASE)return [apiUrl(`/api/public/rpc/${id}`)];
-    return PUBLIC_RPC_FALLBACKS[id]||[];
+    const publicList=[...(PUBLIC_RPC_FALLBACKS[id]||[])];
+    const cloudList=API_BASE?[apiUrl(`/api/public/rpc/${id}`)]:[];
+    // Public mint pages default to direct public RPCs so normal visitors do not
+    // consume the creator's private Alchemy quota. Keep the Railway/Alchemy relay
+    // available as a fallback and as a one-line future switch once PAYG is enabled.
+    if(MINT_RPC_MODE==='alchemy-first'||MINT_RPC_MODE==='cloud-first')return [...cloudList,...publicList];
+    if(MINT_RPC_MODE==='public-only')return publicList;
+    return [...publicList,...cloudList];
   }
   const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
   const ZERO = ethers.ZeroAddress.toLowerCase();
@@ -154,14 +158,12 @@
     }
   }
   function getReadProvider(){
-    // V11: when RelicForge Cloud is configured, reads go through the Alchemy-backed
-    // safe relay. The injected wallet is reserved for signing transactions.
-    if(API_BASE&&publicProvider)return publicProvider;
-    if(API_BASE){const list=rpcCandidates(config.chainId);if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}}
-    if(browserProvider)return browserProvider;
+    // Mint-page reads are deliberately independent from the signing wallet.
+    // V11.0.5 defaults to public RPC first; Railway/Alchemy remains a fallback.
     if(publicProvider)return publicProvider;
     const list=rpcCandidates(config.chainId);
     if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}
+    if(browserProvider)return browserProvider;
     if(window.ethereum){browserProvider=new ethers.BrowserProvider(window.ethereum);return browserProvider}
     throw new Error('Connect a wallet to read this collection.');
   }
@@ -194,9 +196,8 @@
     }
   }
   async function resolveAnonymousReadProvider(){
-    if(API_BASE&&publicProvider)return publicProvider;
-    if(!API_BASE&&browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
+    if(!API_BASE&&browserProvider)return browserProvider;
     const candidates=rpcCandidates(config.chainId);
     let lastError=null;
     for(const rpc of candidates){
@@ -251,7 +252,7 @@
     document.title=`${name} — Mint`;$('collectionName').textContent=name;$('collectionDescription').textContent=desc||'Fully onchain collection forged with Relic Forge.';
     $('mintedStat').textContent=`${totalMinted.toLocaleString()} / ${maxSupply.toLocaleString()}`;$('priceStat').textContent=fmtEth(mintPrice);$('limitStat').textContent=maxPerWallet?maxPerWallet.toLocaleString():'Unlimited';$('revealStat').textContent=reveal===0?'Forge Reveal':'Creator Reveal';$('publicPrice').textContent=fmtEth(mintPrice);$('publicCard').classList.toggle('disabled',!pub);
     const explorer=Number(config.chainId)===11155111?'https://sepolia.etherscan.io':'https://etherscan.io';
-    $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a> · Alchemy via RelicForge Cloud`;
+    $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a> · RelicForge Cloud state`;
     const supplyRemaining=Math.max(0,maxSupply-totalMinted);
     if(wallet){
       const activeWallet=wallet;const ws=await apiJson(`/api/public/collection/${config.chainId}/${config.contract}/wallet/${activeWallet}`);if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
@@ -264,13 +265,15 @@
     }else{
       $('walletMintsStat').textContent='Connect wallet';$('walletAllotment')?.classList.add('hidden');const publicMax=maxPerWallet>0?Math.min(supplyRemaining,maxPerWallet):supplyRemaining;setQtyLimit('publicQty',publicMax);$('publicQtyHint').textContent=!pub?'Public mint is currently disabled by the creator.':maxPerWallet>0?`Wallet limit: ${maxPerWallet}. Connect to calculate what remains for you.`:`Up to ${publicMax} remaining in the collection. Connect to mint.`;$('publicMintBtn').disabled=true;$('publicMintBtn').dataset.ready='false';setQtyLimit('whitelistQty',0);$('whitelistQtyHint').textContent=wlEnabled?'Connect wallet to calculate whitelist allowance.':'Whitelist mint is disabled.';$('whitelistState').textContent=wlEnabled?'Connect to check':'Disabled';$('whitelistMintBtn').disabled=true;
     }
-    $('whitelistCard').classList.toggle('disabled',!wlEnabled);$('mintIntro').textContent=reveal===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.';status(wallet?($('publicMintBtn').disabled?'Wallet connected. Check mint availability above.':'Wallet connected. Ready to mint.'):'Collection loaded through Alchemy. Connect a wallet to mint.');updateExplorerControls();loadMintedGallery().catch(()=>{});if(holdersLoadedForMintCount!==totalMinted)loadHolders().catch(()=>{});else{renderHolders();renderMyNfts().catch(()=>{})}
+    $('whitelistCard').classList.toggle('disabled',!wlEnabled);$('mintIntro').textContent=reveal===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.';status(wallet?($('publicMintBtn').disabled?'Wallet connected. Check mint availability above.':'Wallet connected. Ready to mint.'):'Collection loaded. Connect a wallet to mint.');updateExplorerControls();loadMintedGallery().catch(()=>{});if(holdersLoadedForMintCount!==totalMinted)loadHolders().catch(()=>{});else{renderHolders();renderMyNfts().catch(()=>{})}
   }
 
   async function refresh(){
     const serial=++refreshSerial;
     if(!config.contract||!ethers.isAddress(config.contract)){status('Mint page is missing a valid collection contract address.');return}
-    if(API_BASE){try{return await refreshCloud(serial)}catch(error){if(serial===refreshSerial)status(`RelicForge Cloud error: ${error.message}`);return}}
+    if(API_BASE&&(MINT_RPC_MODE==='alchemy-first'||MINT_RPC_MODE==='cloud-first')){
+      try{return await refreshCloud(serial)}catch(error){console.warn('RelicForge Cloud state read failed; falling back to direct RPC:',error.message)}
+    }
     const diagnostics=[];
     try{
       const c=await readOnlyContract();
@@ -332,7 +335,12 @@
         $('publicMintBtn').disabled=!pub||publicRemaining<1;
         $('publicMintBtn').dataset.ready=(!$('publicMintBtn').disabled).toString();
 
-        whitelistData=await readConfigWhitelist();
+        if(API_BASE){
+          try{
+            const proof=await apiJson(`/api/public/whitelist/${config.chainId}/${config.contract}/${activeWallet}`);
+            whitelistData=proof?.eligible?{root,by:{[activeWallet.toLowerCase()]:{address:activeWallet,allowance:Number(proof.allowance||0),proof:proof.proof||[]}}}:null;
+          }catch(_){whitelistData=await readConfigWhitelist()}
+        }else whitelistData=await readConfigWhitelist();
         if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
         let whitelistMints=Number(await safeRead('whitelistMintedByWallet()',()=>c.whitelistMintedByWallet(activeWallet),0n,diagnostics,false));
         if(serial!==refreshSerial)return;
@@ -375,6 +383,14 @@
       loadMintedGallery().catch(()=>{});
       if(holdersLoadedForMintCount!==Number(totalMinted))loadHolders().catch(()=>{}); else {renderHolders();renderMyNfts().catch(()=>{});}
     }catch(e){
+      if(API_BASE&&MINT_RPC_MODE!=='public-only'&&MINT_RPC_MODE!=='alchemy-first'&&MINT_RPC_MODE!=='cloud-first'){
+        try{
+          publicProvider=null;activeReadRpc=null;
+          return await refreshCloud(serial);
+        }catch(cloudError){
+          console.warn('Public RPC and RelicForge Cloud state reads both failed:',cloudError.message);
+        }
+      }
       if(serial===refreshSerial){
         const extra=diagnostics.length?` Failed reads: ${diagnostics.join(' | ')}`:'';
         status(`Contract error: ${e.shortMessage||e.message}.${extra}`);
@@ -469,15 +485,32 @@
   }
   async function getTransferHistory(totalMinted){
     if(totalMinted<1)return[];
-    const provider=getReadProvider();const latest=await provider.getBlockNumber();let to=latest,chunk=100000,logs=[],mintsFound=0,attempts=0;
-    while(to>=0&&mintsFound<totalMinted&&attempts<1000){
-      const from=Math.max(0,to-chunk+1);$('holdersStatus').textContent=`Scanning holder history… block ${from.toLocaleString()}-${to.toLocaleString()}`;
+    const chainId=Number(config.chainId);
+    // Holder reconstruction can require wide eth_getLogs scans. Keep this request
+    // completely off the creator's Alchemy Free-tier quota. Try the direct public
+    // RPC pool one endpoint at a time; only non-log mint reads may fall back to Cloud.
+    const directRpcs=[...(PUBLIC_RPC_FALLBACKS[chainId]||[])];
+    if(!directRpcs.length)throw new Error(`No public holder-history RPC is configured for chain ${chainId}.`);
+    let lastError=null;
+    for(const rpc of directRpcs){
       try{
-        const part=await provider.getLogs({address:config.contract,fromBlock:from,toBlock:to,topics:[TRANSFER_TOPIC]});logs.push(...part);mintsFound+=part.filter(log=>topicAddress(log.topics[1]).toLowerCase()===ZERO).length;to=from-1;attempts++;
-        if(part.length<50&&chunk<500000)chunk=Math.min(500000,chunk*2);
-      }catch(e){if(chunk>2000){chunk=Math.max(2000,Math.floor(chunk/4));continue}throw e}
+        const provider=new ethers.JsonRpcProvider(rpc,chainId,{staticNetwork:true,batchMaxCount:20});
+        const latest=await provider.getBlockNumber();let to=latest,chunk=20000,logs=[],mintsFound=0,attempts=0;
+        while(to>=0&&mintsFound<totalMinted&&attempts<5000){
+          const from=Math.max(0,to-chunk+1);$('holdersStatus').textContent=`Scanning holder history via public RPC… block ${from.toLocaleString()}-${to.toLocaleString()}`;
+          try{
+            const part=await provider.getLogs({address:config.contract,fromBlock:from,toBlock:to,topics:[TRANSFER_TOPIC]});
+            logs.push(...part);mintsFound+=part.filter(log=>topicAddress(log.topics[1]).toLowerCase()===ZERO).length;to=from-1;attempts++;
+            if(part.length<50&&chunk<100000)chunk=Math.min(100000,chunk*2);
+          }catch(error){
+            if(chunk>250){chunk=Math.max(250,Math.floor(chunk/4));continue}
+            throw error;
+          }
+        }
+        return logs;
+      }catch(error){lastError=error;console.warn(`Holder history RPC failed (${rpc}); trying next public RPC.`,error?.message||error)}
     }
-    return logs;
+    throw lastError||new Error('Unable to load holder history from the public RPC pool.');
   }
   async function loadHolders(force=false){
     if(!contractState)return;const total=contractState.totalMinted;

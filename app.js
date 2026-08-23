@@ -2835,7 +2835,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.0.4',
+    version: '11.0.5',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2848,7 +2848,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.4' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.5' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

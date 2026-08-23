@@ -1,8 +1,8 @@
-# Relic Forge V11.0.4 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.0.5 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.0.4" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.0.5" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.

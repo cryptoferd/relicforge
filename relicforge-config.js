@@ -7,5 +7,8 @@ window.RELICFORGE_CONFIG = Object.freeze({
   // Leave blank to use apiBase.
   renderBase: '',
   cloudEnabled: true,
-  version: '11.0.4'
+  // Public mint pages use direct public RPCs first. Change to 'alchemy-first'
+  // after upgrading Alchemy if you want Railway/Alchemy to become primary again.
+  mintRpcMode: 'public-first',
+  version: '11.0.5'
 });

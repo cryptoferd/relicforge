@@ -1,4 +1,17 @@
-# Relic Forge Studio V11.0.4 — Cloud + Alchemy + Render Modes
+# Relic Forge Studio V11.0.5 — Cloud + Alchemy + Render Modes
+
+
+## V11.0.5 mint RPC policy
+
+Public mint pages now use direct public JSON-RPC endpoints first for normal collection reads and use a public-only RPC pool for holder `eth_getLogs` scans. Railway remains responsible for global mint-page configuration, whitelist proofs, assets, and other Cloud persistence. The Railway/Alchemy RPC relay is preserved as a fallback for ordinary mint reads and remains the Studio/backend architecture.
+
+The switch is controlled by `window.RELICFORGE_CONFIG.mintRpcMode`:
+
+- `public-first` (default): public RPC first, Railway/Alchemy fallback for ordinary reads.
+- `alchemy-first`: Railway/Alchemy first, public RPC fallback. Use this after moving to an Alchemy plan that supports the desired request ranges.
+- `public-only`: never use the Railway/Alchemy RPC relay from the mint page.
+
+Holder-history scans intentionally stay on the direct public RPC pool in this release because they can require large `eth_getLogs` ranges that exceed Alchemy Free-tier limits.
 
 V11 is the first cloud-backed RelicForge build. It keeps the existing static Studio/mint frontend, adds a Railway API under `/server`, moves cross-device project/mint-page persistence to PostgreSQL + Railway Bucket storage, and routes production blockchain reads through a server-side Alchemy connection.
 
@@ -25,7 +38,7 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - A flattened PNG renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
 ### Alchemy — one private key
-The Alchemy key stays **only on Railway**. V11.0.4 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+The Alchemy key stays **only on Railway**. V11.0.5 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
 The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 
