@@ -274,12 +274,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.1.0', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.1.1', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.1.0' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.1.1' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -749,7 +749,7 @@ ${await file.text()}`;
       encodingCode = 0;
       encoding = 'animated-gif-svg';
       if (chosenData.length > MAX_TRAIT_BYTES) {
-        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.1.0 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
+        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.1.1 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
       }
     }
     // PNG is already highly compressed. Vectorizing every pixel can be much larger,
@@ -1342,7 +1342,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.1.0');
+      const worker = new Worker('./js/solc-worker.js?v=11.1.1');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();

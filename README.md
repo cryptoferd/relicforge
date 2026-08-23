@@ -1,6 +1,14 @@
-# Relic Forge V11.1.0
+# Relic Forge V11.1.1
 
-## V11.1.0 — Studio UX + standalone Creator Dashboard
+## V11.1.1 — View Image data-URI compatibility fix
+
+- `View Image` no longer navigates the top frame directly to `data:image/...` URIs (blocked by modern Chromium browsers).
+- Onchain data images are converted client-side to temporary `blob:` URLs before opening.
+- Preserves the original MIME type and animation for SVG, GIF, PNG, JPEG, WebP, AVIF, and other browser-displayable image types.
+- `ipfs://` and `ar://` image links are normalized to browser-viewable HTTP gateways.
+- The same token-card action handler now works in both the minted collection gallery and the connected holder's NFT gallery.
+
+## V11.1.1 — Studio UX + standalone Creator Dashboard
 
 - Studio project actions collapse into a compact hamburger menu on mobile instead of stacking vertically above the workspace.
 - Studio now tracks unsaved edits, shows the most recent save timestamp, and triggers the browser's leave-page warning while unsaved work exists.
@@ -11,14 +19,14 @@
 - Offchain rendering is adaptive without changing the V11 Solidity ABI: static renders can be cached as PNG, while GIF/SVG animation-sensitive tokens are cached and served as SVG with the correct HTTP content type. The legacy `.png` URL suffix remains because existing V11 contracts append it onchain.
 
 
-## V11.1.0 — layer delineation
+## V11.1.1 — layer delineation
 
 - Rarity/layer configuration now uses stronger rounded outlines, darker header bands, explicit interior dividers, and larger gutters between layers.
 - Trait cells use a denser bordered grid that visually belongs to its parent layer, matching the supplied Studio reference while preserving all existing controls and behavior.
 - Responsive wrapping keeps the same grouping on narrower screens.
 
 
-## V11.1.0 — public gas oracle + full collection preview
+## V11.1.1 — public gas oracle + full collection preview
 
 - Studio deployment-cost GWEI now comes from direct public Sepolia RPCs (`eth_gasPrice`) with the connected wallet RPC as a fallback. The RelicForge Railway/Alchemy relay is not used for gas-price discovery.
 - Step 4 now previews the entire compiled collection instead of 12 samples. The grid uses smaller cards and renders 24, 48, or 96 tokens per page with Previous/Next pagination.
@@ -33,14 +41,14 @@
 - Backups can be imported later and saved as a new cloud project.
 - Mint-page collection image and banner: 2 MB maximum each; any image MIME type is accepted, including animated GIF.
 
-# Relic Forge Studio V11.1.0 — Cloud + Alchemy + Render Modes
+# Relic Forge Studio V11.1.1 — Cloud + Alchemy + Render Modes
 
 
-## Animated GIF artwork (V11.1.0)
+## Animated GIF artwork (V11.1.1)
 
 Studio accepts animated GIFs as normal layered traits, standalone 1/1 artwork, Creator Reveal placeholders, and custom mint-page images/banners. GIF animation is preserved by embedding the original GIF bytes as a `data:image/gif;base64,...` image inside the canonical onchain SVG. This deliberately uses the existing SVG-fragment encoding (`0`), so GIF projects remain compatible with already-deployed V11 factory/implementation contracts and do **not** require a factory redeployment. The existing 22 KB per-trait onchain shard limit applies to the compiled SVG fragment; base64 overhead means the practical source-GIF limit is somewhat below 22 KB. Offchain Render is adaptive: animation-sensitive GIF/SVG output is cached as SVG so animation survives, while static output may be rasterized and cached as PNG.
 
-## V11.1.0 mint RPC policy
+## V11.1.1 mint RPC policy
 
 Public mint pages now use direct public JSON-RPC endpoints first for normal collection reads and use a public-only RPC pool for holder `eth_getLogs` scans. Railway remains responsible for global mint-page configuration, whitelist proofs, assets, and other Cloud persistence. The Railway/Alchemy RPC relay is preserved as a fallback for ordinary mint reads and remains the Studio/backend architecture.
 
@@ -77,7 +85,7 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - An adaptive offchain renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
 ### Alchemy — one private key
-The Alchemy key stays **only on Railway**. V11.1.0 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+The Alchemy key stays **only on Railway**. V11.1.1 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
 The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 

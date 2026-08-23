@@ -47,6 +47,7 @@
   let holders = [], holderPage = 1, holdersLoadedForMintCount = -1;
   const holderPageSize = 20;
   let currentTokenOwners = new Map(), myNftIds = [], myNftPage = 1;
+  const tokenImageViewUris = new Map();
   const myNftPageSize = 10;
   let refreshSerial = 0;
 
@@ -159,7 +160,7 @@
   }
   function getReadProvider(){
     // Mint-page reads are deliberately independent from the signing wallet.
-    // V11.1.0 defaults to public RPC first; Railway/Alchemy remains a fallback.
+    // V11.1.1 defaults to public RPC first; Railway/Alchemy remains a fallback.
     if(publicProvider)return publicProvider;
     const list=rpcCandidates(config.chainId);
     if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}
@@ -220,6 +221,59 @@
   function imageMarkup(src,name){
     if(!src)return '<div class="minted-thumb-empty">No image</div>';
     return `<img src="${esc(src)}" alt="${esc(name||'NFT')}" loading="lazy"/>`;
+  }
+  function browserViewUri(uri){
+    const value=String(uri||'').trim();
+    if(/^ipfs:\/\//i.test(value))return `https://ipfs.io/ipfs/${value.replace(/^ipfs:\/\/(?:ipfs\/)?/i,'')}`;
+    if(/^ar:\/\//i.test(value))return `https://arweave.net/${value.replace(/^ar:\/\//i,'')}`;
+    return value;
+  }
+  function dataUriBlobUrl(uri){
+    const value=String(uri||'');
+    const comma=value.indexOf(',');
+    if(comma<0||!/^data:/i.test(value))throw new Error('Invalid data image URI.');
+    const meta=value.slice(5,comma);
+    const payload=value.slice(comma+1);
+    const mime=(meta.split(';')[0]||'application/octet-stream').trim();
+    let bytes;
+    if(/(?:^|;)base64(?:;|$)/i.test(meta)){
+      const binary=atob(payload.replace(/\s/g,''));
+      bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    }else{
+      bytes=new TextEncoder().encode(decodeURIComponent(payload));
+    }
+    return URL.createObjectURL(new Blob([bytes],{type:mime}));
+  }
+  function openTokenImage(tokenId){
+    const raw=tokenImageViewUris.get(Number(tokenId));
+    if(!raw){status(`Image for token #${tokenId} is not available yet.`);return}
+    let target=browserViewUri(raw),objectUrl='';
+    try{
+      if(/^data:/i.test(target)){
+        objectUrl=dataUriBlobUrl(target);
+        target=objectUrl;
+      }
+      const tab=window.open(target,'_blank');
+      if(!tab){
+        if(objectUrl)URL.revokeObjectURL(objectUrl);
+        status('Your browser blocked the image tab. Allow pop-ups for this mint page and try again.');
+        return;
+      }
+      try{tab.opener=null}catch(_){}
+      // The new tab has already loaded the Blob by the time this expires. Keeping
+      // it alive for a few minutes is generous for slower/mobile browsers.
+      if(objectUrl)setTimeout(()=>URL.revokeObjectURL(objectUrl),300000);
+    }catch(error){
+      if(objectUrl)URL.revokeObjectURL(objectUrl);
+      status(`Unable to open image: ${error.message}`);
+    }
+  }
+  function handleTokenCardAction(event){
+    const renderButton=event.target.closest('[data-render-token]');
+    if(renderButton){setTokenRenderMode(renderButton.dataset.renderToken,renderButton.dataset.renderMode);return}
+    const imageButton=event.target.closest('[data-view-image-token]');
+    if(imageButton)openTokenImage(imageButton.dataset.viewImageToken);
   }
   function renderWalletAllotment(walletMints,maxPerWallet,remaining){
     const box=$('walletAllotment'); if(!box)return;
@@ -432,7 +486,8 @@
       if(wallet&&String(owner).toLowerCase()===wallet.toLowerCase()&&revealed){
         const mode=Number(await c.renderMode(tokenId).catch(()=>0));
         const viewImage=String(meta.image||'');
-        ownerActions=`<div class="token-owner-actions"><button class="small-btn render-toggle-btn" data-render-token="${tokenId}" data-render-mode="${mode===1?0:1}" type="button">${mode===1?'Render Onchain':'Render Offchain'}</button>${viewImage?`<a class="small-btn link-btn view-image-btn" href="${esc(viewImage)}" target="_blank" rel="noreferrer">View Image</a>`:''}</div>`;
+        if(viewImage)tokenImageViewUris.set(Number(tokenId),viewImage); else tokenImageViewUris.delete(Number(tokenId));
+        ownerActions=`<div class="token-owner-actions"><button class="small-btn render-toggle-btn" data-render-token="${tokenId}" data-render-mode="${mode===1?0:1}" type="button">${mode===1?'Render Onchain':'Render Offchain'}</button>${viewImage?`<button class="small-btn link-btn view-image-btn" data-view-image-token="${tokenId}" type="button">View Image</button>`:''}</div>`;
       }
       return `<article class="minted-token-card" data-token-id="${tokenId}"><div class="minted-token-thumb">${imageMarkup(meta.image,meta.name)}</div><div class="minted-token-info"><div><strong>${esc(meta.name||`Token #${tokenId}`)}</strong><span>#${tokenId}</span></div><small>${revealed?'Revealed':'Unrevealed'} · ${esc(shortAddr(owner))}</small>${ownerActions}</div></article>`;
     }catch(e){return `<article class="minted-token-card"><div class="minted-token-thumb"><div class="minted-thumb-empty">#${tokenId}</div></div><div class="minted-token-info"><div><strong>Token #${tokenId}</strong></div><small>${esc(e.shortMessage||e.message)}</small></div></article>`}
@@ -555,7 +610,7 @@
     $('connectBtn').addEventListener('click',connect);$('publicMintBtn').addEventListener('click',publicMint);$('whitelistMintBtn').addEventListener('click',whitelistMint);bindStrictQty('publicQty');bindStrictQty('whitelistQty');
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
-    $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsGrid')?.addEventListener('click',event=>{const button=event.target.closest('[data-render-token]');if(button)setTokenRenderMode(button.dataset.renderToken,button.dataset.renderMode)});$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
+    $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsGrid')?.addEventListener('click',handleTokenCardAction);$('mintedGrid')?.addEventListener('click',handleTokenCardAction);$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
     if(window.ethereum){window.ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){try{browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}catch(error){status(`Wallet error: ${walletErrorMessage(error)}`);return}}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});window.ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }

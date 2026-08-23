@@ -1,9 +1,11 @@
 {
   "name": "relicforge-cloud-api",
-  "version": "11.1.0",
+  "version": "11.1.1",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
