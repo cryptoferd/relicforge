@@ -48,7 +48,7 @@ export default async function publicRoutes(app) {
     const chainId = Number(request.params.chainId);
     const contract = address(request.params.contract);
     const row = await one('SELECT mint_page,updated_at FROM collections WHERE chain_id=$1 AND contract_address=$2', [chainId, contract]);
-    reply.header('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=300');
+    reply.header('Cache-Control', 'no-store');
     if (!row) return { config: { chainId, contract: getAddress(contract) }, published: false };
     const config = { ...(row.mint_page || {}), chainId, contract: getAddress(contract) };
     if (config.collectionImageAssetId) config.collectionImage = publicAssetUrl(request, config.collectionImageAssetId);

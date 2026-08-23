@@ -93,7 +93,9 @@
   async function hydratePublishedConfig(){
     if(!API_BASE||!requestedContract||!ethers.isAddress(requestedContract))return;
     try{
-      const published=await apiJson(`/api/public/mint/${requestedChain}/${requestedContract}/config`);
+      const res=await fetch(apiUrl(`/api/public/mint/${requestedChain}/${requestedContract}/config`),{headers:{accept:'application/json'},cache:'no-store'});
+      const published=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(published.error||`RelicForge API ${res.status}`);
       config={...localConfig,...(published.config||{}),...embedded,contract:requestedContract,chainId:requestedChain};
     }catch(error){console.warn('RelicForge cloud mint config unavailable:',error.message)}
   }

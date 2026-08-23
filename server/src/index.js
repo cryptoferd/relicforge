@@ -26,7 +26,7 @@ await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' }
 
 app.get('/health', async () => {
   await db.query('SELECT 1');
-  return { ok: true, service: 'relicforge-cloud-api', version: '11.0.2', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
+  return { ok: true, service: 'relicforge-cloud-api', version: '11.0.3', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
 });
 await app.register(authRoutes);
 await app.register(projectRoutes);
