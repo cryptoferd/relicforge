@@ -13,13 +13,18 @@
     'function renderMode(uint256 tokenId) view returns (uint8)','function holderRenderModeEnabled() view returns (bool)','function setRenderMode(uint256 tokenId,uint8 mode)',
     'function mint(uint32 quantity) payable returns (uint256)','function whitelistMint(uint32 quantity,uint32 allowance,bytes32[] proof) payable returns (uint256)'
   ];
-  const RPC_BY_CHAIN = API_BASE ? {
-    11155111: [apiUrl('/api/public/rpc/11155111')],
-    1: [apiUrl('/api/public/rpc/1')]
-  } : {
+  const PUBLIC_RPC_FALLBACKS = {
     11155111: ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://rpc.sepolia.org'],
     1: ['https://ethereum-rpc.publicnode.com','https://eth.drpc.org']
   };
+  function rpcCandidates(chainId){
+    const id=Number(chainId);
+    // When V11 Cloud is configured, every mapped EVM network uses the same
+    // Railway safe-RPC endpoint. Railway selects the Alchemy hostname and
+    // appends the private ALCHEMY_API_KEY server-side.
+    if(API_BASE)return [apiUrl(`/api/public/rpc/${id}`)];
+    return PUBLIC_RPC_FALLBACKS[id]||[];
+  }
   const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
   const ZERO = ethers.ZeroAddress.toLowerCase();
   const params = new URLSearchParams(location.search);
@@ -150,10 +155,10 @@
     // V11: when RelicForge Cloud is configured, reads go through the Alchemy-backed
     // safe relay. The injected wallet is reserved for signing transactions.
     if(API_BASE&&publicProvider)return publicProvider;
-    if(API_BASE){const list=RPC_BY_CHAIN[Number(config.chainId)]||[];if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}}
+    if(API_BASE){const list=rpcCandidates(config.chainId);if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}}
     if(browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
-    const list=RPC_BY_CHAIN[Number(config.chainId)]||[];
+    const list=rpcCandidates(config.chainId);
     if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}
     if(window.ethereum){browserProvider=new ethers.BrowserProvider(window.ethereum);return browserProvider}
     throw new Error('Connect a wallet to read this collection.');
@@ -190,7 +195,7 @@
     if(API_BASE&&publicProvider)return publicProvider;
     if(!API_BASE&&browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
-    const candidates=RPC_BY_CHAIN[Number(config.chainId)]||[];
+    const candidates=rpcCandidates(config.chainId);
     let lastError=null;
     for(const rpc of candidates){
       try{

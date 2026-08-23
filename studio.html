@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=11.0.0" />
+  <link rel="stylesheet" href="./styles.css?v=11.0.1" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -379,7 +379,7 @@
                 <option value="1">Ethereum Mainnet</option>
                 <option value="11155111">Ethereum Sepolia</option>
               </select>
-              <small>The whitelist source can be different from the network where you deploy the new collection.</small>
+              <small>The whitelist source can be different from the deployment network. When RelicForge Cloud is connected, mapped Alchemy EVM networks load here automatically.</small>
             </label>
             <label class="field"><span>Collection contract</span><input id="whitelistCollectionAddress" placeholder="0x..." type="text"/></label>
           </div>
@@ -651,11 +651,11 @@
   </section>
 </div>
 
-  <script src="./relicforge-config.js?v=11.0.0"></script>
+  <script src="./relicforge-config.js?v=11.0.1"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./cloud.js?v=11.0.0" defer></script>
-  <script src="./app.js?v=11.0.0" defer></script>
-  <script src="./forge.js?v=11.0.0" defer></script>
-  <script src="./project-storage.js?v=11.0.0" defer></script>
+  <script src="./cloud.js?v=11.0.1" defer></script>
+  <script src="./app.js?v=11.0.1" defer></script>
+  <script src="./forge.js?v=11.0.1" defer></script>
+  <script src="./project-storage.js?v=11.0.1" defer></script>
 </body>
 </html>

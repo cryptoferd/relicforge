@@ -7,5 +7,5 @@ window.RELICFORGE_CONFIG = Object.freeze({
   // Leave blank to use apiBase.
   renderBase: '',
   cloudEnabled: true,
-  version: '11.0.0'
+  version: '11.0.1'
 });

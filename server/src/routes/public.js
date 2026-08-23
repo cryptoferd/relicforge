@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { getAddress } from 'ethers';
 import { db, one } from '../lib/db.js';
 import { collectionFor, providerFor, rpcUrl } from '../lib/rpc.js';
+import { publicAlchemyNetworkCatalog } from '../lib/alchemy-networks.js';
 import { getBuffer, objectKey, putBuffer } from '../lib/storage.js';
 
 const STATE_CACHE = new Map();
@@ -34,6 +35,15 @@ function validateRpcCall(call) {
 }
 
 export default async function publicRoutes(app) {
+  app.get('/api/public/networks', async (request, reply) => {
+    reply.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    return {
+      provider: 'alchemy',
+      apiKeyConfigured: Boolean(process.env.ALCHEMY_API_KEY),
+      networks: publicAlchemyNetworkCatalog()
+    };
+  });
+
   app.get('/api/public/mint/:chainId/:contract/config', async (request, reply) => {
     const chainId = Number(request.params.chainId);
     const contract = address(request.params.contract);
@@ -107,7 +117,12 @@ export default async function publicRoutes(app) {
       const calls = Array.isArray(request.body) ? request.body : [request.body];
       if (!calls.length || calls.length > 20) throw new Error('RPC batch size must be 1-20.');
       calls.forEach(validateRpcCall);
-      const response = await fetch(rpcUrl(Number(request.params.chainId)), {
+      const chainId = Number(request.params.chainId);
+      // Force an eth_chainId verification through ethers before using a mapped
+      // endpoint. This protects against an outdated/incorrect endpoint->chain
+      // mapping and fails closed instead of silently reading a different chain.
+      await providerFor(chainId).getNetwork();
+      const response = await fetch(rpcUrl(chainId), {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request.body)
       });
       const text = await response.text();

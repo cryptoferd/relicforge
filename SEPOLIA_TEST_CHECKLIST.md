@@ -1,13 +1,16 @@
-# Relic Forge V11.0.0 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.0.1 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.0.0" }`.
+- [ ] `/health` returns `{ ok: true, version: "11.0.1" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
-- [ ] `ALCHEMY_ETH_MAINNET_URL` works server-side.
-- [ ] `ALCHEMY_ETH_SEPOLIA_URL` works server-side.
+- [ ] Railway has one private `ALCHEMY_API_KEY` variable (no per-network Alchemy URL secrets required).
+- [ ] `GET /api/public/networks` returns the non-secret EVM endpoint catalog with no API key.
+- [ ] `POST /api/public/rpc/1` reaches Ethereum Mainnet through Alchemy.
+- [ ] `POST /api/public/rpc/11155111` reaches Ethereum Sepolia through Alchemy.
+- [ ] At least one additional mapped chain (for example Base `8453` or Robinhood Chain `4663`) returns the correct `eth_chainId`.
 - [ ] No Alchemy key appears in page source, `relicforge-config.js`, or browser network request URLs.
 - [ ] `PUBLIC_API_BASE`, `apiBase`, and `renderBase` use the intended stable API hostname.
 

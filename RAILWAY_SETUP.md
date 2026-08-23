@@ -1,4 +1,4 @@
-# RelicForge V11 — Railway + Alchemy Setup
+# RelicForge V11.0.1 — Railway + Alchemy Setup
 
 This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test deployment.
 
@@ -6,7 +6,7 @@ This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test
 
 - The V11 repository pushed to GitHub.
 - A Railway account.
-- An Alchemy account with Ethereum Mainnet and Ethereum Sepolia access.
+- An Alchemy account. V11.0.1 uses one private API key with a built-in EVM endpoint registry instead of one Railway variable per chain.
 - Your existing static frontend host (GitHub Pages or Vercel is fine).
 - Preferably a stable API hostname you control, e.g. `api.relicforge.xyz`.
 
@@ -102,28 +102,56 @@ Project files remain private; cross-device restore gets an authenticated presign
 
 ---
 
-## 4. Add the Alchemy endpoints
+## 4. Add Alchemy — one key, all mapped EVM endpoints
 
-In Alchemy, copy the private HTTPS endpoint for each network you will use.
-
-Add these **only to the Railway API service**:
+V11.0.1 no longer stores a full Alchemy URL per network. Add **one private variable** to the Railway API service:
 
 ```text
-ALCHEMY_ETH_MAINNET_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
-ALCHEMY_ETH_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+ALCHEMY_API_KEY=YOUR_PRIVATE_ALCHEMY_KEY
 ```
 
-Using explicit URLs is preferred because it makes the selected Alchemy app/network unambiguous.
-
-V11 also supports a shared:
+RelicForge keeps the non-secret endpoint bases in `server/src/lib/alchemy-networks.js` and builds the final URL only on Railway. For example:
 
 ```text
-ALCHEMY_API_KEY=...
+chain 1       -> https://eth-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
+chain 8453    -> https://base-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
+chain 42161   -> https://arb-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
+chain 4663    -> https://robinhood-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
 ```
 
-and constructs the standard Ethereum Mainnet/Sepolia URLs automatically, but the explicit URL variables above are easier to audit.
+The key is never returned by `/api/public/networks`, `/api/public/rpc/:chainId`, the Studio frontend, or the mint page.
 
-**Never place either value in `relicforge-config.js`.** The public frontend talks to the Railway API; Railway talks to Alchemy.
+### Optional RPC overrides
+
+For an emergency provider change or a chain that should not use Alchemy, you may add either:
+
+```text
+RPC_8453_URL=https://your-custom-base-rpc.example
+```
+
+or one JSON variable for several chains:
+
+```text
+RPC_OVERRIDES_JSON={"8453":"https://your-custom-base-rpc.example","42161":"https://your-custom-arbitrum-rpc.example"}
+```
+
+For a newly launched Alchemy endpoint whose EIP-155 chain ID is not yet mapped in the built-in registry, map the chain ID to an existing Alchemy network key without changing source code:
+
+```text
+ALCHEMY_NETWORK_OVERRIDES_JSON={"123456":"some-network-mainnet"}
+```
+
+`RPC_<chainId>_URL` has highest priority, then `RPC_OVERRIDES_JSON`, then the Alchemy registry.
+
+**Never place `ALCHEMY_API_KEY` in `relicforge-config.js`, GitHub, a Vercel public environment variable, or a standalone mint page.**
+
+The public non-secret catalog is available after deployment at:
+
+```text
+GET /api/public/networks
+```
+
+That endpoint is also what Studio uses to populate supported whitelist snapshot networks.
 
 ---
 
@@ -199,7 +227,7 @@ window.RELICFORGE_CONFIG = Object.freeze({
   apiBase: 'https://api.relicforge.xyz',
   renderBase: 'https://api.relicforge.xyz',
   cloudEnabled: true,
-  version: '11.0.0'
+  version: '11.0.1'
 });
 ```
 
@@ -223,7 +251,7 @@ Expected shape:
 {
   "ok": true,
   "service": "relicforge-cloud-api",
-  "version": "11.0.0"
+  "version": "11.0.1"
 }
 ```
 

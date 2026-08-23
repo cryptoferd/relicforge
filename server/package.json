@@ -1,6 +1,6 @@
 {
   "name": "relicforge-cloud-api",
-  "version": "11.0.0",
+  "version": "11.0.1",
   "private": true,
   "type": "module",
   "engines": { "node": ">=20" },
@@ -8,7 +8,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node scripts/migrate.js",
-    "check": "node --check src/index.js && node --check src/lib/auth.js && node --check src/lib/db.js && node --check src/lib/rpc.js && node --check src/lib/storage.js && node --check src/routes/auth.js && node --check src/routes/projects.js && node --check src/routes/assets.js && node --check src/routes/collections.js && node --check src/routes/public.js"
+    "check": "node --check src/index.js && node --check src/lib/auth.js && node --check src/lib/db.js && node --check src/lib/rpc.js && node --check src/lib/alchemy-networks.js && node --check src/lib/storage.js && node --check src/routes/auth.js && node --check src/routes/projects.js && node --check src/routes/assets.js && node --check src/routes/collections.js && node --check src/routes/public.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",

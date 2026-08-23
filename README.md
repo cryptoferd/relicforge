@@ -1,4 +1,4 @@
-# Relic Forge Studio V11.0.0 — Cloud + Alchemy + Render Modes
+# Relic Forge Studio V11.0.1 — Cloud + Alchemy + Render Modes
 
 V11 is the first cloud-backed RelicForge build. It keeps the existing static Studio/mint frontend, adds a Railway API under `/server`, moves cross-device project/mint-page persistence to PostgreSQL + Railway Bucket storage, and routes production blockchain reads through a server-side Alchemy connection.
 
@@ -24,14 +24,18 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - A restricted read-only JSON-RPC relay used by the current Studio/viewer/gallery code.
 - A flattened PNG renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
-### Alchemy
-The Alchemy key stays **only on Railway**. Do not put it in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+### Alchemy — one private key
+The Alchemy key stays **only on Railway**. V11.0.1 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
-Supported out of the box:
-- Ethereum Mainnet — chain ID `1`
-- Ethereum Sepolia — chain ID `11155111`
+The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 
-Additional EVM chains can be added later with `RPC_<chainId>_URL` Railway variables and frontend chain definitions.
+- `GET /api/public/networks` exposes the non-secret catalog.
+- `POST /api/public/rpc/:chainId` chooses the proper Alchemy hostname and appends the private key server-side.
+- Studio loads resolved catalog networks into the whitelist snapshot network selector automatically.
+- Mint-page Cloud reads are no longer hardcoded to Ethereum Mainnet/Sepolia.
+- `RPC_<chainId>_URL`, `RPC_OVERRIDES_JSON`, and `ALCHEMY_NETWORK_OVERRIDES_JSON` remain available for provider/new-chain overrides.
+
+RelicForge **deployment support remains deliberately separate from RPC support**. V11 test forging is still Sepolia-only until a Factory, implementation, randomness router, explorer and deployment flow are validated for each production chain.
 
 ### Public mint pages are cross-device
 Creator mint-page aesthetics are no longer dependent on the creator browser's `localStorage` when Cloud is configured. **Publish Mint Page** stores the public presentation config in PostgreSQL and the image/banner in the Railway Bucket.

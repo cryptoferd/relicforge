@@ -7,6 +7,7 @@ import assetRoutes from './routes/assets.js';
 import collectionRoutes from './routes/collections.js';
 import publicRoutes from './routes/public.js';
 import { db } from './lib/db.js';
+import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 25 * 1024 * 1024 });
 const origins = String(process.env.CORS_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -25,7 +26,7 @@ await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' }
 
 app.get('/health', async () => {
   await db.query('SELECT 1');
-  return { ok: true, service: 'relicforge-cloud-api', version: '11.0.0' };
+  return { ok: true, service: 'relicforge-cloud-api', version: '11.0.1', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
 });
 await app.register(authRoutes);
 await app.register(projectRoutes);

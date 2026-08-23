@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v11_0_0';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v11_0_1';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
   const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
   const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
@@ -78,6 +78,50 @@
       return cloudReadProviders.get(id);
     }
     return forgeState.provider;
+  }
+
+  async function loadCloudNetworkCatalog() {
+    const apiBase = String(window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
+    const select = $('whitelistSourceChain');
+    if (!apiBase || !select) return;
+    const previous = String(select.value || '1');
+    const response = await fetch(`${apiBase}/api/public/networks`, { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Network catalog HTTP ${response.status}`);
+    const payload = await response.json();
+    const networks = (payload.networks || []).filter(v => v && v.snapshotEnabled && Number.isInteger(Number(v.chainId)));
+    networks.forEach(v => {
+      const id = Number(v.chainId);
+      WHITELIST_SOURCE_CHAINS[id] = {
+        chainId: id,
+        label: v.label || `Chain ${id}`,
+        rpc: `${apiBase}/api/public/rpc/${id}`,
+        historyRpc: `${apiBase}/api/public/rpc/${id}`,
+        testnet: !!v.testnet,
+        alchemyKey: v.key || ''
+      };
+    });
+    const mainnets = networks.filter(v => !v.testnet).sort((a,b) => String(a.label).localeCompare(String(b.label)));
+    const testnets = networks.filter(v => v.testnet).sort((a,b) => String(a.label).localeCompare(String(b.label)));
+    select.innerHTML = '';
+    const appendGroup = (label, list) => {
+      if (!list.length) return;
+      const group = document.createElement('optgroup');
+      group.label = label;
+      list.forEach(v => {
+        const option = document.createElement('option');
+        option.value = String(v.chainId);
+        option.textContent = `${v.label} (${v.chainId})`;
+        group.appendChild(option);
+      });
+      select.appendChild(group);
+    };
+    appendGroup('Mainnets', mainnets);
+    appendGroup('Testnets', testnets);
+    if ([...select.options].some(o => o.value === previous)) select.value = previous;
+    else if ([...select.options].some(o => o.value === '1')) select.value = '1';
+    if ($('whitelistStatus') && payload.apiKeyConfigured === false) {
+      $('whitelistStatus').textContent = 'Alchemy network catalog loaded, but ALCHEMY_API_KEY is not configured on Railway yet.';
+    }
   }
 
   function fileToDataUrl(file) {
@@ -182,12 +226,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.0', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.1', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, version: '11.0.0' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, version: '11.0.1' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -1172,7 +1216,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.0.0');
+      const worker = new Worker('./js/solc-worker.js?v=11.0.1');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -2268,6 +2312,7 @@ ${await file.text()}`;
     ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
     restoreInfra();
     const cloudReady = !!window.RelicForgeCloud?.enabled?.();
+    if (cloudReady) loadCloudNetworkCatalog().catch(error => console.warn('RelicForge Alchemy network catalog unavailable:', error.message));
     const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
     if ($('rendererCloudStatus')) $('rendererCloudStatus').textContent = cloudReady
       ? `Cloud renderer ready at ${renderHost || window.RelicForgeCloud.apiBase()}. Flattened PNGs are generated from the contract's canonical renderToken() output and cached in Railway object storage.`
