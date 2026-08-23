@@ -1,4 +1,4 @@
-# RelicForge V11.0.7 — Railway + Alchemy Setup
+# RelicForge V11.0.8 — Railway + Alchemy Setup
 
 This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test deployment.
 
@@ -6,7 +6,7 @@ This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test
 
 - The V11 repository pushed to GitHub.
 - A Railway account.
-- An Alchemy account. V11.0.7 uses one private API key with a built-in EVM endpoint registry instead of one Railway variable per chain.
+- An Alchemy account. V11.0.8 uses one private API key with a built-in EVM endpoint registry instead of one Railway variable per chain.
 - Your existing static frontend host (GitHub Pages or Vercel is fine).
 - Preferably a stable API hostname you control, e.g. `api.relicforge.xyz`.
 
@@ -104,7 +104,7 @@ Project files remain private; cross-device restore gets an authenticated presign
 
 ## 4. Add Alchemy — one key, all mapped EVM endpoints
 
-V11.0.7 no longer stores a full Alchemy URL per network. Add **one private variable** to the Railway API service:
+V11.0.8 no longer stores a full Alchemy URL per network. Add **one private variable** to the Railway API service:
 
 ```text
 ALCHEMY_API_KEY=YOUR_PRIVATE_ALCHEMY_KEY
@@ -227,7 +227,7 @@ window.RELICFORGE_CONFIG = Object.freeze({
   apiBase: 'https://api.relicforge.xyz',
   renderBase: 'https://api.relicforge.xyz',
   cloudEnabled: true,
-  version: '11.0.7'
+  version: '11.0.8'
 });
 ```
 
@@ -251,7 +251,7 @@ Expected shape:
 {
   "ok": true,
   "service": "relicforge-cloud-api",
-  "version": "11.0.7"
+  "version": "11.0.8"
 }
 ```
 

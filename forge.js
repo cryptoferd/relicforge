@@ -24,6 +24,12 @@
     'function creatorMint(uint32 quantity) returns (uint256)','function requestCreatorReveal() returns (uint256)','function sealCollection()'
   ];
 
+  const PUBLIC_SEPOLIA_GAS_RPCS = [
+    'https://ethereum-sepolia-rpc.publicnode.com',
+    'https://sepolia.drpc.org',
+    'https://rpc.sepolia.org',
+  ];
+
   const WHITELIST_SOURCE_CHAINS = {
     1: { chainId: 1, label: 'Ethereum Mainnet', rpc: 'https://ethereum-rpc.publicnode.com', historyRpc: 'https://eth.drpc.org' },
     11155111: { chainId: 11155111, label: 'Ethereum Sepolia', rpc: 'https://ethereum-sepolia-rpc.publicnode.com', historyRpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
@@ -268,12 +274,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.7', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.8', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.0.7' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.0.8' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -743,7 +749,7 @@ ${await file.text()}`;
       encodingCode = 0;
       encoding = 'animated-gif-svg';
       if (chosenData.length > MAX_TRAIT_BYTES) {
-        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.0.7 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
+        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.0.8 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
       }
     }
     // PNG is already highly compressed. Vectorizing every pixel can be much larger,
@@ -1176,6 +1182,39 @@ ${await file.text()}`;
     $('forgeCompiledSummary').innerHTML = `<strong>${esc(c.core.name)}</strong> · ${c.recipeCount.toLocaleString()} NFTs · ${c.layerDefs.length} layers · ${c.traits.length} traits · ${fmtBytes(c.totalCompiledBytes)} compiled · ${c.artShards.length} art shard(s) + ${c.dnaShards.length} DNA shard(s).`;
   }
 
+  const publicGasProviders = new Map();
+  function publicGasProvider(rpc) {
+    if (!window.ethers) return null;
+    if (!publicGasProviders.has(rpc)) publicGasProviders.set(rpc, new window.ethers.JsonRpcProvider(rpc, 11155111, { staticNetwork: true, batchMaxCount: 1 }));
+    return publicGasProviders.get(rpc);
+  }
+
+  async function liveSepoliaGasPrice() {
+    let lastError = null;
+    for (const rpc of PUBLIC_SEPOLIA_GAS_RPCS) {
+      try {
+        const provider = publicGasProvider(rpc);
+        const raw = await Promise.race([
+          provider.send('eth_gasPrice', []),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Public gas RPC timeout')), 3500)),
+        ]);
+        const gasPrice = BigInt(raw);
+        if (gasPrice > 0n) return { gasPrice, source: 'Public RPC' };
+      } catch (error) { lastError = error; }
+    }
+    // A connected wallet is a safe fallback because it uses the user's wallet RPC,
+    // not the RelicForge Railway/Alchemy account.
+    if (forgeState.provider) {
+      try {
+        const raw = await forgeState.provider.send('eth_gasPrice', []);
+        const gasPrice = BigInt(raw);
+        if (gasPrice > 0n) return { gasPrice, source: 'Wallet RPC' };
+      } catch (error) { lastError = error; }
+    }
+    if (lastError) console.warn('Live Sepolia gas price unavailable:', lastError.message || lastError);
+    return null;
+  }
+
   function roughGasBreakdown(c) {
     const shardGas = bytes => 75000 + bytes * 225;
     const art = c.artShards.reduce((n, shard) => n + shardGas(shard.length), 0);
@@ -1211,16 +1250,18 @@ ${await file.text()}`;
     }
     const b = roughGasBreakdown(forgeState.compiled);
     let totalText = `~${b.total.toLocaleString()} gas`;
-    let feeText = 'Connect wallet for live Sepolia fee data';
+    let feeText = 'Live public Sepolia gas unavailable · enter custom gwei if needed';
     let liveGwei = null;
+    let gasSource = '';
     try {
-      if (forgeState.provider && window.ethers) {
-        const fee = await (readProvider(11155111) || forgeState.provider).getFeeData();
-        forgeState.gasPrice = fee.gasPrice || fee.maxFeePerGas;
+      if (window.ethers) {
+        const live = await liveSepoliaGasPrice();
+        forgeState.gasPrice = live?.gasPrice || null;
+        gasSource = live?.source || '';
         if (forgeState.gasPrice) liveGwei = Number(window.ethers.formatUnits(forgeState.gasPrice, 'gwei'));
       }
     } catch (_) {}
-    if ($('forgeCurrentGwei')) $('forgeCurrentGwei').textContent = liveGwei == null ? 'Current: unavailable' : `Current: ${liveGwei.toFixed(2)} gwei`;
+    if ($('forgeCurrentGwei')) $('forgeCurrentGwei').textContent = liveGwei == null ? 'Current: unavailable' : `Current: ${liveGwei.toFixed(3)} gwei${gasSource ? ` · ${gasSource}` : ''}`;
 
     let selectedGwei = liveGwei;
     if (currentGweiMode() === 'custom') {
@@ -1295,7 +1336,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.0.7');
+      const worker = new Worker('./js/solc-worker.js?v=11.0.8');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();

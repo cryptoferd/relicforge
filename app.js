@@ -37,6 +37,8 @@
     oneOfOnes: [],
     categoryPendingFiles: [],
     hideNoneMetadata: false,
+    previewPage: 1,
+    previewPageSize: 48,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -93,6 +95,12 @@
     collectionStats: $('#collectionStats'),
     rarityAudit: $('#rarityAudit'),
     previewGrid: $('#previewGrid'),
+    collectionPreviewToolbar: $('#collectionPreviewToolbar'),
+    previewRange: $('#previewRange'),
+    previewPageLabel: $('#previewPageLabel'),
+    previewPageSize: $('#previewPageSize'),
+    previewPrevBtn: $('#previewPrevBtn'),
+    previewNextBtn: $('#previewNextBtn'),
     toLaunchBtn: $('#toLaunchBtn'),
     launchName: $('#launchName'),
     launchSummaryTitle: $('#launchSummaryTitle'),
@@ -2126,6 +2134,8 @@
     el.compilerStatus.innerHTML = `<div class="compiler-box"><strong>Forging collection…</strong><ul><li>Allocating exact trait amounts</li><li>Applying manual token recipes</li><li>Resolving shared trait rules</li><li>Checking duplicates</li></ul></div>`;
     el.previewGrid.innerHTML = '';
     el.previewControls.classList.add('hidden');
+    el.collectionPreviewToolbar?.classList.add('hidden');
+    state.previewPage = 1;
     el.toLaunchBtn.disabled = true;
 
     await new Promise(resolve => setTimeout(resolve, 35));
@@ -2139,6 +2149,7 @@
       renderCompilerReport();
       await renderPreviewGrid();
       el.previewControls.classList.remove('hidden');
+      el.collectionPreviewToolbar?.classList.remove('hidden');
       el.toLaunchBtn.disabled = result.report.ruleViolations > 0 || result.report.exactIssues.length > 0 || result.report.distributionIssues.length > 0;
       if (!el.toLaunchBtn.disabled) showStatus('Collection compiled successfully.', 'success');
     } catch (error) {
@@ -2546,29 +2557,50 @@
     }
   }
 
+  function updatePreviewPagination() {
+    const total = state.compiledTokens.length;
+    const pageSize = Math.max(1, Number(state.previewPageSize || 48));
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    state.previewPage = Math.min(Math.max(1, Number(state.previewPage || 1)), totalPages);
+    const start = total ? ((state.previewPage - 1) * pageSize) + 1 : 0;
+    const end = total ? Math.min(total, state.previewPage * pageSize) : 0;
+    if (el.previewRange) el.previewRange.textContent = total ? `Tokens ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}` : 'No compiled tokens';
+    if (el.previewPageLabel) el.previewPageLabel.textContent = `Page ${state.previewPage.toLocaleString()} of ${totalPages.toLocaleString()}`;
+    if (el.previewPrevBtn) el.previewPrevBtn.disabled = state.previewPage <= 1;
+    if (el.previewNextBtn) el.previewNextBtn.disabled = state.previewPage >= totalPages;
+    if (el.previewPageSize && String(el.previewPageSize.value) !== String(pageSize)) el.previewPageSize.value = String(pageSize);
+    return { total, pageSize, totalPages, start, end };
+  }
+
   async function renderPreviewGrid() {
     const tokens = state.compiledTokens;
-    if (!tokens.length) return;
-    const picks = [];
-    const max = Math.min(12, tokens.length);
-    for (let i = 0; i < max; i++) {
-      const index = max === 1 ? 0 : Math.floor(i * (tokens.length - 1) / (max - 1));
-      picks.push(tokens[index]);
+    if (!tokens.length) {
+      el.previewGrid.innerHTML = '';
+      updatePreviewPagination();
+      return;
     }
-    el.previewGrid.innerHTML = picks.map(token => `
-      <article class="preview-card" data-token-id="${token.tokenId}">
-        <div class="preview-canvas-wrap"><div class="svg-preview-host preview-svg-host" role="img" aria-label="SVG token preview"></div></div>
+    const { pageSize } = updatePreviewPagination();
+    const offset = (state.previewPage - 1) * pageSize;
+    const picks = tokens.slice(offset, offset + pageSize);
+    el.previewGrid.innerHTML = picks.map(token => {
+      const traitNames = token.oneOfOneId
+        ? [`1/1 · ${getOneOfOne(token.oneOfOneId)?.name || 'Standalone'}`]
+        : state.layers.map(layer => `${layer.name}: ${getTrait(token.traits[layer.id])?.name || '—'}`);
+      return `
+      <article class="preview-card" data-token-id="${token.tokenId}" title="${escapeHtml(traitNames.join(' · '))}">
+        <div class="preview-canvas-wrap"><div class="svg-preview-host preview-svg-host" role="img" aria-label="Rendered token #${token.tokenId}"></div></div>
         <div class="preview-card-body">
           <strong>#${token.tokenId}</strong>
           <div class="preview-traits">${token.oneOfOneId ? `<span>1/1 · ${escapeHtml(getOneOfOne(token.oneOfOneId)?.name || 'Standalone')}</span>` : state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || '—')}</span>`).join('')}</div>
         </div>
-      </article>
-    `).join('');
-    await Promise.all(picks.map(async token => {
+      </article>`;
+    }).join('');
+    await Promise.allSettled(picks.map(async token => {
       const card = $(`.preview-card[data-token-id="${token.tokenId}"]`, el.previewGrid);
       const host = $('.preview-svg-host', card);
       await renderTokenToSvgHost(token, host);
     }));
+    updatePreviewPagination();
   }
 
   function manifestObject() {
@@ -2778,6 +2810,7 @@
     const savedCompilerReport = saved.compilerReport || null;
     const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '11.0.0';
     state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) }, oneOfOneId: token.oneOfOneId || null }));
+    state.previewPage = 1;
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
     state.imageHeight = Number(saved.imageHeight || state.layers[0]?.traits[0]?.height || 1000);
@@ -2796,7 +2829,11 @@
     renderRulesList();
     updateStep1State();
     if (state.compilerReport) renderCompilerReport();
-    if (state.compiledTokens.length) await renderPreviewGrid();
+    if (state.compiledTokens.length) {
+      await renderPreviewGrid();
+      el.previewControls?.classList.remove('hidden');
+      el.collectionPreviewToolbar?.classList.remove('hidden');
+    }
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
     if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V11.0.0 compiler before forging.`, 'warn');
@@ -2891,7 +2928,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.0.7',
+    version: '11.0.8',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2904,7 +2941,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.7' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.8' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
@@ -3326,6 +3363,25 @@
   $('#exportCsvBtn').addEventListener('click', () => {
     if (!state.compiledTokens.length) return;
     downloadText(`${slug(el.collectionName.value)}-manifest.csv`, manifestCsv(), 'text/csv');
+  });
+
+  el.previewPrevBtn?.addEventListener('click', () => {
+    if (state.previewPage <= 1) return;
+    state.previewPage -= 1;
+    renderPreviewGrid().catch(error => showStatus(error.message, 'error'));
+    el.collectionPreviewToolbar?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  el.previewNextBtn?.addEventListener('click', () => {
+    const totalPages = Math.max(1, Math.ceil(state.compiledTokens.length / Math.max(1, state.previewPageSize)));
+    if (state.previewPage >= totalPages) return;
+    state.previewPage += 1;
+    renderPreviewGrid().catch(error => showStatus(error.message, 'error'));
+    el.collectionPreviewToolbar?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  el.previewPageSize?.addEventListener('change', () => {
+    state.previewPageSize = Math.max(1, Number(el.previewPageSize.value || 48));
+    state.previewPage = 1;
+    renderPreviewGrid().catch(error => showStatus(error.message, 'error'));
   });
 
   // Project + launch exports

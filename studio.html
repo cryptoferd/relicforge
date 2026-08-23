@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=11.0.7" />
+  <link rel="stylesheet" href="./styles.css?v=11.0.8" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -306,7 +306,7 @@
 <div>
 <div class="eyebrow">STEP 4</div>
 <h2>Preview the collection</h2>
-<p>We’ll compile a deterministic collection recipe first, then render sample NFTs from your uploaded layers.</p>
+<p>Compile a deterministic collection recipe, then browse every rendered NFT in the collection with paginated previews.</p>
 </div>
 <div class="inline-actions">
 <label class="field seed-field">
@@ -330,6 +330,15 @@
 <button class="ghost-btn" id="exportManifestBtn" type="button">Export Final Manifest</button>
 <button class="ghost-btn" id="exportCsvBtn" type="button">Export CSV</button>
 </div>
+</div>
+<div class="collection-preview-toolbar hidden" id="collectionPreviewToolbar">
+  <div class="collection-preview-range"><span>FULL COLLECTION PREVIEW</span><strong id="previewRange">Tokens 0–0 of 0</strong><small>Every compiled token is available here; pages are rendered on demand to keep Studio responsive.</small></div>
+  <div class="collection-preview-pagination">
+    <label><span>Per page</span><select id="previewPageSize"><option value="24">24</option><option selected value="48">48</option><option value="96">96</option></select></label>
+    <button class="ghost-btn" id="previewPrevBtn" type="button">← Previous</button>
+    <strong id="previewPageLabel">Page 1 of 1</strong>
+    <button class="ghost-btn" id="previewNextBtn" type="button">Next →</button>
+  </div>
 </div>
 <div class="preview-grid" id="previewGrid"></div>
 <div class="panel-footer">
@@ -511,7 +520,7 @@
         </div>
       </div>
       <div class="forge-rows" id="forgeCostBreakdown"></div>
-      <small class="forge-footnote">Live ETH cost uses the connected wallet provider's current Sepolia fee data. Final wallet gas estimation remains authoritative.</small>
+      <small class="forge-footnote">Live gwei is read from public Sepolia RPCs and does not use the RelicForge Alchemy key. The connected wallet remains authoritative for the final transaction gas estimate.</small>
     </article>
 
     <article class="forge-workbench-card forge-deploy-card">
@@ -654,11 +663,11 @@
   </section>
 </div>
 
-  <script src="./relicforge-config.js?v=11.0.7"></script>
+  <script src="./relicforge-config.js?v=11.0.8"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./cloud.js?v=11.0.7" defer></script>
-  <script src="./app.js?v=11.0.7" defer></script>
-  <script src="./forge.js?v=11.0.7" defer></script>
-  <script src="./project-storage.js?v=11.0.7" defer></script>
+  <script src="./cloud.js?v=11.0.8" defer></script>
+  <script src="./app.js?v=11.0.8" defer></script>
+  <script src="./forge.js?v=11.0.8" defer></script>
+  <script src="./project-storage.js?v=11.0.8" defer></script>
 </body>
 </html>

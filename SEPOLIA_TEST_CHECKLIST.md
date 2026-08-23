@@ -1,8 +1,8 @@
-# Relic Forge V11.0.7 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.0.8 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.0.7" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.0.8" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -107,7 +107,7 @@
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
 
-## Animated GIF acceptance (V11.0.7)
+## Animated GIF acceptance (V11.0.8)
 
 - [ ] Upload an animated GIF as a normal trait using folder import.
 - [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
@@ -123,3 +123,13 @@
 - [ ] Upload GIF mint-page collection art/banner and confirm Cloud/Railway restores and serves it on another device.
 - [ ] If Creator Reveal is used, upload a small GIF placeholder and confirm the unrevealed token animation is preserved.
 - [ ] Confirm holder-selected flattened PNG mode is static by design and does not replace the canonical animated `renderToken()` output.
+
+
+## V11.0.8 public gas + full preview acceptance
+
+- [ ] Compile a collection while no wallet is connected and confirm Current GWEI populates from a public Sepolia RPC when available.
+- [ ] Confirm the gas-price network requests go directly to public Sepolia RPC hosts and not `/api/public/rpc/11155111`.
+- [ ] Disconnect/block the first public RPC and confirm another public RPC or the connected wallet RPC can supply GWEI.
+- [ ] Build a collection larger than 12 tokens and confirm every token can be reached through Preview pagination.
+- [ ] Verify 24 / 48 / 96 page-size options, Previous/Next disabling, token ranges, and page counts.
+- [ ] Verify animated GIF traits remain animated on paginated preview pages.

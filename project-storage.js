@@ -377,7 +377,7 @@
     const snapshot = await encodeBackupValue({ studio, forge }, assets, fileMap);
     return {
       schema: BACKUP_SCHEMA,
-      relicForgeVersion: '11.0.7',
+      relicForgeVersion: '11.0.8',
       exportedAt: new Date().toISOString(),
       project: {
         name: String(name || studio?.ui?.collectionName || 'Untitled Collection'),
@@ -430,7 +430,7 @@
     try { backup = JSON.parse(await file.text()); }
     catch { throw new Error('That file is not a valid Relic Forge project backup.'); }
     if (backup?.schema !== BACKUP_SCHEMA || !backup?.project?.snapshot?.studio) {
-      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.0.7 .relicforge backup for portable projects.');
+      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.0.8 .relicforge backup for portable projects.');
       throw new Error('Unsupported Relic Forge backup format.');
     }
     const assetMap = new Map();
@@ -578,7 +578,7 @@
   }
 
   window.RelicForgeProjects = {
-    version: '11.0.7',
+    version: '11.0.8',
     connectWallet,
     saveProject,
     openManager,

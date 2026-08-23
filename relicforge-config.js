@@ -10,7 +10,9 @@ window.RELICFORGE_CONFIG = Object.freeze({
   // Public mint pages use direct public RPCs first. Change to 'alchemy-first'
   // after upgrading Alchemy if you want Railway/Alchemy to become primary again.
   mintRpcMode: 'public-first',
+  // Studio gas-price discovery is intentionally public-only; it never consumes the private Alchemy key.
+  studioGasRpcMode: 'public-only',
   maxCloudProjects: 10,
   mintPageMaxBytes: 2 * 1024 * 1024,
-  version: '11.0.7'
+  version: '11.0.8'
 });
