@@ -172,7 +172,7 @@
   function publicUrl(path) { return `${apiBase()}${path}`; }
 
   window.RelicForgeCloud = {
-    version: '11.1.1', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.2', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();

@@ -1,8 +1,8 @@
-# Relic Forge V11.1.1 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.1.2 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.1.1" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.1.2" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -107,7 +107,7 @@
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
 
-## Animated GIF acceptance (V11.1.1)
+## Animated GIF acceptance (V11.1.2)
 
 - [ ] Upload an animated GIF as a normal trait using folder import.
 - [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
@@ -125,7 +125,7 @@
 - [ ] Confirm holder-selected Offchain Render preserves an animated GIF token and does not replace the canonical animated `renderToken()` output.
 
 
-## V11.1.1 public gas + full preview acceptance
+## V11.1.2 public gas + full preview acceptance
 
 - [ ] Compile a collection while no wallet is connected and confirm Current GWEI populates from a public Sepolia RPC when available.
 - [ ] Confirm the gas-price network requests go directly to public Sepolia RPC hosts and not `/api/public/rpc/11155111`.
@@ -135,7 +135,7 @@
 - [ ] Verify animated GIF traits remain animated on paginated preview pages.
 
 
-## V11.1.1 layer delineation acceptance
+## V11.1.2 layer delineation acceptance
 
 - [ ] Each rarity layer is visually enclosed by a stronger rounded border and clearly separated from adjacent layers.
 - [ ] Layer header, rarity-order hint, and trait grid read as three distinct internal bands.

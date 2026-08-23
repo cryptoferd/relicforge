@@ -1424,7 +1424,7 @@ body.modal-open { overflow: hidden; }
 
 @media (max-width: 720px) { .collection-preview-toolbar { margin-left:20px; margin-right:20px; align-items:stretch; flex-direction:column; } .collection-preview-pagination { justify-content:flex-start; } .preview-grid { grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); padding-left:20px; padding-right:20px; } }
 
-/* V11.1.1 — stronger visual delineation for rarity/layer configuration */
+/* V11.1.2 — stronger visual delineation for rarity/layer configuration */
 .trait-setup {
   gap: 20px;
   padding-top: 4px;
@@ -1586,7 +1586,7 @@ body.modal-open { overflow: hidden; }
 }
 
 /* =========================================================
-   V11.1.1 — Studio navigation, save safety, dashboard page,
+   V11.1.2 — Studio navigation, save safety, dashboard page,
    layer hierarchy, and unified Relic Forge typography
    ========================================================= */
 
@@ -1809,4 +1809,26 @@ body.modal-open { overflow: hidden; }
   .trait-config-toolbar .mini-select select { min-width: 0; width: 100%; }
   .trait-config-toolbar .percent-total,
   .trait-config-toolbar .exact-total { margin-left: 0; justify-self: end; }
+}
+
+/* V11.1.2 — keep per-trait rarity tier names readable. */
+.trait-config-controls.tier-mode {
+  grid-template-columns: minmax(112px, 1fr);
+}
+.trait-config-controls.tier-mode .rarity-select {
+  width: 100%;
+  min-width: 112px;
+  padding-left: 10px;
+  padding-right: 30px;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .trait-config-controls.tier-mode {
+    grid-template-columns: minmax(108px, 1fr);
+  }
+  .trait-config-controls.tier-mode .rarity-select {
+    min-width: 108px;
+  }
 }

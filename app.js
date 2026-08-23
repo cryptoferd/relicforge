@@ -885,7 +885,7 @@
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
                   ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
                 </div>
-                <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : ''}">
+                <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : (autoMode && layer.rarityMode === 'tier' ? 'tier-mode' : '')}">
                   ${showExact
                     ? `<input class="exact-count" type="number" min="0" max="${genSupply}" placeholder="Blank / auto" value="${trait.exactCount == null ? '' : trait.exactCount}" aria-label="Exact amount for ${escapeHtml(trait.name)}" />${trait.exactManual ? '<span class="input-manual-badge">Manual</span>' : '<span class="input-tag">#</span>'}`
                     : autoMode && layer.rarityMode === 'percentage'
@@ -2932,7 +2932,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.1.1',
+    version: '11.1.2',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2945,7 +2945,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.1' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.2' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
