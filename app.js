@@ -2053,7 +2053,7 @@
     return {
       tokens: allRecipes,
       report: {
-        compilerVersion: '10.10.1',
+        compilerVersion: '11.0.0',
         supply: totalSupply,
         generativeSupply: supply,
         oneOfOneCount: state.oneOfOnes.length,
@@ -2720,7 +2720,7 @@
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
     const savedCompilerReport = saved.compilerReport || null;
-    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '10.10.1';
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '11.0.0';
     state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) }, oneOfOneId: token.oneOfOneId || null }));
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
     state.imageWidth = Number(saved.imageWidth || state.layers[0]?.traits[0]?.width || 1000);
@@ -2743,7 +2743,7 @@
     if (state.compiledTokens.length) await renderPreviewGrid();
     gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
     updateLaunchSummary();
-    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V10.10.1 compiler before forging.`, 'warn');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V11.0.0 compiler before forging.`, 'warn');
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
@@ -2835,7 +2835,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '10.10.1',
+    version: '11.0.0',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2848,7 +2848,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '10.10.1' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.0' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

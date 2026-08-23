@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=10.10.1" />
+  <link rel="stylesheet" href="./styles.css?v=11.0.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -26,7 +26,7 @@
 <button class="ghost-btn" id="exportProjectBtn" type="button">Export Project</button>
 </div>
 </header>
-<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save editable projects in this browser.</div>
+<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save locally. With RelicForge Cloud configured, the same save also syncs across devices.</div>
 <main>
 <section class="hero-panel studio-hero-panel">
 <div>
@@ -424,6 +424,13 @@
     </div>
 
     <div class="launch-card">
+      <h3>Rendering</h3>
+      <label class="project-toggle-row"><span><strong>Holder render switching</strong><small>Let NFT owners switch their token between the canonical fully-onchain SVG and a flattened PNG served by RelicForge Cloud.</small></span><input id="holderRenderModeEnabled" type="checkbox" checked/></label>
+      <label class="field"><span>Default display</span><select id="defaultRenderMode"><option value="0" selected>Fully Onchain SVG</option><option value="1">Flattened PNG</option></select><small>The onchain SVG always remains the canonical renderer. A holder can always switch back to it.</small></label>
+      <div class="prototype-note"><strong>Flattened PNG renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will generate PNGs from the contract's onchain renderToken() output and cache them for marketplaces.</p></div>
+    </div>
+
+    <div class="launch-card">
       <h3>Network + wallet</h3>
       <label class="field"><span>Chain</span>
         <select id="chainSelect" disabled><option>Ethereum Sepolia</option></select>
@@ -448,7 +455,7 @@
     <article class="forge-workbench-card mint-page-builder-card">
       <div class="forge-card-heading">
         <div><span>PUBLIC MINT PAGE</span><h3>Customize the minter experience</h3></div>
-        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">Open Mint Page</button><button class="primary-btn" disabled id="downloadMintPageBtn" type="button">Download Standalone Page</button></div>
+        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">Open Mint Page</button><button class="primary-btn" disabled id="publishMintPageBtn" type="button">Publish Mint Page</button><button class="ghost-btn" disabled id="downloadMintPageBtn" type="button">Download Standalone Page</button></div>
       </div>
       <div class="mint-page-builder-grid">
         <div class="mint-page-media-settings">
@@ -644,9 +651,11 @@
   </section>
 </div>
 
+  <script src="./relicforge-config.js?v=11.0.0"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./app.js?v=10.10.1" defer></script>
-  <script src="./forge.js?v=10.10.1" defer></script>
-  <script src="./project-storage.js?v=10.10.1" defer></script>
+  <script src="./cloud.js?v=11.0.0" defer></script>
+  <script src="./app.js?v=11.0.0" defer></script>
+  <script src="./forge.js?v=11.0.0" defer></script>
+  <script src="./project-storage.js?v=11.0.0" defer></script>
 </body>
 </html>

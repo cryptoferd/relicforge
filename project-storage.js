@@ -8,6 +8,7 @@
   let wallet = null;
   let currentProjectId = null;
   let currentProjectOwner = null;
+  let cloudProjects = [];
 
   const $ = id => document.getElementById(id);
 
@@ -110,6 +111,17 @@
     }
   }
 
+  async function ensureCloudSession() {
+    const cloud = window.RelicForgeCloud;
+    if (!wallet || !cloud?.enabled?.()) return null;
+    const active = cloud.loadSession?.();
+    if (active?.wallet?.toLowerCase() === wallet) return active;
+    setStatus('Wallet connected. Sign once to enable private cloud sync…');
+    const signed = await cloud.ensureSignedIn(wallet);
+    setStatus(`Cloud sync enabled for ${shortAddress(wallet)}.`, 'success');
+    return signed;
+  }
+
   async function connectWallet() {
     if (!window.ethereum) {
       setStatus('No injected EVM wallet was found.', 'error');
@@ -119,7 +131,12 @@
     if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
     setWallet(accounts[0]);
     window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: accounts[0] } }));
-    setStatus(`Projects are scoped to ${shortAddress(accounts[0])}.`, 'success');
+    if (window.RelicForgeCloud?.enabled?.()) {
+      try { await ensureCloudSession(); }
+      catch (error) { setStatus(`Wallet connected. Local saves work; cloud sign-in was not completed: ${error.message}`, 'warning'); }
+    } else {
+      setStatus(`Projects are scoped to ${shortAddress(accounts[0])}. Cloud API not configured yet.`, 'success');
+    }
     return accounts[0];
   }
 
@@ -176,7 +193,18 @@
     }
     currentProjectId = id;
     currentProjectOwner = wallet;
-    setStatus(`Saved “${name}” · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+    if (window.RelicForgeCloud?.enabled?.()) {
+      try {
+        await ensureCloudSession();
+        setStatus(`Saved locally · syncing “${name}” to cloud…`);
+        await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
+        setStatus(`Saved locally + synced to cloud · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+      } catch (error) {
+        setStatus(`Saved locally. Cloud sync pending: ${error.message}`, 'warning');
+      }
+    } else {
+      setStatus(`Saved locally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+    }
     await renderProjects();
     return record;
   }
@@ -184,7 +212,18 @@
   async function loadProject(id) {
     if (!wallet) await connectWallet();
     const key = `${wallet}:${id}`;
-    const record = await idbGet(key);
+    let record = await idbGet(key);
+    let fromCloud = false;
+    if (!record && window.RelicForgeCloud?.enabled?.()) {
+      await ensureCloudSession();
+      setStatus('Downloading project + artwork from cloud…');
+      const remote = await window.RelicForgeCloud.loadProject(id);
+      const payload = remote.snapshot || {};
+      if (!payload.studio) throw new Error('Cloud project snapshot is incomplete.');
+      record = { key, id: remote.id, owner: wallet, name: remote.name, createdAt: remote.created_at, updatedAt: remote.updated_at, bytes: 0, studio: payload.studio, forge: payload.forge || null };
+      await idbPut(record);
+      fromCloud = true;
+    }
     if (!record) throw new Error('That project was not found for the connected wallet.');
     setStatus(`Opening “${record.name}”…`);
     await window.RelicForgeStudioBridge.restoreStudioProjectSnapshot(record.studio);
@@ -192,7 +231,7 @@
     currentProjectId = record.id;
     currentProjectOwner = record.owner;
     closeManager();
-    setStatus(`Opened “${record.name}”.`, 'success');
+    setStatus(`Opened “${record.name}”${fromCloud ? ' from cloud' : ''}.`, 'success');
   }
 
   async function deleteProject(id) {
@@ -228,23 +267,37 @@
       await renderStorageEstimate();
       return;
     }
-    const projects = await idbListByOwner(wallet);
+    const localProjects = await idbListByOwner(wallet);
+    cloudProjects = [];
+    if (window.RelicForgeCloud?.enabled?.()) {
+      try {
+        await ensureCloudSession();
+        cloudProjects = await window.RelicForgeCloud.listProjects();
+      } catch (error) {
+        setStatus(`Cloud project list unavailable: ${error.message}`, 'warning');
+      }
+    }
+    const merged = new Map();
+    for (const project of cloudProjects) merged.set(project.id, { id: project.id, name: project.name, updatedAt: project.updated_at, bytes: 0, cloud: true, local: false });
+    for (const project of localProjects) merged.set(project.id, { ...merged.get(project.id), ...project, cloud: merged.has(project.id), local: true });
+    const projects = [...merged.values()].sort((a,b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     if (!projects.length) {
-      list.innerHTML = '<div class="empty-state">No projects saved for this wallet in this browser yet.</div>';
+      list.innerHTML = `<div class="empty-state">No projects saved for this wallet${window.RelicForgeCloud?.enabled?.() ? ' locally or in RelicForge Cloud' : ' in this browser yet'}.</div>`;
       await renderStorageEstimate();
       return;
     }
     list.innerHTML = projects.map(project => {
       const active = project.id === currentProjectId && currentProjectOwner === wallet;
       const updated = new Date(project.updatedAt);
+      const location = project.cloud && project.local ? 'Local + Cloud' : project.cloud ? 'Cloud' : 'Local';
       return `<article class="saved-project-card ${active ? 'active' : ''}">
         <div class="saved-project-main">
           <div class="saved-project-title-row"><strong>${esc(project.name)}</strong>${active ? '<span class="project-current-badge">OPEN</span>' : ''}</div>
-          <span>${esc(updated.toLocaleString())} · ${esc(formatBytes(project.bytes || 0))}</span>
+          <span>${esc(updated.toLocaleString())} · ${esc(location)}${project.local ? ` · ${esc(formatBytes(project.bytes || 0))}` : ''}</span>
         </div>
         <div class="saved-project-actions">
           <button class="ghost-btn" data-load-project="${esc(project.id)}" type="button">Open</button>
-          <button class="ghost-btn danger-btn" data-delete-project="${esc(project.id)}" type="button">Delete</button>
+          ${project.local ? `<button class="ghost-btn danger-btn" data-delete-project="${esc(project.id)}" type="button">Delete Local</button>` : ''}
         </div>
       </article>`;
     }).join('');
@@ -307,12 +360,13 @@
   }
 
   window.RelicForgeProjects = {
-    version: '10.10.1',
+    version: '11.0.0',
     connectWallet,
     saveProject,
     openManager,
     getWallet: () => wallet,
     getCurrentProjectId: () => currentProjectId,
+    ensureCloudSession,
   };
 
   bind();

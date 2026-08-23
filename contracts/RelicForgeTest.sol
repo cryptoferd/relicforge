@@ -115,7 +115,7 @@ interface IERC721ReceiverRF {
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4);
 }
 
-contract RelicCollectionV1 is IRelicRandomnessConsumer {
+contract RelicCollectionV2 is IRelicRandomnessConsumer {
     using RFStrings for uint256;
 
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
@@ -133,6 +133,8 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     event CreatorRevealCompleted(uint256 indexed requestId, uint256 seed);
     event DataFinalized(bytes32 indexed provenanceHash);
     event CollectionSealed();
+    event RenderConfigUpdated(string flattenedRenderBaseURI, bool holderRenderModeEnabled, uint8 defaultRenderMode);
+    event RenderModeUpdated(uint256 indexed tokenId, uint8 renderMode);
 
     struct Trait {
         string name;
@@ -194,6 +196,13 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     uint8 public oneOfOneLayerPlusOne; // 0 disabled, otherwise layer index + 1
     uint8 public revealMode; // 0 Forge Reveal, 1 Creator Reveal
     address public randomnessProvider;
+
+    // Render mode 0 = canonical fully-onchain SVG. Render mode 1 = flattened PNG URL.
+    // The flattened URL is presentation-only; renderToken() always remains the canonical onchain renderer.
+    string public flattenedRenderBaseURI;
+    bool public holderRenderModeEnabled;
+    uint8 public defaultRenderMode;
+    mapping(uint256 => uint8) private _renderModeOverridePlusOne;
 
     bool public dataFinalized;
     bool public isSealed;
@@ -429,6 +438,43 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
         emit WhitelistSnapshotRecorded(sourceContract, sourceChainId, snapshotBlock, sourceType);
     }
     function setRoyalty(address receiver, uint96 bps) external onlyOwner whenMutable { require(bps <= 10000, "BAD_ROYALTY"); royaltyReceiver = receiver; royaltyBps = bps; }
+
+    function setRenderConfig(string calldata baseURI, bool holderEnabled, uint8 defaultMode) external onlyOwner whenMutable {
+        require(defaultMode <= 1, "BAD_RENDER_MODE");
+        if (defaultMode == 1) require(bytes(baseURI).length != 0, "MISSING_RENDERER");
+        flattenedRenderBaseURI = baseURI;
+        holderRenderModeEnabled = holderEnabled;
+        defaultRenderMode = defaultMode;
+        emit RenderConfigUpdated(baseURI, holderEnabled, defaultMode);
+        if (totalMinted > 0) emit BatchMetadataUpdate(1, totalMinted);
+    }
+
+    function renderMode(uint256 tokenId) public view returns (uint8) {
+        ownerOf(tokenId);
+        uint8 overridePlusOne = _renderModeOverridePlusOne[tokenId];
+        return overridePlusOne == 0 ? defaultRenderMode : overridePlusOne - 1;
+    }
+
+    function flattenedImageURI(uint256 tokenId) public view returns (string memory) {
+        ownerOf(tokenId);
+        require(bytes(flattenedRenderBaseURI).length != 0, "MISSING_RENDERER");
+        return string(abi.encodePacked(flattenedRenderBaseURI, tokenId.toString(), ".png"));
+    }
+
+    function setRenderMode(uint256 tokenId, uint8 mode) external {
+        address holder = ownerOf(tokenId);
+        require(msg.sender == holder, "NOT_TOKEN_OWNER");
+        require(mode <= 1, "BAD_RENDER_MODE");
+        // Holders can always return to the canonical onchain SVG. Flattened mode
+        // is available only when the creator enabled it before sealing.
+        if (mode == 1) {
+            require(holderRenderModeEnabled, "FLATTENED_DISABLED");
+            require(bytes(flattenedRenderBaseURI).length != 0, "MISSING_RENDERER");
+        }
+        _renderModeOverridePlusOne[tokenId] = mode + 1;
+        emit RenderModeUpdated(tokenId, mode);
+        emit MetadataUpdate(tokenId);
+    }
 
     function mint() external payable returns (uint256 tokenId) {
         uint256 start = mint(1);
@@ -695,18 +741,27 @@ contract RelicCollectionV1 is IRelicRandomnessConsumer {
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         ownerOf(tokenId);
         bool revealed = isRevealed(tokenId);
-        string memory svg = revealed ? renderToken(tokenId) : renderPlaceholder();
         string memory json;
         if (revealed) {
             (string memory tokenName_, string memory tokenDescription_) = _tokenNameDescription(tokenId);
+            string memory imageURI;
+            if (renderMode(tokenId) == 1 && bytes(flattenedRenderBaseURI).length != 0) {
+                // Flattened presentation avoids reconstructing the full SVG inside tokenURI().
+                // renderToken(tokenId) remains independently available as the canonical onchain image.
+                imageURI = flattenedImageURI(tokenId);
+            } else {
+                string memory svg = renderToken(tokenId);
+                imageURI = string(abi.encodePacked("data:image/svg+xml;base64,", RFBase64.encode(bytes(svg))));
+            }
             json = string(abi.encodePacked(
                 '{"name":"', tokenName_, '","description":"', tokenDescription_,
-                '","image":"data:image/svg+xml;base64,', RFBase64.encode(bytes(svg)), '","attributes":', _attributes(tokenId), "}"
+                '","image":"', imageURI, '","attributes":', _attributes(tokenId), "}"
             ));
         } else {
+            string memory placeholderSvg = renderPlaceholder();
             json = string(abi.encodePacked(
                 '{"name":"', name, " #", tokenId.toString(), ' - Forging","description":"', description,
-                '","image":"data:image/svg+xml;base64,', RFBase64.encode(bytes(svg)), '","attributes":[]}'
+                '","image":"data:image/svg+xml;base64,', RFBase64.encode(bytes(placeholderSvg)), '","attributes":[]}'
             ));
         }
         return string(abi.encodePacked("data:application/json;base64,", RFBase64.encode(bytes(json))));
@@ -809,7 +864,7 @@ contract RelicForgeFactory {
         uint96 royaltyBps_
     ) external returns (address collection) {
         collection = _clone(implementation);
-        RelicCollectionV1(collection).initialize(
+        RelicCollectionV2(collection).initialize(
             name_, symbol_, description_, msg.sender, maxSupply_, canvasWidth_, canvasHeight_, layerCount_, revealMode_, randomnessProvider, mintPrice_, maxPerWallet_, royaltyReceiver_, royaltyBps_, testAutoFulfill
         );
         collectionCount += 1;

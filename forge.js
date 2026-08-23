@@ -6,7 +6,7 @@
   const MAX_TRAIT_BYTES = 22000;
   const MAX_SHARD_BYTES = 22000;
   const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-  const INFRA_KEY = 'relicforge_sepolia_test_infra_v10_10_0';
+  const INFRA_KEY = 'relicforge_sepolia_test_infra_v11_0_0';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
   const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
   const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
@@ -17,7 +17,8 @@
     'function whitelistSourceContract() view returns (address)','function whitelistSourceChainId() view returns (uint64)','function whitelistSnapshotBlock() view returns (uint64)','function whitelistSourceType() view returns (uint8)',
     'function royaltyReceiver() view returns (address)','function royaltyBps() view returns (uint96)','function revealMode() view returns (uint8)','function creatorRevealSeed() view returns (uint256)',
     'function dataFinalized() view returns (bool)','function isSealed() view returns (bool)','function provenanceHash() view returns (bytes32)',
-    'function setMintPrice(uint256 price)','function setMaxPerWallet(uint32 limit)','function setRoyalty(address receiver,uint96 bps)',
+    'function holderRenderModeEnabled() view returns (bool)','function defaultRenderMode() view returns (uint8)','function flattenedRenderBaseURI() view returns (string)',
+    'function setMintPrice(uint256 price)','function setMaxPerWallet(uint32 limit)','function setRoyalty(address receiver,uint96 bps)','function setRenderConfig(string baseURI,bool holderEnabled,uint8 defaultMode)',
     'function setMintAccess(bool publicEnabled,bool whitelistEnabled,bytes32 root,uint256 whitelistPrice,address sourceContract,uint64 sourceChainId,uint64 snapshotBlock,uint8 sourceType)',
     'function creatorMint(uint32 quantity) returns (uint256)','function requestCreatorReveal() returns (uint256)','function sealCollection()'
   ];
@@ -66,6 +67,17 @@
   function shortAddr(value) {
     const text = String(value || '');
     return text && text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
+  }
+
+  const cloudReadProviders = new Map();
+  function readProvider(chainId = 11155111) {
+    const apiBase = String(window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
+    if (apiBase && window.ethers) {
+      const id = Number(chainId);
+      if (!cloudReadProviders.has(id)) cloudReadProviders.set(id, new window.ethers.JsonRpcProvider(`${apiBase}/api/public/rpc/${id}`, id, { staticNetwork: true }));
+      return cloudReadProviders.get(id);
+    }
+    return forgeState.provider;
   }
 
   function fileToDataUrl(file) {
@@ -117,6 +129,31 @@
     return config;
   }
 
+  async function publishedMintPageConfig(collectionAddress, chainId = 11155111) {
+    if (!window.RelicForgeCloud?.enabled?.()) return {};
+    try {
+      const result = await window.RelicForgeCloud.json(`/api/public/mint/${chainId}/${collectionAddress}/config`);
+      return result?.config || {};
+    } catch (_) { return {}; }
+  }
+
+  async function publishMintPageCloud(collectionAddress = forgeState.collectionAddress, dashboard = false) {
+    if (!window.RelicForgeCloud?.enabled?.()) throw new Error('RelicForge Cloud API is not configured. Set apiBase in relicforge-config.js first.');
+    if (!forgeState.wallet) await connectWallet();
+    await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
+    const localConfig = await buildMintPageConfig(collectionAddress);
+    const existingCloud = await publishedMintPageConfig(collectionAddress, localConfig.chainId);
+    const imageFile = dashboard ? forgeState.dashboardMintPageImageFile : forgeState.mintPageImageFile;
+    const bannerFile = dashboard ? forgeState.dashboardMintPageBannerFile : forgeState.mintPageBannerFile;
+    const config = { ...existingCloud, ...localConfig, collectionImageAssetId: existingCloud.collectionImageAssetId || null, bannerImageAssetId: existingCloud.bannerImageAssetId || null };
+    delete config.collectionImage; delete config.bannerImage; delete config.whitelistEntries;
+    const projectId = window.RelicForgeProjects?.getCurrentProjectId?.() || null;
+    await window.RelicForgeCloud.publishMintPage({
+      chainId: localConfig.chainId, contract: collectionAddress, projectId, collectionImageFile: imageFile, bannerImageFile: bannerFile, config, whitelist: dashboard ? null : forgeState.whitelist
+    });
+    return true;
+  }
+
   function mintPageConfigKey(collectionAddress, chainId = 11155111) {
     return `relicforge_mint_page_${chainId}_${String(collectionAddress || '').toLowerCase()}`;
   }
@@ -145,11 +182,13 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=10.10.1', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.0', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, version: '11.0.0' }).replace(/<\/script/gi, '<\\/script');
+    html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
     html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
@@ -179,7 +218,8 @@
   function whitelistSourceProvider(useHistory = false) {
     const config = whitelistSourceChainConfig();
     const override = $('whitelistSnapshotRpc')?.value.trim() || '';
-    const rpc = override || (useHistory ? (config.historyRpc || config.rpc) : config.rpc);
+    const cloudRpc = window.RelicForgeCloud?.enabled?.() ? window.RelicForgeCloud.publicUrl(`/api/public/rpc/${config.chainId}`) : '';
+    const rpc = override || cloudRpc || (useHistory ? (config.historyRpc || config.rpc) : config.rpc);
     return new window.ethers.JsonRpcProvider(rpc, config.chainId, { staticNetwork: true });
   }
 
@@ -775,7 +815,7 @@ ${await file.text()}`;
     for (const trait of compiledTraits) {
       const bytes = trait.data;
       if (!(bytes instanceof Uint8Array)) throw new Error(`Missing compiled bytes for ${trait.layerName} / ${trait.name}.`);
-      if (bytes.length > MAX_TRAIT_BYTES) throw new Error(`${trait.layerName} / ${trait.name} needs ${fmtBytes(bytes.length)} after lossless optimization, above the ${fmtBytes(MAX_TRAIT_BYTES)} v10 test limit.`);
+      if (bytes.length > MAX_TRAIT_BYTES) throw new Error(`${trait.layerName} / ${trait.name} needs ${fmtBytes(bytes.length)} after lossless optimization, above the ${fmtBytes(MAX_TRAIT_BYTES)} V11 test limit.`);
       const prior = exactAssetIndex.get(trait.assetKey);
       if (prior) {
         Object.assign(trait, prior, { deduped: true });
@@ -838,7 +878,7 @@ ${await file.text()}`;
     try {
       const studio = bridge().getState();
       if (!studio.compiledTokens?.length) throw new Error('Build the collection in Step 4 first.');
-      if (studio.compilerReport?.compilerVersion !== '10.10.1') throw new Error('This collection was compiled with an older collection compiler. Rebuild it in Step 4 before forging.');
+      if (studio.compilerReport?.compilerVersion !== '11.0.0') throw new Error('This collection was compiled with an older collection compiler. Rebuild it in Step 4 before forging.');
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
@@ -1052,7 +1092,7 @@ ${await file.text()}`;
     let liveGwei = null;
     try {
       if (forgeState.provider && window.ethers) {
-        const fee = await forgeState.provider.getFeeData();
+        const fee = await (readProvider(11155111) || forgeState.provider).getFeeData();
         forgeState.gasPrice = fee.gasPrice || fee.maxFeePerGas;
         if (forgeState.gasPrice) liveGwei = Number(window.ethers.formatUnits(forgeState.gasPrice, 'gwei'));
       }
@@ -1109,6 +1149,10 @@ ${await file.text()}`;
       forgeState.wallet = await forgeState.signer.getAddress();
       window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
       $('forgeWalletStatus').textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
+      if (window.RelicForgeCloud?.enabled?.()) {
+        try { await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet); $('forgeWalletStatus').textContent += ' · Cloud'; }
+        catch (cloudError) { $('forgeWalletStatus').textContent += ` · Cloud sign-in pending`; }
+      }
       $('connectForgeWalletBtn').textContent = 'Wallet Connected';
       if (!$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
       restoreInfra();
@@ -1128,7 +1172,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=10.10.1');
+      const worker = new Worker('./js/solc-worker.js?v=11.0.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1146,13 +1190,13 @@ ${await file.text()}`;
     if (!contracts) throw new Error('Compiler returned no RelicForge contracts.');
     const pick = name => ({ abi: contracts[name].abi, bytecode: `0x${contracts[name].evm.bytecode.object}`, deployedBytecode: `0x${contracts[name].evm.deployedBytecode.object}` });
     forgeState.contractArtifacts = {
-      RelicCollectionV1: pick('RelicCollectionV1'),
+      RelicCollectionV2: pick('RelicCollectionV2'),
       RelicRandomnessMock: pick('RelicRandomnessMock'),
       RelicForgeFactory: pick('RelicForgeFactory'),
     };
     const runtimeSizes = Object.fromEntries(Object.entries(forgeState.contractArtifacts).map(([name, artifact]) => [name, (artifact.deployedBytecode.length - 2) / 2]));
-    if (runtimeSizes.RelicCollectionV1 > 24576) throw new Error(`RelicCollectionV1 runtime is ${runtimeSizes.RelicCollectionV1} bytes, above the EIP-170 limit.`);
-    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV1: ${runtimeSizes.RelicCollectionV1} bytes runtime\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime\n✓ Ready for Sepolia test deployment.`);
+    if (runtimeSizes.RelicCollectionV2 > 24576) throw new Error(`RelicCollectionV2 runtime is ${runtimeSizes.RelicCollectionV2} bytes, above the EIP-170 limit.`);
+    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${runtimeSizes.RelicCollectionV2} bytes runtime\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime\n✓ Ready for Sepolia test deployment.`);
     return forgeState.contractArtifacts;
   }
 
@@ -1174,7 +1218,7 @@ ${await file.text()}`;
       if (!forgeState.signer) await connectWallet();
       await compileContracts();
       log('forgeInfraStatus', 'Deploying shared Sepolia TEST infrastructure…', true);
-      const implementation = await deployOne('RelicCollectionV1');
+      const implementation = await deployOne('RelicCollectionV2');
       const randomness = await deployOne('RelicRandomnessMock');
       const factory = await deployOne('RelicForgeFactory', [implementation, randomness, true]);
       forgeState.infra = { implementation, randomness, factory };
@@ -1231,6 +1275,9 @@ ${await file.text()}`;
       if (maxPerWallet > 4294967295) throw new Error('Max per wallet is too large.');
       const publicMintEnabled = !!$('publicMintEnabled')?.checked;
       const whitelistEnabled = !!$('whitelistEnabled')?.checked;
+      const holderRenderEnabled = !!$('holderRenderModeEnabled')?.checked;
+      const defaultRenderMode = Number($('defaultRenderMode')?.value || 0);
+      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Flattened PNG cannot be the default until the Railway API URL is configured in relicforge-config.js.');
       if (!publicMintEnabled && !whitelistEnabled) throw new Error('Enable public mint, whitelist mint, or both.');
       if (whitelistEnabled && !forgeState.whitelist) throw new Error('Build or snapshot the whitelist before forging.');
       const whitelistMintPrice = window.ethers.parseEther(String(Number($('whitelistMintPrice')?.value || 0)));
@@ -1249,6 +1296,7 @@ ${await file.text()}`;
         ...c.dnaShards.map((_, i) => ({ label: `Write DNA shard ${i + 1}/${c.dnaShards.length}`, status: 'pending' })),
         { label: 'Configure DNA', status: 'pending' },
         { label: 'Store reveal placeholder', status: 'pending' },
+        { label: 'Configure render modes', status: 'pending' },
         { label: 'Finalize provenance', status: 'pending' },
         { label: 'Configure mint access', status: 'pending' },
       ];
@@ -1272,7 +1320,7 @@ ${await file.text()}`;
       $('forgeResult').classList.remove('hidden');
       if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = collectionAddress;
 
-      const collection = new window.ethers.Contract(collectionAddress, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
+      const collection = new window.ethers.Contract(collectionAddress, forgeState.contractArtifacts.RelicCollectionV2.abi, forgeState.signer);
       for (let i = 0; i < c.artShards.length; i++, si++) await sendStep(`Write artwork shard ${i + 1}/${c.artShards.length}`, () => collection.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si);
       await sendStep('Register layer names', () => collection.setLayerNames(c.layerDefs.map(layer => layer.name)), steps, si++);
       await sendStep('Configure metadata visibility', () => collection.setLayerMetadataVisibility(c.layerDefs.map(layer => !!layer.metadataHidden)), steps, si++);
@@ -1289,6 +1337,9 @@ ${await file.text()}`;
       for (let i = 0; i < c.dnaShards.length; i++, si++) await sendStep(`Write DNA shard ${i + 1}/${c.dnaShards.length}`, () => collection.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);
       await sendStep('Configure DNA', () => collection.setDNAConfig(c.recipeCount, c.recipesPerShard), steps, si++);
       await sendStep('Store reveal placeholder', () => collection.setPlaceholder(window.ethers.hexlify(c.placeholderBytes)), steps, si++);
+      const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
+      const renderBase = renderHost ? `${renderHost}/api/public/render/11155111/${collectionAddress}/` : '';
+      await sendStep('Configure render modes', () => collection.setRenderConfig(renderBase, holderRenderEnabled && !!renderBase, defaultRenderMode), steps, si++);
       await sendStep('Finalize provenance', () => collection.finalizeData(c.provenance), steps, si++);
       const wl = forgeState.whitelist;
       await sendStep('Configure mint access', () => collection.setMintAccess(
@@ -1309,7 +1360,17 @@ ${await file.text()}`;
       $('forgeCreatorRevealBtn').disabled = c.core.revealMode !== 1;
       if ($('openMintPageBtn')) $('openMintPageBtn').disabled = false;
       if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = false;
+      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !window.RelicForgeCloud?.enabled?.();
       persistMintPageConfig(collectionAddress).catch(() => {});
+      if (window.RelicForgeCloud?.enabled?.()) {
+        try {
+          log('forgeTestStatus', 'Publishing mint page configuration + whitelist proofs to RelicForge Cloud…');
+          await publishMintPageCloud(collectionAddress);
+          log('forgeTestStatus', '✓ Cloud mint page published.');
+        } catch (cloudError) {
+          log('forgeTestStatus', `Cloud publish warning: ${cloudError.message}`);
+        }
+      }
       log('forgeTestStatus', `Collection ready: ${collectionAddress}`, true);
       bridge().showStatus?.('Collection forged on Sepolia.', 'success');
       loadViewerCollection(true).catch(() => {});
@@ -1321,7 +1382,7 @@ ${await file.text()}`;
   function collectionContract() {
     if (!forgeState.collectionAddress) throw new Error('No forged collection loaded.');
     if (!forgeState.signer) throw new Error('Connect the creator wallet first.');
-    return new window.ethers.Contract(forgeState.collectionAddress, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
+    return new window.ethers.Contract(forgeState.collectionAddress, forgeState.contractArtifacts.RelicCollectionV2.abi, forgeState.signer);
   }
 
   function requestedMintQuantity() {
@@ -1464,11 +1525,12 @@ ${await file.text()}`;
 
   async function viewerContract() {
     await compileContracts();
-    if (!forgeState.signer) await connectWallet();
     const address = viewerAddressInput();
     if (!window.ethers.isAddress(address)) throw new Error('Enter a valid Sepolia collection address.');
     forgeState.viewerAddress = address;
-    return new window.ethers.Contract(address, forgeState.contractArtifacts.RelicCollectionV1.abi, forgeState.signer);
+    const runner = readProvider(11155111) || forgeState.provider;
+    if (!runner) throw new Error('No Sepolia read provider is available. Configure RelicForge Cloud/Alchemy or connect a wallet.');
+    return new window.ethers.Contract(address, forgeState.contractArtifacts.RelicCollectionV2.abi, runner);
   }
 
   async function loadViewerCollection(resetPage = true) {
@@ -1650,17 +1712,19 @@ ${await file.text()}`;
     }
   }
 
-  async function collectionDashboardSnapshot(address, runner = forgeState.provider) {
+  async function collectionDashboardSnapshot(address, runner = readProvider(11155111) || forgeState.provider) {
     const c = new window.ethers.Contract(address, COLLECTION_DASHBOARD_ABI, runner);
-    const [name, symbol, description, owner, maxSupply, totalMinted, mintPrice, maxPerWallet, publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId, snapshotBlock, sourceType, royaltyReceiver, royaltyBps, revealMode, creatorRevealSeed, finalized, sealed, provenance] = await Promise.all([
+    const [name, symbol, description, owner, maxSupply, totalMinted, mintPrice, maxPerWallet, publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId, snapshotBlock, sourceType, royaltyReceiver, royaltyBps, revealMode, creatorRevealSeed, finalized, sealed, provenance, holderRenderEnabled, defaultRenderMode, flattenedRenderBaseURI] = await Promise.all([
       c.name(), c.symbol(), c.description(), c.owner(), c.maxSupply(), c.totalMinted(), c.mintPrice(), c.maxPerWallet(), c.publicMintEnabled(), c.whitelistMintEnabled(), c.whitelistRoot(), c.whitelistMintPrice(),
-      c.whitelistSourceContract(), c.whitelistSourceChainId(), c.whitelistSnapshotBlock(), c.whitelistSourceType(), c.royaltyReceiver(), c.royaltyBps(), c.revealMode(), c.creatorRevealSeed(), c.dataFinalized(), c.isSealed(), c.provenanceHash()
+      c.whitelistSourceContract(), c.whitelistSourceChainId(), c.whitelistSnapshotBlock(), c.whitelistSourceType(), c.royaltyReceiver(), c.royaltyBps(), c.revealMode(), c.creatorRevealSeed(), c.dataFinalized(), c.isSealed(), c.provenanceHash(),
+      c.holderRenderModeEnabled().catch(() => false), c.defaultRenderMode().catch(() => 0n), c.flattenedRenderBaseURI().catch(() => '')
     ]);
     return {
       address, name, symbol, description, owner,
       maxSupply: Number(maxSupply), totalMinted: Number(totalMinted), mintPrice, maxPerWallet: Number(maxPerWallet),
       publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId: Number(sourceChainId), snapshotBlock: Number(snapshotBlock), sourceType: Number(sourceType),
       royaltyReceiver, royaltyBps: Number(royaltyBps), revealMode: Number(revealMode), creatorRevealSeed: BigInt(creatorRevealSeed), finalized, sealed, provenance,
+      holderRenderEnabled: Boolean(holderRenderEnabled), defaultRenderMode: Number(defaultRenderMode), flattenedRenderBaseURI,
     };
   }
 
@@ -1675,12 +1739,20 @@ ${await file.text()}`;
     }
     const factories = knownFactories();
     const addresses = new Set(manualLaunches().map(x => x.toLowerCase()));
+    if (window.RelicForgeCloud?.enabled?.()) {
+      try {
+        await window.RelicForgeCloud.ensureSignedIn(wallet);
+        const cloudCollections = (await window.RelicForgeCloud.json('/api/collections', {}, true)).collections || [];
+        cloudCollections.filter(item => Number(item.chain_id) === 11155111).forEach(item => addresses.add(String(item.contract_address).toLowerCase()));
+      } catch (_) {}
+    }
     if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Searching ${factories.length} known Factor${factories.length === 1 ? 'y' : 'ies'} for ${shortAddr(wallet)}…`;
     for (const factoryAddress of factories) {
       try {
-        const code = await forgeState.provider.getCode(factoryAddress);
+        const rp = readProvider(11155111) || forgeState.provider;
+        const code = await rp.getCode(factoryAddress);
         if (!code || code === '0x') continue;
-        const factory = new window.ethers.Contract(factoryAddress, FACTORY_DASHBOARD_ABI, forgeState.provider);
+        const factory = new window.ethers.Contract(factoryAddress, FACTORY_DASHBOARD_ABI, rp);
         const found = await factory.collectionsByCreator(wallet);
         found.forEach(address => addresses.add(String(address).toLowerCase()));
       } catch (_) {}
@@ -1723,7 +1795,7 @@ ${await file.text()}`;
       const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
       const mutableDisabled = snap.sealed || !isOwner;
       const creatorRevealReady = snap.revealMode === 1 && snap.creatorRevealSeed === 0n && snap.totalMinted > 0 && isOwner;
-      const dashboardMintConfig = readMintPageConfig(snap.address);
+      const dashboardMintConfig = { ...readMintPageConfig(snap.address), ...(await publishedMintPageConfig(snap.address)) };
       forgeState.dashboardMintPageImageFile = null;
       forgeState.dashboardMintPageBannerFile = null;
       const dashboardMintImage = dashboardMintConfig.collectionImage || '';
@@ -1759,7 +1831,7 @@ ${await file.text()}`;
                 <button class="primary-btn" data-dashboard-action="savemintpage" ${!isOwner ? 'disabled' : ''} type="button">Save Mint Page</button>
                 <button class="ghost-btn" data-dashboard-action="downloadmintpage" type="button">Download Updated Page</button>
               </div>
-              <small class="forge-footnote">The hosted test page reads this browser's saved presentation config. Download the updated standalone page when you want a portable/shareable copy.</small>
+              <small class="forge-footnote">With RelicForge Cloud configured, Save Mint Page publishes these aesthetics globally so every device sees the same page. Standalone export remains available as a backup.</small>
             </div>
             <div class="mint-page-studio-preview">
               <div class="mint-page-preview-banner" id="dashboardMintPagePreviewBanner">${dashboardMintBanner ? `<img src="${esc(dashboardMintBanner)}" alt=""/>` : '<span>BANNER</span>'}</div>
@@ -1801,6 +1873,17 @@ ${await file.text()}`;
         </div>
 
         ${snap.revealMode === 1 ? `<div class="launched-section"><h4>Creator Reveal</h4><p class="forge-footnote">${snap.creatorRevealSeed !== 0n ? 'This collection has already been revealed.' : 'Trigger the collection-wide reveal when you are ready.'}</p><button class="ghost-btn" data-dashboard-action="reveal" ${creatorRevealReady ? '' : 'disabled'} type="button">Trigger Creator Reveal</button></div>` : ''}
+
+        <div class="launched-section">
+          <h4>Rendering</h4>
+          <p class="forge-footnote">The canonical onchain SVG is always available. Flattened PNG mode points marketplaces at the RelicForge renderer while preserving renderToken() onchain.</p>
+          <div class="launched-controls-grid">
+            <label class="field"><span>Default display</span><select id="dashboardDefaultRenderMode" ${mutableDisabled ? 'disabled' : ''}><option value="0" ${snap.defaultRenderMode === 0 ? 'selected' : ''}>Fully Onchain SVG</option><option value="1" ${snap.defaultRenderMode === 1 ? 'selected' : ''}>Flattened PNG</option></select></label>
+            <label class="field"><span>Renderer base URI</span><input id="dashboardRenderBaseURI" type="url" value="${esc(snap.flattenedRenderBaseURI || '')}" ${mutableDisabled ? 'disabled' : ''}/></label>
+          </div>
+          <label class="project-toggle-row"><span><strong>Allow holder switching</strong><small>Owners can choose Onchain SVG or Flattened PNG for their token.</small></span><input id="dashboardHolderRenderEnabled" type="checkbox" ${snap.holderRenderEnabled ? 'checked' : ''} ${mutableDisabled ? 'disabled' : ''}/></label>
+          <div class="launched-actions"><button class="primary-btn" data-dashboard-action="saverendering" ${mutableDisabled ? 'disabled' : ''} type="button">Save Render Settings</button></div>
+        </div>
 
         <div class="launched-section">
           <h4>Collection Integrity</h4>
@@ -1855,9 +1938,13 @@ ${await file.text()}`;
           bannerImage: newBanner || existing.bannerImage || null,
           updatedAt: new Date().toISOString(),
         });
+        if (window.RelicForgeCloud?.enabled?.()) {
+          launchedStatus('Publishing mint page appearance to RelicForge Cloud…');
+          await publishMintPageCloud(snap.address, true);
+        }
         forgeState.dashboardMintPageImageFile = null;
         forgeState.dashboardMintPageBannerFile = null;
-        launchedStatus('Mint page appearance saved.');
+        launchedStatus(window.RelicForgeCloud?.enabled?.() ? 'Mint page appearance saved + published.' : 'Mint page appearance saved locally.');
         await openLaunchedCollection(snap.address);
         return;
       }
@@ -1885,7 +1972,16 @@ ${await file.text()}`;
         return;
       }
       if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the collection owner.');
-      if (action === 'creatormint') {
+      if (action === 'saverendering') {
+        const baseURI = String($('dashboardRenderBaseURI')?.value || '').trim();
+        const enabled = !!$('dashboardHolderRenderEnabled')?.checked;
+        const defaultMode = Number($('dashboardDefaultRenderMode')?.value || 0);
+        if (defaultMode === 1 && !baseURI) throw new Error('Flattened PNG default requires a renderer base URI.');
+        launchedStatus('Updating onchain render settings…');
+        const tx = await contract.setRenderConfig(baseURI, enabled, defaultMode);
+        await tx.wait();
+        launchedStatus('Render settings updated.');
+      } else if (action === 'creatormint') {
         const quantity = Math.max(1, Math.floor(Number($('dashboardCreatorMintQty')?.value || 1)));
         launchedStatus(`Creator minting ${quantity} NFT${quantity === 1 ? '' : 's'}…`);
         const tx = await contract.creatorMint(quantity);
@@ -1965,6 +2061,8 @@ ${await file.text()}`;
       royalty: $('royalty')?.value || '0',
       royaltyWallet: $('royaltyWallet')?.value || '',
       revealMode: currentRevealMode(),
+      holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
+      defaultRenderMode: Number($('defaultRenderMode')?.value || 0),
       placeholderFile: forgeState.placeholderFile || null,
       publicMintEnabled: !!$('publicMintEnabled')?.checked,
       whitelistEnabled: !!$('whitelistEnabled')?.checked,
@@ -2014,6 +2112,8 @@ ${await file.text()}`;
       if (node && value != null) node.value = value;
     }
     const reveal = Number(saved.revealMode || 0);
+    if ($('holderRenderModeEnabled')) $('holderRenderModeEnabled').checked = saved.holderRenderModeEnabled !== false;
+    if ($('defaultRenderMode')) $('defaultRenderMode').value = String(saved.defaultRenderMode || 0);
     const radio = document.querySelector(`input[name="revealMode"][value="${reveal}"]`);
     if (radio) radio.checked = true;
     if ($('publicMintEnabled')) $('publicMintEnabled').checked = saved.publicMintEnabled !== false;
@@ -2036,6 +2136,7 @@ ${await file.text()}`;
       if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = saved.collectionAddress;
       if ($('openMintPageBtn')) $('openMintPageBtn').disabled = false;
       if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = false;
+      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !window.RelicForgeCloud?.enabled?.();
     }
     updateMintPagePreview().catch(() => {});
     forgeState.whitelist = null;
@@ -2108,6 +2209,7 @@ ${await file.text()}`;
     $('forgeCreatorRevealBtn')?.addEventListener('click', requestCreatorReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
     $('previewMintPageBtn')?.addEventListener('click', () => updateMintPagePreview().catch(() => {}));
+    $('publishMintPageBtn')?.addEventListener('click', async () => { try { if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing mint page + whitelist proofs to RelicForge Cloud…'; await publishMintPageCloud(); if ($('mintPageStatus')) $('mintPageStatus').textContent = '✓ Published. Mint aesthetics and whitelist proofs are now available cross-device.'; } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Publish: ${error.message}`; } });
     $('openMintPageBtn')?.addEventListener('click', openMintPage);
     $('downloadMintPageBtn')?.addEventListener('click', downloadStandaloneMintPage);
     $('mintPageImageInput')?.addEventListener('change', event => {
@@ -2165,6 +2267,12 @@ ${await file.text()}`;
     }));
     ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
     restoreInfra();
+    const cloudReady = !!window.RelicForgeCloud?.enabled?.();
+    const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
+    if ($('rendererCloudStatus')) $('rendererCloudStatus').textContent = cloudReady
+      ? `Cloud renderer ready at ${renderHost || window.RelicForgeCloud.apiBase()}. Flattened PNGs are generated from the contract's canonical renderToken() output and cached in Railway object storage.`
+      : 'Cloud renderer is not configured yet. Set apiBase/renderBase in relicforge-config.js after the Railway API is deployed. Fully-onchain SVG rendering still works without Cloud.';
+    if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !cloudReady || !forgeState.collectionAddress;
     updateRevealUi();
     updateMintPagePreview().catch(() => {});
     updateWhitelistUi();

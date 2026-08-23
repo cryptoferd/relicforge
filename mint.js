@@ -1,6 +1,8 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+  const API_BASE = String(window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
+  const apiUrl = path => `${API_BASE}${path}`;
   const ABI = [
     'function name() view returns (string)','function symbol() view returns (string)','function description() view returns (string)',
     'function maxSupply() view returns (uint32)','function totalMinted() view returns (uint32)','function maxPerWallet() view returns (uint32)',
@@ -8,18 +10,15 @@
     'function whitelistMintEnabled() view returns (bool)','function whitelistRoot() view returns (bytes32)','function revealMode() view returns (uint8)',
     'function mintedByWallet(address) view returns (uint32)','function whitelistMintedByWallet(address) view returns (uint32)',
     'function ownerOf(uint256 tokenId) view returns (address)','function tokenURI(uint256 tokenId) view returns (string)','function balanceOf(address) view returns (uint256)',
+    'function renderMode(uint256 tokenId) view returns (uint8)','function holderRenderModeEnabled() view returns (bool)','function setRenderMode(uint256 tokenId,uint8 mode)',
     'function mint(uint32 quantity) payable returns (uint256)','function whitelistMint(uint32 quantity,uint32 allowance,bytes32[] proof) payable returns (uint256)'
   ];
-  const RPC_BY_CHAIN = {
-    11155111: [
-      'https://ethereum-sepolia-rpc.publicnode.com',
-      'https://sepolia.drpc.org',
-      'https://rpc.sepolia.org'
-    ],
-    1: [
-      'https://ethereum-rpc.publicnode.com',
-      'https://eth.drpc.org'
-    ]
+  const RPC_BY_CHAIN = API_BASE ? {
+    11155111: [apiUrl('/api/public/rpc/11155111')],
+    1: [apiUrl('/api/public/rpc/1')]
+  } : {
+    11155111: ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://rpc.sepolia.org'],
+    1: ['https://ethereum-rpc.publicnode.com','https://eth.drpc.org']
   };
   const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
   const ZERO = ethers.ZeroAddress.toLowerCase();
@@ -30,7 +29,7 @@
   const localKey = requestedContract ? `relicforge_mint_page_${requestedChain}_${requestedContract.toLowerCase()}` : '';
   let localConfig = {};
   try { if (localKey) localConfig = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch (_) {}
-  const config = { ...localConfig, ...embedded, contract: requestedContract || localConfig.contract, chainId: requestedChain || localConfig.chainId || 11155111 };
+  let config = { ...localConfig, ...embedded, contract: requestedContract || localConfig.contract, chainId: requestedChain || localConfig.chainId || 11155111 };
 
   let browserProvider = null, publicProvider = null, signer = null, wallet = null, contract = null, contractState = null, whitelistData = null;
   let activeReadRpc = null;
@@ -80,6 +79,20 @@
     if(config.whitelistUrl){try{const res=await fetch(config.whitelistUrl,{cache:'no-store'});if(res.ok){const data=await res.json();return buildWhitelist(data.entries||data.whitelist||data)}}catch(_) {}}
     return null;
   }
+  async function apiJson(path){
+    const res=await fetch(apiUrl(path),{headers:{accept:'application/json'}});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.error||`RelicForge API ${res.status}`);
+    return data;
+  }
+  async function hydratePublishedConfig(){
+    if(!API_BASE||!requestedContract||!ethers.isAddress(requestedContract))return;
+    try{
+      const published=await apiJson(`/api/public/mint/${requestedChain}/${requestedContract}/config`);
+      config={...localConfig,...(published.config||{}),...embedded,contract:requestedContract,chainId:requestedChain};
+    }catch(error){console.warn('RelicForge cloud mint config unavailable:',error.message)}
+  }
+
   function walletErrorMessage(error){
     return error?.info?.error?.message || error?.error?.message || error?.data?.message || error?.shortMessage || error?.reason || error?.message || 'Unknown wallet error';
   }
@@ -134,8 +147,10 @@
     }
   }
   function getReadProvider(){
-    // Once a wallet is connected, prefer its provider. This avoids a public RPC
-    // disagreement from overriding the exact chain the minter is connected to.
+    // V11: when RelicForge Cloud is configured, reads go through the Alchemy-backed
+    // safe relay. The injected wallet is reserved for signing transactions.
+    if(API_BASE&&publicProvider)return publicProvider;
+    if(API_BASE){const list=RPC_BY_CHAIN[Number(config.chainId)]||[];if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}}
     if(browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
     const list=RPC_BY_CHAIN[Number(config.chainId)]||[];
@@ -144,7 +159,7 @@
     throw new Error('Connect a wallet to read this collection.');
   }
   async function readOnlyContract(){
-    if(contract)return contract;
+    if(contract&&!API_BASE)return contract;
     const provider=await resolveAnonymousReadProvider();
     return new ethers.Contract(config.contract,ABI,provider);
   }
@@ -172,7 +187,8 @@
     }
   }
   async function resolveAnonymousReadProvider(){
-    if(browserProvider)return browserProvider;
+    if(API_BASE&&publicProvider)return publicProvider;
+    if(!API_BASE&&browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
     const candidates=RPC_BY_CHAIN[Number(config.chainId)]||[];
     let lastError=null;
@@ -219,9 +235,35 @@
     try{return (await provider.getCode(address))!=='0x'}catch(_){return true}
   }
 
+  async function refreshCloud(serial){
+    const state=await apiJson(`/api/public/collection/${config.chainId}/${config.contract}/state`);
+    if(serial!==refreshSerial)return;
+    const name=state.name||'Relic Forge Collection',desc=state.description||'',maxSupply=Number(state.maxSupply||0),totalMinted=Number(state.totalMinted||0),maxPerWallet=Number(state.maxPerWallet||0);
+    const mintPrice=BigInt(state.mintPrice||0),wlPrice=BigInt(state.whitelistMintPrice||0),pub=!!state.publicMintEnabled,wlEnabled=!!state.whitelistMintEnabled,root=state.whitelistRoot||ethers.ZeroHash,reveal=Number(state.revealMode||0);
+    contractState={name,desc,maxSupply,totalMinted,maxPerWallet,mintPrice,wlPrice,pub,wlEnabled,root,reveal,diagnostics:[]};
+    document.title=`${name} — Mint`;$('collectionName').textContent=name;$('collectionDescription').textContent=desc||'Fully onchain collection forged with Relic Forge.';
+    $('mintedStat').textContent=`${totalMinted.toLocaleString()} / ${maxSupply.toLocaleString()}`;$('priceStat').textContent=fmtEth(mintPrice);$('limitStat').textContent=maxPerWallet?maxPerWallet.toLocaleString():'Unlimited';$('revealStat').textContent=reveal===0?'Forge Reveal':'Creator Reveal';$('publicPrice').textContent=fmtEth(mintPrice);$('publicCard').classList.toggle('disabled',!pub);
+    const explorer=Number(config.chainId)===11155111?'https://sepolia.etherscan.io':'https://etherscan.io';
+    $('contractInfo').innerHTML=`Contract: <a target="_blank" rel="noreferrer" href="${explorer}/address/${config.contract}">${config.contract}</a> · Alchemy via RelicForge Cloud`;
+    const supplyRemaining=Math.max(0,maxSupply-totalMinted);
+    if(wallet){
+      const activeWallet=wallet;const ws=await apiJson(`/api/public/collection/${config.chainId}/${config.contract}/wallet/${activeWallet}`);if(serial!==refreshSerial||wallet?.toLowerCase()!==activeWallet.toLowerCase())return;
+      const walletMints=Number(ws.mintedByWallet||0),whitelistMints=Number(ws.whitelistMintedByWallet||0);const globalRemaining=maxPerWallet>0?Math.max(0,maxPerWallet-walletMints):supplyRemaining;const publicRemaining=Math.min(supplyRemaining,globalRemaining);
+      $('walletMintsStat').textContent=maxPerWallet>0?`${walletMints} / ${maxPerWallet}`:`${walletMints} / ∞`;renderWalletAllotment(walletMints,maxPerWallet,publicRemaining);setQtyLimit('publicQty',publicRemaining);
+      $('publicQtyHint').textContent=!pub?'Public mint is currently disabled by the creator.':supplyRemaining<1?'Collection is sold out.':publicRemaining>0?`You can mint up to ${publicRemaining} more from your wallet allotment.`:'This wallet has no public mint allowance remaining.';$('publicMintBtn').disabled=!pub||publicRemaining<1;$('publicMintBtn').dataset.ready=(!$('publicMintBtn').disabled).toString();
+      let proof=null;try{proof=await apiJson(`/api/public/whitelist/${config.chainId}/${config.contract}/${activeWallet}`)}catch(_){};
+      if(proof?.eligible){const entry={address:activeWallet,allowance:Number(proof.allowance||0),proof:proof.proof||[]};whitelistData={root,by:{[activeWallet.toLowerCase()]:entry}};const allowanceRemaining=Math.max(0,entry.allowance-whitelistMints),whitelistRemaining=Math.min(supplyRemaining,globalRemaining,allowanceRemaining);setQtyLimit('whitelistQty',whitelistRemaining);$('whitelistQtyHint').textContent=whitelistRemaining>0?`You can whitelist mint up to ${whitelistRemaining} more right now.`:'No whitelist allowance remains for this wallet.';$('whitelistState').textContent=`Eligible · ${whitelistMints}/${entry.allowance} used · ${whitelistRemaining} remaining`;$('whitelistState').className='eligible';$('whitelistMintBtn').disabled=!wlEnabled||whitelistRemaining<1}
+      else{whitelistData=null;setQtyLimit('whitelistQty',0);$('whitelistQtyHint').textContent=wlEnabled?'No whitelist mint available for this wallet.':'Whitelist mint is disabled.';$('whitelistState').textContent=wlEnabled?'Not eligible':'Disabled';$('whitelistState').className='not-eligible';$('whitelistMintBtn').disabled=true}
+    }else{
+      $('walletMintsStat').textContent='Connect wallet';$('walletAllotment')?.classList.add('hidden');const publicMax=maxPerWallet>0?Math.min(supplyRemaining,maxPerWallet):supplyRemaining;setQtyLimit('publicQty',publicMax);$('publicQtyHint').textContent=!pub?'Public mint is currently disabled by the creator.':maxPerWallet>0?`Wallet limit: ${maxPerWallet}. Connect to calculate what remains for you.`:`Up to ${publicMax} remaining in the collection. Connect to mint.`;$('publicMintBtn').disabled=true;$('publicMintBtn').dataset.ready='false';setQtyLimit('whitelistQty',0);$('whitelistQtyHint').textContent=wlEnabled?'Connect wallet to calculate whitelist allowance.':'Whitelist mint is disabled.';$('whitelistState').textContent=wlEnabled?'Connect to check':'Disabled';$('whitelistMintBtn').disabled=true;
+    }
+    $('whitelistCard').classList.toggle('disabled',!wlEnabled);$('mintIntro').textContent=reveal===0?'Mint once, then your token forges automatically when randomness resolves.':'Minted tokens display the creator placeholder until the collection reveal.';status(wallet?($('publicMintBtn').disabled?'Wallet connected. Check mint availability above.':'Wallet connected. Ready to mint.'):'Collection loaded through Alchemy. Connect a wallet to mint.');updateExplorerControls();loadMintedGallery().catch(()=>{});if(holdersLoadedForMintCount!==totalMinted)loadHolders().catch(()=>{});else{renderHolders();renderMyNfts().catch(()=>{})}
+  }
+
   async function refresh(){
     const serial=++refreshSerial;
     if(!config.contract||!ethers.isAddress(config.contract)){status('Mint page is missing a valid collection contract address.');return}
+    if(API_BASE){try{return await refreshCloud(serial)}catch(error){if(serial===refreshSerial)status(`RelicForge Cloud error: ${error.message}`);return}}
     const diagnostics=[];
     try{
       const c=await readOnlyContract();
@@ -363,7 +405,13 @@
       const [uri,owner]=await Promise.all([c.tokenURI(tokenId),c.ownerOf(tokenId)]);
       const meta=JSON.parse(decodeDataUri(uri));
       const revealed=Array.isArray(meta.attributes)&&meta.attributes.length>0;
-      return `<article class="minted-token-card" data-token-id="${tokenId}"><div class="minted-token-thumb">${imageMarkup(meta.image,meta.name)}</div><div class="minted-token-info"><div><strong>${esc(meta.name||`Token #${tokenId}`)}</strong><span>#${tokenId}</span></div><small>${revealed?'Revealed':'Unrevealed'} · ${esc(shortAddr(owner))}</small></div></article>`;
+      let ownerActions='';
+      if(wallet&&String(owner).toLowerCase()===wallet.toLowerCase()&&revealed){
+        const mode=Number(await c.renderMode(tokenId).catch(()=>0));
+        const png=API_BASE?apiUrl(`/api/public/render/${config.chainId}/${config.contract}/${tokenId}.png`):'';
+        ownerActions=`<div class="token-owner-actions"><button class="small-btn" data-render-token="${tokenId}" data-render-mode="${mode===1?0:1}" type="button">${mode===1?'Use Onchain SVG':'Use Flattened PNG'}</button>${png?`<a class="small-btn link-btn" href="${esc(png)}" target="_blank" rel="noreferrer">Open PNG</a>`:''}</div>`;
+      }
+      return `<article class="minted-token-card" data-token-id="${tokenId}"><div class="minted-token-thumb">${imageMarkup(meta.image,meta.name)}</div><div class="minted-token-info"><div><strong>${esc(meta.name||`Token #${tokenId}`)}</strong><span>#${tokenId}</span></div><small>${revealed?'Revealed':'Unrevealed'} · ${esc(shortAddr(owner))}</small>${ownerActions}</div></article>`;
     }catch(e){return `<article class="minted-token-card"><div class="minted-token-thumb"><div class="minted-thumb-empty">#${tokenId}</div></div><div class="minted-token-info"><div><strong>Token #${tokenId}</strong></div><small>${esc(e.shortMessage||e.message)}</small></div></article>`}
   }
   async function loadMintedGallery(){
@@ -450,13 +498,24 @@
     statusNode.textContent=`${holders.length.toLocaleString()} current holder${holders.length===1?'':'s'} · ${contractState.totalMinted.toLocaleString()} NFTs`;$('holderPagination').classList.toggle('hidden',pages<=1);$('holderPageInfo').textContent=`Page ${holderPage} of ${pages}`;$('holderPrevBtn').disabled=holderPage<=1;$('holderNextBtn').disabled=holderPage>=pages;
   }
 
+  async function setTokenRenderMode(tokenId,mode){
+    try{
+      if(!wallet)await connect();
+      status(`${Number(mode)===1?'Switching to flattened PNG':'Switching to fully onchain SVG'} for token #${tokenId}…`);
+      const tx=await contract.setRenderMode(Number(tokenId),Number(mode));await tx.wait();
+      status(`Token #${tokenId} display updated. Marketplaces can refresh from the ERC-4906 MetadataUpdate event.`);
+      await renderMyNfts();
+    }catch(error){status(`Render mode error: ${error.shortMessage||error.message}`)}
+  }
+
   async function init(){
+    await hydratePublishedConfig();
     if(config.collectionImage)imageInto('mintAvatar',config.collectionImage);if(config.bannerImage)imageInto('mintBanner',config.bannerImage);
     $('networkStat').textContent=Number(config.chainId)===11155111?'Sepolia':Number(config.chainId)===1?'Ethereum':`Chain ${config.chainId}`;
     $('connectBtn').addEventListener('click',connect);$('publicMintBtn').addEventListener('click',publicMint);$('whitelistMintBtn').addEventListener('click',whitelistMint);bindStrictQty('publicQty');bindStrictQty('whitelistQty');
     $('mintedPrevBtn').addEventListener('click',()=>{mintedPage=Math.max(1,mintedPage-1);loadMintedGallery()});$('mintedNextBtn').addEventListener('click',()=>{mintedPage+=1;loadMintedGallery()});$('mintedSearchBtn').addEventListener('click',searchToken);$('mintedClearBtn').addEventListener('click',clearTokenSearch);$('mintedSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchToken()}});
     $('holdersRefreshBtn').addEventListener('click',()=>loadHolders(true));$('holderPrevBtn').addEventListener('click',()=>{holderPage=Math.max(1,holderPage-1);renderHolders()});$('holderNextBtn').addEventListener('click',()=>{holderPage+=1;renderHolders()});
-    $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
+    $('myNftsRefreshBtn').addEventListener('click',()=>loadHolders(true));$('myNftsGrid')?.addEventListener('click',event=>{const button=event.target.closest('[data-render-token]');if(button)setTokenRenderMode(button.dataset.renderToken,button.dataset.renderMode)});$('myNftsPrevBtn').addEventListener('click',()=>{myNftPage=Math.max(1,myNftPage-1);renderMyNfts()});$('myNftsNextBtn').addEventListener('click',()=>{myNftPage+=1;renderMyNfts()});
     if(window.ethereum){window.ethereum.on?.('accountsChanged',async a=>{++refreshSerial;wallet=a?.[0]?ethers.getAddress(a[0]):null;signer=null;contract=null;myNftPage=1;$('connectBtn').textContent=wallet?shortAddr(wallet):'Connect Wallet';if(wallet){try{browserProvider=new ethers.BrowserProvider(window.ethereum);signer=await browserProvider.getSigner();contract=new ethers.Contract(config.contract,ABI,signer)}catch(error){status(`Wallet error: ${walletErrorMessage(error)}`);return}}else{$('myNftsSection')?.classList.add('hidden')}await refresh()});window.ethereum.on?.('chainChanged',()=>location.reload())}
     await refresh();
   }
