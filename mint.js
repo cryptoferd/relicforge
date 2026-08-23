@@ -157,11 +157,11 @@
     // V11: when RelicForge Cloud is configured, reads go through the Alchemy-backed
     // safe relay. The injected wallet is reserved for signing transactions.
     if(API_BASE&&publicProvider)return publicProvider;
-    if(API_BASE){const list=rpcCandidates(config.chainId);if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}}
+    if(API_BASE){const list=rpcCandidates(config.chainId);if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}}
     if(browserProvider)return browserProvider;
     if(publicProvider)return publicProvider;
     const list=rpcCandidates(config.chainId);
-    if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true});return publicProvider}
+    if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}
     if(window.ethereum){browserProvider=new ethers.BrowserProvider(window.ethereum);return browserProvider}
     throw new Error('Connect a wallet to read this collection.');
   }
@@ -201,7 +201,7 @@
     let lastError=null;
     for(const rpc of candidates){
       try{
-        const provider=new ethers.JsonRpcProvider(rpc,Number(config.chainId),{staticNetwork:true});
+        const provider=new ethers.JsonRpcProvider(rpc,Number(config.chainId),{staticNetwork:true,batchMaxCount:20});
         await probeCollectionProvider(provider);
         publicProvider=provider;activeReadRpc=rpc;return provider;
       }catch(error){lastError=error}

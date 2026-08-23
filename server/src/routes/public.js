@@ -114,20 +114,39 @@ export default async function publicRoutes(app) {
 
   app.post('/api/public/rpc/:chainId', { config: { rateLimit: { max: 1200, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
-      const calls = Array.isArray(request.body) ? request.body : [request.body];
-      if (!calls.length || calls.length > 20) throw new Error('RPC batch size must be 1-20.');
+      const isBatch = Array.isArray(request.body);
+      const calls = isBatch ? request.body : [request.body];
+      // ethers v6 may coalesce many simultaneous contract reads into one JSON-RPC
+      // batch. Accept a reasonable client batch here and split it into upstream-safe
+      // chunks instead of turning an otherwise healthy read into HTTP 400.
+      if (!calls.length || calls.length > 100) throw new Error('RPC batch size must be 1-100.');
       calls.forEach(validateRpcCall);
       const chainId = Number(request.params.chainId);
       // Force an eth_chainId verification through ethers before using a mapped
       // endpoint. This protects against an outdated/incorrect endpoint->chain
       // mapping and fails closed instead of silently reading a different chain.
       await providerFor(chainId).getNetwork();
-      const response = await fetch(rpcUrl(chainId), {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request.body)
-      });
-      const text = await response.text();
-      let data; try { data = JSON.parse(text); } catch { data = { jsonrpc: '2.0', id: request.body?.id ?? null, error: { code: -32000, message: text || 'Upstream RPC error.' } }; }
-      reply.code(response.status).send(data);
+
+      const allResults = [];
+      for (let i = 0; i < calls.length; i += 20) {
+        const chunk = calls.slice(i, i + 20);
+        const upstreamBody = isBatch ? chunk : chunk[0];
+        const response = await fetch(rpcUrl(chainId), {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(upstreamBody)
+        });
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { jsonrpc: '2.0', id: chunk[0]?.id ?? null, error: { code: -32000, message: text || 'Upstream RPC error.' } };
+        }
+        if (!response.ok) return reply.code(response.status).send(data);
+        if (!isBatch) return reply.code(response.status).send(data);
+        if (Array.isArray(data)) allResults.push(...data);
+        else allResults.push(data);
+      }
+      return reply.code(200).send(allResults);
     } catch (error) {
       reply.code(400).send({ jsonrpc: '2.0', id: request.body?.id ?? null, error: { code: -32600, message: error.message } });
     }

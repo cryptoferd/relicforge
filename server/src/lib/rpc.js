@@ -37,7 +37,7 @@ export function rpcUrl(chainId) {
   const bulkOverride = String(jsonOverrides()[String(id)] || '').trim();
   if (bulkOverride) return bulkOverride;
 
-  // Normal V11.0.3 path: one ALCHEMY_API_KEY + built-in endpoint registry.
+  // Normal V11.0.4 path: one ALCHEMY_API_KEY + built-in endpoint registry.
   return alchemyRpcUrl(id);
 }
 
@@ -56,7 +56,7 @@ export function rpcInfo(chainId) {
 
 export function providerFor(chainId) {
   const id = Number(chainId);
-  if (!PROVIDERS.has(id)) PROVIDERS.set(id, new JsonRpcProvider(rpcUrl(id), id));
+  if (!PROVIDERS.has(id)) PROVIDERS.set(id, new JsonRpcProvider(rpcUrl(id), id, { staticNetwork: true, batchMaxCount: 20 }));
   return PROVIDERS.get(id);
 }
 export function collectionFor(chainId, address) {
