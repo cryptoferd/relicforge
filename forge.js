@@ -274,12 +274,12 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.0.8', { cache: 'no-store' })]);
+    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.1.0', { cache: 'no-store' })]);
     if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.0.8' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.1.0' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
@@ -749,7 +749,7 @@ ${await file.text()}`;
       encodingCode = 0;
       encoding = 'animated-gif-svg';
       if (chosenData.length > MAX_TRAIT_BYTES) {
-        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.0.8 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
+        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.1.0 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
       }
     }
     // PNG is already highly compressed. Vectorizing every pixel can be much larger,
@@ -1312,18 +1312,24 @@ ${await file.text()}`;
       forgeState.signer = await forgeState.provider.getSigner();
       forgeState.wallet = await forgeState.signer.getAddress();
       window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
-      $('forgeWalletStatus').textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
+      const forgeWalletStatus = $('forgeWalletStatus');
+      if (forgeWalletStatus) forgeWalletStatus.textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
       if (window.RelicForgeCloud?.enabled?.()) {
-        try { await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet); $('forgeWalletStatus').textContent += ' · Cloud'; }
-        catch (cloudError) { $('forgeWalletStatus').textContent += ` · Cloud sign-in pending`; }
+        try {
+          await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
+          if (forgeWalletStatus) forgeWalletStatus.textContent += ' · Cloud';
+        } catch (cloudError) {
+          if (forgeWalletStatus) forgeWalletStatus.textContent += ' · Cloud sign-in pending';
+        }
       }
-      $('connectForgeWalletBtn').textContent = 'Wallet Connected';
-      if (!$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
+      if ($('connectForgeWalletBtn')) $('connectForgeWalletBtn').textContent = 'Wallet Connected';
+      if ($('royaltyWallet') && !$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
       restoreInfra();
-      await refreshCostEstimate();
+      if ($('forgeCostEstimate')) await refreshCostEstimate();
       return forgeState.wallet;
     } catch (error) {
-      $('forgeWalletStatus').textContent = `Wallet error: ${error.message}`;
+      if ($('forgeWalletStatus')) $('forgeWalletStatus').textContent = `Wallet error: ${error.message}`;
+      if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Wallet error: ${error.message}`;
       throw error;
     }
   }
@@ -1336,7 +1342,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.0.8');
+      const worker = new Worker('./js/solc-worker.js?v=11.1.0');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -1410,8 +1416,8 @@ ${await file.text()}`;
       if (!infra.factory) return;
       forgeState.infra = infra;
       rememberFactory(infra.factory);
-      if (!$('factoryAddress').value.trim()) $('factoryAddress').value = infra.factory;
-      if (!$('randomnessAddress').value.trim()) $('randomnessAddress').value = infra.randomness || '';
+      if ($('factoryAddress') && !$('factoryAddress').value.trim()) $('factoryAddress').value = infra.factory;
+      if ($('randomnessAddress') && !$('randomnessAddress').value.trim()) $('randomnessAddress').value = infra.randomness || '';
     } catch (_) {}
   }
 
@@ -1447,7 +1453,7 @@ ${await file.text()}`;
       const whitelistEnabled = !!$('whitelistEnabled')?.checked;
       const holderRenderEnabled = !!$('holderRenderModeEnabled')?.checked;
       const defaultRenderMode = Number($('defaultRenderMode')?.value || 0);
-      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Flattened PNG cannot be the default until the Railway API URL is configured in relicforge-config.js.');
+      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Offchain rendering cannot be the default until the Railway API URL is configured in relicforge-config.js.');
       if (!publicMintEnabled && !whitelistEnabled) throw new Error('Enable public mint, whitelist mint, or both.');
       if (whitelistEnabled && !forgeState.whitelist) throw new Error('Build or snapshot the whitelist before forging.');
       const whitelistMintPrice = window.ethers.parseEther(String(Number($('whitelistMintPrice')?.value || 0)));
@@ -1867,7 +1873,9 @@ ${await file.text()}`;
   }
 
   function launchedModal(open) {
-    $('launchedDashboardModal')?.classList.toggle('hidden', !open);
+    const modal = $('launchedDashboardModal');
+    if (!modal) return;
+    modal.classList.toggle('hidden', !open);
     document.body.classList.toggle('modal-open', !!open);
   }
 
@@ -1902,6 +1910,7 @@ ${await file.text()}`;
     if (!forgeState.signer) await connectWallet();
     const wallet = forgeState.wallet;
     if ($('launchedDashboardWallet')) $('launchedDashboardWallet').textContent = `${wallet.slice(0, 6)}…${wallet.slice(-4)} · Sepolia`;
+    if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
     const extra = $('launchedFactoryInput')?.value.trim();
     if (extra) {
       if (!window.ethers.isAddress(extra)) throw new Error('Additional Factory address is invalid.');
@@ -2046,12 +2055,12 @@ ${await file.text()}`;
 
         <div class="launched-section">
           <h4>Rendering</h4>
-          <p class="forge-footnote">The canonical onchain SVG is always available. Flattened PNG mode points marketplaces at the RelicForge renderer while preserving renderToken() onchain.</p>
+          <p class="forge-footnote">The canonical onchain SVG is always available. Offchain Render serves a cached presentation copy while preserving renderToken() onchain. Animated GIF artwork remains animated through the adaptive offchain renderer.</p>
           <div class="launched-controls-grid">
-            <label class="field"><span>Default display</span><select id="dashboardDefaultRenderMode" ${mutableDisabled ? 'disabled' : ''}><option value="0" ${snap.defaultRenderMode === 0 ? 'selected' : ''}>Fully Onchain SVG</option><option value="1" ${snap.defaultRenderMode === 1 ? 'selected' : ''}>Flattened PNG</option></select></label>
+            <label class="field"><span>Default display</span><select id="dashboardDefaultRenderMode" ${mutableDisabled ? 'disabled' : ''}><option value="0" ${snap.defaultRenderMode === 0 ? 'selected' : ''}>Fully Onchain SVG</option><option value="1" ${snap.defaultRenderMode === 1 ? 'selected' : ''}>Offchain Render</option></select></label>
             <label class="field"><span>Renderer base URI</span><input id="dashboardRenderBaseURI" type="url" value="${esc(snap.flattenedRenderBaseURI || '')}" ${mutableDisabled ? 'disabled' : ''}/></label>
           </div>
-          <label class="project-toggle-row"><span><strong>Allow holder switching</strong><small>Owners can choose Onchain SVG or Flattened PNG for their token.</small></span><input id="dashboardHolderRenderEnabled" type="checkbox" ${snap.holderRenderEnabled ? 'checked' : ''} ${mutableDisabled ? 'disabled' : ''}/></label>
+          <label class="project-toggle-row"><span><strong>Allow holder switching</strong><small>Owners can choose Onchain SVG or Offchain Render for their token.</small></span><input id="dashboardHolderRenderEnabled" type="checkbox" ${snap.holderRenderEnabled ? 'checked' : ''} ${mutableDisabled ? 'disabled' : ''}/></label>
           <div class="launched-actions"><button class="primary-btn" data-dashboard-action="saverendering" ${mutableDisabled ? 'disabled' : ''} type="button">Save Render Settings</button></div>
         </div>
 
@@ -2145,6 +2154,10 @@ ${await file.text()}`;
         return;
       }
       if (action === 'viewer') {
+        if (document.body.classList.contains('dashboard-page-body')) {
+          window.open(`./studio.html?viewer=${encodeURIComponent(snap.address)}`, '_blank', 'noopener');
+          return;
+        }
         if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = snap.address;
         launchedModal(false);
         await loadViewerCollection(true);
@@ -2156,7 +2169,7 @@ ${await file.text()}`;
         const baseURI = String($('dashboardRenderBaseURI')?.value || '').trim();
         const enabled = !!$('dashboardHolderRenderEnabled')?.checked;
         const defaultMode = Number($('dashboardDefaultRenderMode')?.value || 0);
-        if (defaultMode === 1 && !baseURI) throw new Error('Flattened PNG default requires a renderer base URI.');
+        if (defaultMode === 1 && !baseURI) throw new Error('Offchain Render default requires a renderer base URI.');
         launchedStatus('Updating onchain render settings…');
         const tx = await contract.setRenderConfig(baseURI, enabled, defaultMode);
         await tx.wait();
@@ -2461,16 +2474,35 @@ ${await file.text()}`;
     if (cloudReady) loadCloudNetworkCatalog().catch(error => console.warn('RelicForge Alchemy network catalog unavailable:', error.message));
     const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
     if ($('rendererCloudStatus')) $('rendererCloudStatus').textContent = cloudReady
-      ? `Cloud renderer ready at ${renderHost || window.RelicForgeCloud.apiBase()}. Flattened PNGs are generated from the contract's canonical renderToken() output and cached in Railway object storage.`
+      ? `Cloud renderer ready at ${renderHost || window.RelicForgeCloud.apiBase()}. Offchain images are generated from the contract's canonical renderToken() output and cached in Railway object storage. Animated renders are preserved as SVG; static renders may be cached as PNG.`
       : 'Cloud renderer is not configured yet. Set apiBase/renderBase in relicforge-config.js after the Railway API is deployed. Fully-onchain SVG rendering still works without Cloud.';
     if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !cloudReady || !forgeState.collectionAddress;
     updateRevealUi();
     updateMintPagePreview().catch(() => {});
     updateWhitelistUi();
     updateGweiUi();
-    if (new URLSearchParams(window.location.search).get('dashboard') === '1') setTimeout(openLaunchedDashboard, 0);
+    const viewerFromQuery = new URLSearchParams(window.location.search).get('viewer');
+    if (viewerFromQuery && window.ethers?.isAddress(viewerFromQuery) && $('viewerCollectionAddress')) {
+      $('viewerCollectionAddress').value = viewerFromQuery;
+      setTimeout(() => loadViewerCollection(true).catch(() => {}), 0);
+    }
+  }
+
+  async function bindCreatorDashboardPage() {
+    $('launchedConnectBtn')?.addEventListener('click', () => connectWallet().then(loadLaunchedProjects).catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
+    $('launchedRefreshBtn')?.addEventListener('click', () => loadLaunchedProjects().catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
+    $('launchedManualAddBtn')?.addEventListener('click', addManualLaunchedCollection);
+    restoreInfra();
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = 'Connect your creator wallet to rediscover launched collections.';
+    try {
+      const accounts = await window.ethereum?.request?.({ method: 'eth_accounts' });
+      if (accounts?.[0]) { await connectWallet(); await loadLaunchedProjects(); }
+    } catch (error) {
+      if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`;
+    }
   }
 
   window.RelicForgeForge = { getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState };
-  bind();
+  if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
+  else bind();
 })();

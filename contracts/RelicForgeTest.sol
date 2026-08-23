@@ -263,8 +263,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumer {
     uint8 public revealMode; // 0 Forge Reveal, 1 Creator Reveal
     address public randomnessProvider;
 
-    // Render mode 0 = canonical fully-onchain SVG. Render mode 1 = flattened PNG URL.
-    // The flattened URL is presentation-only; renderToken() always remains the canonical onchain renderer.
+    // Render mode 0 = canonical fully-onchain SVG. Render mode 1 = offchain presentation URL.
+    // V11 retains the legacy .png URL suffix for deployed-contract compatibility; the RelicForge
+    // HTTP renderer may respond with another image content type when animation must be preserved.
+    // The offchain URL is presentation-only; renderToken() always remains the canonical onchain renderer.
     string public flattenedRenderBaseURI;
     bool public holderRenderModeEnabled;
     uint8 public defaultRenderMode;

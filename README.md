@@ -1,7 +1,24 @@
-# Relic Forge V11.0.8
+# Relic Forge V11.1.0
+
+## V11.1.0 — Studio UX + standalone Creator Dashboard
+
+- Studio project actions collapse into a compact hamburger menu on mobile instead of stacking vertically above the workspace.
+- Studio now tracks unsaved edits, shows the most recent save timestamp, and triggers the browser's leave-page warning while unsaved work exists.
+- Creator Dashboard is now a dedicated `dashboard.html` page rather than a Studio popup.
+- Relic Forge brand typography/header treatment is unified across landing, Studio, dashboard, and mint experiences.
+- Rarity layer titles are larger with trait counts on their own line; rarity controls now live in a dedicated toolbar below the layer title next to the live total.
+- Holder buttons are smaller/equal width and renamed **Render Offchain** / **View Image**. **View Image** uses the collection renderer rather than assuming PNG.
+- Offchain rendering is adaptive without changing the V11 Solidity ABI: static renders can be cached as PNG, while GIF/SVG animation-sensitive tokens are cached and served as SVG with the correct HTTP content type. The legacy `.png` URL suffix remains because existing V11 contracts append it onchain.
 
 
-## V11.0.8 — public gas oracle + full collection preview
+## V11.1.0 — layer delineation
+
+- Rarity/layer configuration now uses stronger rounded outlines, darker header bands, explicit interior dividers, and larger gutters between layers.
+- Trait cells use a denser bordered grid that visually belongs to its parent layer, matching the supplied Studio reference while preserving all existing controls and behavior.
+- Responsive wrapping keeps the same grouping on narrower screens.
+
+
+## V11.1.0 — public gas oracle + full collection preview
 
 - Studio deployment-cost GWEI now comes from direct public Sepolia RPCs (`eth_gasPrice`) with the connected wallet RPC as a fallback. The RelicForge Railway/Alchemy relay is not used for gas-price discovery.
 - Step 4 now previews the entire compiled collection instead of 12 samples. The grid uses smaller cards and renders 24, 48, or 96 tokens per page with Previous/Next pagination.
@@ -16,14 +33,14 @@
 - Backups can be imported later and saved as a new cloud project.
 - Mint-page collection image and banner: 2 MB maximum each; any image MIME type is accepted, including animated GIF.
 
-# Relic Forge Studio V11.0.8 — Cloud + Alchemy + Render Modes
+# Relic Forge Studio V11.1.0 — Cloud + Alchemy + Render Modes
 
 
-## Animated GIF artwork (V11.0.8)
+## Animated GIF artwork (V11.1.0)
 
-Studio accepts animated GIFs as normal layered traits, standalone 1/1 artwork, Creator Reveal placeholders, and custom mint-page images/banners. GIF animation is preserved by embedding the original GIF bytes as a `data:image/gif;base64,...` image inside the canonical onchain SVG. This deliberately uses the existing SVG-fragment encoding (`0`), so GIF projects remain compatible with already-deployed V11 factory/implementation contracts and do **not** require a factory redeployment. The existing 22 KB per-trait onchain shard limit applies to the compiled SVG fragment; base64 overhead means the practical source-GIF limit is somewhat below 22 KB. Flattened PNG presentation mode is intentionally static and will capture a frame rather than preserve animation.
+Studio accepts animated GIFs as normal layered traits, standalone 1/1 artwork, Creator Reveal placeholders, and custom mint-page images/banners. GIF animation is preserved by embedding the original GIF bytes as a `data:image/gif;base64,...` image inside the canonical onchain SVG. This deliberately uses the existing SVG-fragment encoding (`0`), so GIF projects remain compatible with already-deployed V11 factory/implementation contracts and do **not** require a factory redeployment. The existing 22 KB per-trait onchain shard limit applies to the compiled SVG fragment; base64 overhead means the practical source-GIF limit is somewhat below 22 KB. Offchain Render is adaptive: animation-sensitive GIF/SVG output is cached as SVG so animation survives, while static output may be rasterized and cached as PNG.
 
-## V11.0.8 mint RPC policy
+## V11.1.0 mint RPC policy
 
 Public mint pages now use direct public JSON-RPC endpoints first for normal collection reads and use a public-only RPC pool for holder `eth_getLogs` scans. Railway remains responsible for global mint-page configuration, whitelist proofs, assets, and other Cloud persistence. The Railway/Alchemy RPC relay is preserved as a fallback for ordinary mint reads and remains the Studio/backend architecture.
 
@@ -57,10 +74,10 @@ V11 is the first cloud-backed RelicForge build. It keeps the existing static Stu
 - Per-wallet whitelist proof lookup instead of distributing the whole whitelist.
 - Alchemy-backed collection state and wallet allowance endpoints.
 - A restricted read-only JSON-RPC relay used by the current Studio/viewer/gallery code.
-- A flattened PNG renderer backed by the canonical onchain `renderToken(tokenId)` output.
+- An adaptive offchain renderer backed by the canonical onchain `renderToken(tokenId)` output.
 
 ### Alchemy — one private key
-The Alchemy key stays **only on Railway**. V11.0.8 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
+The Alchemy key stays **only on Railway**. V11.1.0 requires a single `ALCHEMY_API_KEY`; endpoint bases are non-secret application configuration in `server/src/lib/alchemy-networks.js`. Do not put the key in `relicforge-config.js`, GitHub Pages, Vercel client variables, or a standalone mint page.
 
 The server now includes a broad Alchemy EVM endpoint catalog covering Ethereum, Base, Arbitrum, OP, Polygon, Robinhood Chain, ZKsync, World Chain, Shape, Mantle, Berachain, Blast, Linea, Zora, Ronin, Rootstock, HyperEVM, Lens, Frax, Ink, Avalanche, Gnosis, BNB Smart Chain, Unichain, Superseed, Monad, Flow EVM, Mode, Moonbeam, ApeChain, Celo, Metis, Sonic, Sei, Scroll, opBNB, CrossFi, Abstract, Soneium and additional Alchemy EVM endpoints.
 
@@ -81,19 +98,19 @@ A fresh visitor can load the collection URL, receive the published config, read 
 `RelicCollectionV2` adds two token presentation modes:
 
 - `0` — **Fully Onchain SVG** (canonical/default recommended mode)
-- `1` — **Flattened PNG** served from the configured RelicForge renderer
+- `1` — **Offchain Render** served from the configured RelicForge renderer
 
 The collection creator configures the renderer URL/default mode before sealing. If holder switching is enabled, the current token owner can call `setRenderMode(tokenId, mode)`. The contract emits ERC-4906 `MetadataUpdate(tokenId)` so marketplaces can refresh metadata.
 
 Important properties:
 - `renderToken(tokenId)` always returns the canonical onchain SVG, regardless of display mode.
-- Flattened PNG mode changes only the `image` field returned inside the otherwise-onchain `tokenURI()` JSON.
+- Offchain Render changes only the `image` field returned inside the otherwise-onchain `tokenURI()` JSON; `renderToken()` remains canonical.
 - A holder can always switch back to mode `0` (onchain SVG).
 - Creator render configuration is locked by `sealCollection()`.
 - Holder render selection remains usable after sealing.
 - Do not seal a collection with a temporary Railway renderer hostname. Use the stable custom hostname you intend to keep, e.g. `https://api.relicforge.xyz`.
 
-### Flattened renderer
+### Adaptive offchain renderer
 For a URL such as:
 
 `/api/public/render/11155111/0xCOLLECTION/123.png`
@@ -102,10 +119,10 @@ RelicForge Cloud:
 1. verifies the collection is registered,
 2. verifies token `123` is revealed,
 3. reads `renderToken(123)` through Alchemy,
-4. rasterizes the complete SVG with Sharp,
-5. nearest-neighbor upscales small pixel art to at least ~512 px,
-6. stores the PNG in the Railway Bucket,
-7. caches the result permanently by chain + collection + token.
+4. detects animation-sensitive GIF/SVG content,
+5. preserves animated output as cached SVG or rasterizes static output to PNG with Sharp,
+6. nearest-neighbor upscales small static pixel art to at least ~512 px,
+7. stores the rendered asset in the Railway Bucket and caches it by chain + collection + token.
 
 The renderer never uses the token's flattened `tokenURI()` image to render itself, so there is no recursion.
 
@@ -152,7 +169,7 @@ The short version is:
 7. Deploy the static frontend.
 8. Verify `/health`, cloud sign-in, cross-device project restore, and mint-page publishing.
 9. In Studio, run **Compile Contracts** and require zero Solidity errors before deploying V11 Sepolia infrastructure.
-10. Do not seal until both onchain SVG and flattened PNG rendering have been tested from a fresh device.
+10. Do not seal until both onchain SVG and Offchain Render have been tested from a fresh device.
 
 ## High-traffic design
 

@@ -800,8 +800,10 @@
           Your uploaded collection list chooses the layer combinations. Metadata visibility can still be configured below and applies to the final onchain token attributes.
         </div>
         ${state.layers.map(layer => `<section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
-          <div class="trait-config-header trait-config-header-rich">
-            <div><strong>${escapeHtml(layer.name)}</strong><span>${layer.traits.length} traits</span></div>
+          <div class="trait-config-header">
+            <div class="trait-layer-heading"><strong>${escapeHtml(layer.name)}</strong><span>${layer.traits.length} traits</span></div>
+          </div>
+          <div class="trait-config-toolbar">
             <div class="trait-header-controls">
               <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''}/> Hide category from metadata</label>
               <label class="ghost-btn small-btn file-button rarity-add-trait-btn" for="rarity-layer-traits-${escapeHtml(layer.id)}">+ Add Trait Artwork</label>
@@ -830,11 +832,13 @@
       const sortMode = (autoMode && layer.rarityMode === 'percentage') || showExact;
       return `
       <section class="trait-config-layer" data-layer-id="${escapeHtml(layer.id)}">
-        <div class="trait-config-header trait-config-header-rich">
-          <div>
+        <div class="trait-config-header">
+          <div class="trait-layer-heading">
             <strong>${escapeHtml(layer.name)}</strong>
             <span>${layer.traits.length} traits${layer.allowNone ? ' · None enabled' : ''}${showExact ? ` · ${genSupply.toLocaleString()} generative slots` : ''}</span>
           </div>
+        </div>
+        <div class="trait-config-toolbar">
           <div class="trait-header-controls">
             <label class="inline-check"><input class="none-layer-toggle" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.allowNone ? 'checked' : ''} /> Allow None</label>
             <label class="inline-check"><input class="layer-metadata-hidden" type="checkbox" data-layer-id="${escapeHtml(layer.id)}" ${layer.metadataHidden ? 'checked' : ''} /> Hide category from metadata</label>
@@ -2928,7 +2932,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.0.8',
+    version: '11.1.0',
     getState: () => state,
     getManifest: manifestObject,
     getProjectConfig: projectConfig,
@@ -2941,7 +2945,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.0.8' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.0' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);

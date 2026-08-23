@@ -12,6 +12,9 @@
   let currentProjectOwner = null;
   let cloudProjects = [];
   let cloudProjectLimit = MAX_CLOUD_PROJECTS;
+  let hasUnsavedChanges = false;
+  let lastSavedAt = null;
+  let dirtyTrackingReady = false;
 
   const $ = id => document.getElementById(id);
 
@@ -110,12 +113,38 @@
     if (source !== 'init') renderProjects().catch(() => {});
   }
 
+  function saveTimeLabel(value) {
+    if (!value) return 'Not saved yet';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Save time unavailable';
+    return `Last saved ${date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  function saveSafetyText() {
+    if (hasUnsavedChanges) return `${saveTimeLabel(lastSavedAt)} · Closing this tab will lose unsaved progress.`;
+    return lastSavedAt ? `${saveTimeLabel(lastSavedAt)} · All current changes are saved.` : 'Not saved yet · No changes to protect yet.';
+  }
+
   function setStatus(message, type = '') {
     const node = $('projectSaveStatus');
     if (node) {
-      node.textContent = message;
-      node.className = `project-save-status ${type}`.trim();
+      node.innerHTML = `<strong>${esc(message)}</strong><span>${esc(saveSafetyText())}</span>`;
+      node.className = `project-save-status ${type}${hasUnsavedChanges ? ' unsaved' : ''}`.trim();
     }
+  }
+
+  function markDirty() {
+    if (!dirtyTrackingReady) return;
+    if (!hasUnsavedChanges) {
+      hasUnsavedChanges = true;
+      setStatus('Unsaved changes', 'warning');
+    }
+  }
+
+  function markSaved(value = new Date()) {
+    hasUnsavedChanges = false;
+    lastSavedAt = value instanceof Date ? value.toISOString() : String(value || new Date().toISOString());
+    setStatus('All changes saved', 'success');
   }
 
   async function ensureCloudSession() {
@@ -219,6 +248,8 @@
     }
     currentProjectId = id;
     currentProjectOwner = wallet;
+    hasUnsavedChanges = false;
+    lastSavedAt = now;
     if (window.RelicForgeCloud?.enabled?.()) {
       try {
         await ensureCloudSession();
@@ -282,6 +313,8 @@
     window.RelicForgeForge?.restoreForgeProjectState?.(record.forge);
     currentProjectId = record.id;
     currentProjectOwner = record.owner;
+    hasUnsavedChanges = false;
+    lastSavedAt = record.updatedAt || new Date().toISOString();
     closeManager();
     setStatus(`Opened “${record.name}”${fromCloud ? ' from the latest cloud save' : ''}.`, 'success');
   }
@@ -303,6 +336,8 @@
       if (currentProjectId === id && currentProjectOwner === wallet) {
         currentProjectId = null;
         currentProjectOwner = null;
+        lastSavedAt = null;
+        hasUnsavedChanges = false;
       }
       const freed = Number(result?.freedBytes || 0);
       setStatus(`Deleted “${name}” globally${freed ? ` · freed ${formatBytes(freed)}` : ''}.`, 'success');
@@ -312,6 +347,8 @@
       if (currentProjectId === id && currentProjectOwner === wallet) {
         currentProjectId = null;
         currentProjectOwner = null;
+        lastSavedAt = null;
+        hasUnsavedChanges = false;
       }
       setStatus(`Deleted local save “${name}”.`, 'success');
     }
@@ -377,7 +414,7 @@
     const snapshot = await encodeBackupValue({ studio, forge }, assets, fileMap);
     return {
       schema: BACKUP_SCHEMA,
-      relicForgeVersion: '11.0.8',
+      relicForgeVersion: '11.1.0',
       exportedAt: new Date().toISOString(),
       project: {
         name: String(name || studio?.ui?.collectionName || 'Untitled Collection'),
@@ -430,7 +467,7 @@
     try { backup = JSON.parse(await file.text()); }
     catch { throw new Error('That file is not a valid Relic Forge project backup.'); }
     if (backup?.schema !== BACKUP_SCHEMA || !backup?.project?.snapshot?.studio) {
-      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.0.8 .relicforge backup for portable projects.');
+      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.1.0 .relicforge backup for portable projects.');
       throw new Error('Unsupported Relic Forge backup format.');
     }
     const assetMap = new Map();
@@ -445,6 +482,8 @@
     window.RelicForgeForge?.restoreForgeProjectState?.(restored.forge || null);
     currentProjectId = null;
     currentProjectOwner = null;
+    lastSavedAt = null;
+    hasUnsavedChanges = true;
     closeManager();
     setStatus(`Loaded backup “${backup.project.name || file.name}”. It is open as a new unsaved project; click Save Project to add it to your wallet cloud.`, 'success');
   }
@@ -574,16 +613,57 @@
       const address = event.detail?.address;
       if (address) setWallet(address);
     });
+
+    const menuBtn = $('studioMenuBtn');
+    const menu = $('studioProjectActions');
+    menuBtn?.addEventListener('click', event => {
+      event.stopPropagation();
+      const open = !menu?.classList.contains('mobile-open');
+      menu?.classList.toggle('mobile-open', open);
+      menuBtn.classList.toggle('active', open);
+      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', event => {
+      if (!menu?.classList.contains('mobile-open')) return;
+      if (menu.contains(event.target) || menuBtn?.contains(event.target)) return;
+      menu.classList.remove('mobile-open');
+      menuBtn?.classList.remove('active');
+      menuBtn?.setAttribute('aria-expanded', 'false');
+    });
+
+    const mutationClickSelector = [
+      '#createLayerBtn','#addCategoryBtn','.delete-layer-btn','.trait-thumb-remove','.rarity-remove-trait-btn',
+      '.autofill-btn','.equalize-btn','.exact-autofill-btn','.exact-equalize-btn','#addRuleBtn','.rule-remove',
+      '#saveManualTokenBtn','#clearManualTokenBtn','#compileBtn','#regenerateBtn','.oneofone-remove-btn',
+      '[data-add-oneofone-meta]','[data-remove-oneofone-meta]'
+    ].join(',');
+    const isStudioEditTarget = target => !!target?.closest?.('#studioApp main');
+    document.addEventListener('input', event => { if (isStudioEditTarget(event.target)) markDirty(); }, true);
+    document.addEventListener('change', event => { if (isStudioEditTarget(event.target)) markDirty(); }, true);
+    document.addEventListener('click', event => { if (event.target.closest?.(mutationClickSelector)) setTimeout(markDirty, 0); }, true);
+    document.addEventListener('drop', event => { if (isStudioEditTarget(event.target)) setTimeout(markDirty, 0); }, true);
+    window.addEventListener('beforeunload', event => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+
     initWalletState();
+    setTimeout(() => {
+      dirtyTrackingReady = true;
+      setStatus('No unsaved changes', '');
+    }, 0);
   }
 
   window.RelicForgeProjects = {
-    version: '11.0.8',
+    version: '11.1.0',
     connectWallet,
     saveProject,
     openManager,
     getWallet: () => wallet,
     getCurrentProjectId: () => currentProjectId,
+    hasUnsavedChanges: () => hasUnsavedChanges,
+    markDirty,
     ensureCloudSession,
     downloadCurrentProjectBackup,
     downloadProjectBackup,

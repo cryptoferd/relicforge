@@ -1423,3 +1423,390 @@ body.modal-open { overflow: hidden; }
 .rarity-remove-trait-btn:hover { color: var(--danger); }
 
 @media (max-width: 720px) { .collection-preview-toolbar { margin-left:20px; margin-right:20px; align-items:stretch; flex-direction:column; } .collection-preview-pagination { justify-content:flex-start; } .preview-grid { grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); padding-left:20px; padding-right:20px; } }
+
+/* V11.1.0 — stronger visual delineation for rarity/layer configuration */
+.trait-setup {
+  gap: 20px;
+  padding-top: 4px;
+}
+
+.trait-config-layer {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #555;
+  border-radius: 17px;
+  background: #090909;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 10px 28px rgba(0,0,0,.22);
+}
+
+.trait-config-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.018);
+}
+
+.trait-config-header {
+  min-height: 76px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #303030;
+  background: linear-gradient(180deg, #0b0b0b 0%, #090909 100%);
+}
+
+.trait-config-header-rich > div:first-child {
+  min-width: 210px;
+  padding-top: 2px;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.trait-config-header strong {
+  display: block;
+  color: #f4f4f4;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -.01em;
+}
+
+.trait-config-header span {
+  display: block;
+  color: #878787;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.trait-header-controls {
+  gap: 9px;
+  align-items: flex-end;
+}
+
+.trait-header-controls .inline-check {
+  min-height: 34px;
+  padding: 0 2px;
+}
+
+.trait-header-controls .ghost-btn,
+.trait-header-controls select,
+.trait-header-controls .percent-total,
+.trait-header-controls .exact-total {
+  background-color: #0d0d0d;
+}
+
+.rarity-order-hint {
+  min-height: 40px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #303030;
+  background: #111;
+  color: #858585;
+}
+
+.trait-config-grid {
+  grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 1px;
+  background: #363636;
+}
+
+.trait-config {
+  min-width: 0;
+  min-height: 116px;
+  padding: 12px 13px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  background: #101010;
+  transition: background-color .12s ease;
+}
+
+.trait-config:hover {
+  background: #131313;
+}
+
+.trait-config img {
+  width: 46px;
+  height: 46px;
+  margin-top: 1px;
+  border-color: #2f2f2f;
+  background: #171717;
+}
+
+.trait-config-placeholder {
+  width: 46px;
+  height: 46px;
+  aspect-ratio: auto;
+  margin-top: 1px;
+}
+
+.trait-config-name {
+  margin: 0 0 7px;
+  color: #eeeeee;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trait-config-controls select,
+.trait-config-controls input,
+.input-tag {
+  border-color: #303030;
+  background-color: #0d0d0d;
+}
+
+.trait-metadata-check {
+  margin-top: 8px;
+}
+
+.rarity-remove-trait-btn {
+  padding-top: 6px;
+}
+
+/* Preserve the stronger grouping as the header begins to wrap. */
+@media (max-width: 1180px) {
+  .trait-config-header-rich {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .trait-config-header-rich > div:first-child {
+    min-width: 0;
+  }
+  .trait-header-controls {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .trait-setup { gap: 16px; }
+  .trait-config-layer { border-radius: 14px; }
+  .trait-config-header { min-height: 0; padding: 13px; }
+  .trait-config-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .trait-config { min-height: 108px; }
+}
+
+/* =========================================================
+   V11.1.0 — Studio navigation, save safety, dashboard page,
+   layer hierarchy, and unified Relic Forge typography
+   ========================================================= */
+
+/* One brand treatment everywhere. */
+.site-unified-brand,
+.site-footer-brand,
+.dashboard-topbar .brand {
+  gap: 12px;
+}
+.site-unified-brand .brand-logo,
+.dashboard-topbar .brand-logo { width: 42px; height: 42px; }
+.site-footer-brand .brand-logo { width: 28px; height: 28px; }
+.site-footer-brand strong { font-size: 12px; }
+.site-footer-brand span { font-size: 9px; }
+.site-hero h1,
+.site-section-heading h2,
+.site-control-section h2,
+.site-final-cta h2,
+.dashboard-heading h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+}
+.site-hero h1 { letter-spacing: -.035em; }
+.site-section-heading h2,
+.site-control-section h2,
+.site-final-cta h2 { letter-spacing: -.025em; }
+
+/* Studio desktop actions + compact mobile menu. */
+.studio-action-shell { position: relative; display: flex; align-items: center; margin-left: auto; }
+.studio-menu-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: #111;
+  cursor: pointer;
+  place-content: center;
+  gap: 4px;
+}
+.studio-menu-btn span { display: block; width: 17px; height: 1px; background: #d5d5d5; transition: transform .15s ease, opacity .15s ease; }
+.studio-menu-btn.active span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+.studio-menu-btn.active span:nth-child(2) { opacity: 0; }
+.studio-menu-btn.active span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+.studio-dashboard-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+.project-save-status {
+  min-height: 34px;
+  padding: 7px 28px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+}
+.project-save-status strong { color: #d8d8d8; font-size: 10px; white-space: nowrap; }
+.project-save-status span { color: var(--muted); font-size: 9px; line-height: 1.35; }
+.project-save-status.unsaved {
+  border-bottom-color: rgba(226,195,111,.3);
+  background: rgba(226,195,111,.045);
+}
+.project-save-status.unsaved strong { color: var(--warn); }
+.project-save-status.success strong { color: var(--success); }
+.project-save-status.error strong { color: var(--danger); }
+
+/* Layer title is now its own visual level; controls live on a separate toolbar. */
+.trait-config-header {
+  min-height: 66px;
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.trait-layer-heading { min-width: 0; display: grid; gap: 5px; }
+.trait-layer-heading strong,
+.trait-config-header .trait-layer-heading strong {
+  display: block;
+  color: #f6f6f6;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+.trait-layer-heading span,
+.trait-config-header .trait-layer-heading span {
+  display: block;
+  color: #858585;
+  font-size: 10px;
+  line-height: 1.25;
+}
+.trait-config-toolbar {
+  min-height: 56px;
+  padding: 9px 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  border-bottom: 1px solid #303030;
+  background: #0e0e0e;
+}
+.trait-config-toolbar .trait-header-controls {
+  width: 100%;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 8px;
+}
+.trait-config-toolbar .percent-total,
+.trait-config-toolbar .exact-total { margin-left: 2px; }
+
+/* Standalone creator dashboard. */
+.dashboard-page-body { background: #080808; }
+.dashboard-shell { width: min(1440px, 100%); margin: 0 auto; padding: 0 28px 40px; }
+.dashboard-topbar { min-height: 84px; }
+.dashboard-nav-actions { display: flex; align-items: center; gap: 9px; }
+.dashboard-nav-actions .link-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.dashboard-main { padding-top: 28px; }
+.dashboard-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 30px;
+  align-items: flex-end;
+  padding: 0 0 22px;
+}
+.dashboard-heading h1 { margin: 6px 0 7px; font-size: clamp(32px, 4vw, 48px); line-height: 1; letter-spacing: -.03em; }
+.dashboard-heading p { margin: 0; max-width: 710px; color: var(--muted); line-height: 1.55; }
+.dashboard-wallet-strip { width: min(430px, 100%); flex: 0 0 auto; }
+.dashboard-workspace {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(13,13,13,.96);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.dashboard-launched-layout { min-height: 520px; }
+.dashboard-footer {
+  min-height: 76px;
+  margin-top: 26px;
+  border-top: 1px solid #242424;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-heading { align-items: stretch; flex-direction: column; }
+  .dashboard-wallet-strip { width: 100%; }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    min-height: 70px;
+    padding: 0 !important;
+    align-items: center !important;
+    flex-direction: row !important;
+  }
+  .brand-logo { width: 36px; height: 36px; }
+  .brand strong { font-size: 14px; }
+  .brand span { font-size: 10px; }
+  .studio-menu-btn { display: grid; }
+  .studio-project-actions {
+    display: none !important;
+    position: absolute;
+    z-index: 1800;
+    top: calc(100% + 9px);
+    right: 0;
+    width: min(292px, calc(100vw - 28px));
+    max-width: none !important;
+    padding: 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: #0b0b0b;
+    box-shadow: 0 18px 50px rgba(0,0,0,.55);
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px;
+  }
+  .studio-project-actions.mobile-open { display: flex !important; }
+  .studio-project-actions .ghost-btn,
+  .studio-project-actions .link-btn {
+    width: 100%;
+    min-height: 38px;
+    height: 38px;
+    justify-content: flex-start;
+    text-align: left;
+    padding-inline: 12px;
+  }
+  .project-save-status { padding: 7px 14px; align-items: flex-start; flex-direction: column; gap: 2px; }
+  .project-save-status strong { white-space: normal; }
+
+  .trait-config-header { min-height: 61px; padding: 13px 14px 11px; }
+  .trait-layer-heading strong,
+  .trait-config-header .trait-layer-heading strong { font-size: 17px; }
+  .trait-config-toolbar { padding: 10px 12px; }
+  .trait-config-toolbar .trait-header-controls { justify-content: flex-start; align-items: flex-end; }
+  .trait-config-toolbar .percent-total,
+  .trait-config-toolbar .exact-total { margin-left: auto; }
+
+  .dashboard-shell { padding-inline: 14px; }
+  .dashboard-topbar { gap: 12px; }
+  .dashboard-nav-actions { gap: 6px; }
+  .dashboard-nav-actions .ghost-btn { height: 36px; padding-inline: 10px; font-size: 9px; }
+  .dashboard-main { padding-top: 20px; }
+  .dashboard-workspace { padding: 13px; border-radius: 14px; }
+  .dashboard-footer { align-items: flex-start; flex-direction: column; justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  .site-nav { min-height: 70px; }
+  .site-unified-brand .brand-logo { width: 36px; height: 36px; }
+  .site-nav-links { gap: 8px; }
+  .site-nav-links a { font-size: 10px; }
+  .site-nav-links > a:first-child { display: none; }
+  .site-nav-links .site-studio-link { padding: 8px 10px; }
+  .trait-config-toolbar .trait-header-controls { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); width: 100%; }
+  .trait-config-toolbar .inline-check { min-width: 0; }
+  .trait-config-toolbar .mini-select { min-width: 0; }
+  .trait-config-toolbar .mini-select select { min-width: 0; width: 100%; }
+  .trait-config-toolbar .percent-total,
+  .trait-config-toolbar .exact-total { margin-left: 0; justify-self: end; }
+}

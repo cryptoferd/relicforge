@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=11.0.8" />
+  <link rel="stylesheet" href="./styles.css?v=11.1.0" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -18,17 +18,20 @@
 <span>Studio</span>
 </div>
 </a>
-<div class="topbar-actions studio-project-actions">
+<div class="studio-action-shell">
+<button class="studio-menu-btn" id="studioMenuBtn" type="button" aria-expanded="false" aria-controls="studioProjectActions" aria-label="Open Studio menu"><span></span><span></span><span></span></button>
+<div class="topbar-actions studio-project-actions" id="studioProjectActions">
 <button class="ghost-btn project-wallet-btn" id="projectWalletBtn" type="button">Connect Wallet</button>
 <button class="ghost-btn" disabled id="saveProjectBtn" type="button">Save Project</button>
 <button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
-<button class="ghost-btn" id="launchedProjectsBtn" type="button">Launched Projects</button>
+<a class="ghost-btn link-btn studio-dashboard-link" href="./dashboard.html">Creator Dashboard</a>
 <button class="ghost-btn" id="importProjectBtn" type="button">Import Backup</button>
 <button class="ghost-btn" id="exportProjectBtn" type="button">Download Backup</button>
 <input class="hidden" id="projectBackupInput" accept=".relicforge,.json,application/json,application/vnd.relicforge.project+json" type="file"/>
 </div>
+</div>
 </header>
-<div class="project-save-status" id="projectSaveStatus">Connect a wallet to save globally. Up to 10 active cloud projects per wallet; download backups anytime to free a slot safely.</div>
+<div class="project-save-status" id="projectSaveStatus"><strong>Unsaved project</strong><span>Not saved yet · Closing this tab will lose unsaved progress.</span></div>
 <main>
 <section class="hero-panel studio-hero-panel">
 <div>
@@ -436,9 +439,9 @@
 
     <div class="launch-card">
       <h3>Rendering</h3>
-      <label class="project-toggle-row"><span><strong>Holder render switching</strong><small>Let NFT owners switch their token between the canonical fully-onchain SVG and a flattened PNG served by RelicForge Cloud.</small></span><input id="holderRenderModeEnabled" type="checkbox" checked/></label>
-      <label class="field"><span>Default display</span><select id="defaultRenderMode"><option value="0" selected>Fully Onchain SVG</option><option value="1">Flattened PNG</option></select><small>The onchain SVG always remains the canonical renderer. A holder can always switch back to it.</small></label>
-      <div class="prototype-note"><strong>Flattened PNG renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will generate PNGs from the contract's onchain renderToken() output and cache them for marketplaces.</p></div>
+      <label class="project-toggle-row"><span><strong>Holder render switching</strong><small>Let NFT owners switch their token between the canonical fully-onchain SVG and an offchain presentation render served by RelicForge Cloud.</small></span><input id="holderRenderModeEnabled" type="checkbox" checked/></label>
+      <label class="field"><span>Default display</span><select id="defaultRenderMode"><option value="0" selected>Fully Onchain SVG</option><option value="1">Offchain Render</option></select><small>The onchain SVG always remains the canonical renderer. A holder can always switch back to it.</small></label>
+      <div class="prototype-note"><strong>Offchain renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will cache a presentation render from the canonical onchain renderToken() output; animated artwork is preserved.</p></div>
     </div>
 
     <div class="launch-card">
@@ -627,47 +630,12 @@
   </section>
 </div>
 
-<div class="project-modal hidden launched-dashboard-modal" id="launchedDashboardModal" role="dialog" aria-modal="true" aria-labelledby="launchedDashboardTitle">
-  <div class="project-modal-backdrop" id="launchedDashboardBackdrop"></div>
-  <section class="project-modal-panel launched-dashboard-panel">
-    <div class="project-modal-heading">
-      <div>
-        <div class="eyebrow">CREATOR DASHBOARD</div>
-        <h2 id="launchedDashboardTitle">Launched Projects</h2>
-        <p>Reconnect your creator wallet to rediscover and manage collections launched through Relic Forge.</p>
-      </div>
-      <button class="icon-btn" id="launchedDashboardCloseBtn" type="button" aria-label="Close creator dashboard">×</button>
-    </div>
-    <div class="project-wallet-strip">
-      <span>Creator wallet</span>
-      <strong id="launchedDashboardWallet">Connect wallet to load launches</strong>
-    </div>
-    <div class="launched-discovery-bar">
-      <label class="field"><span>Older / additional Factory (optional)</span><input id="launchedFactoryInput" placeholder="0x..." type="text"/><small>Current and previously used Sepolia factories saved in this browser are searched automatically.</small></label>
-      <div class="inline-actions">
-        <button class="ghost-btn" id="launchedConnectBtn" type="button">Connect Wallet</button>
-        <button class="primary-btn" id="launchedRefreshBtn" type="button">Refresh Launched Projects</button>
-      </div>
-    </div>
-    <div class="forge-inline-status" id="launchedDashboardStatus">No collections loaded.</div>
-    <div class="launched-dashboard-layout">
-      <aside class="launched-list" id="launchedCollectionList"></aside>
-      <section class="launched-detail" id="launchedCollectionDetail">
-        <div class="forge-market-empty">Choose a launched collection to open its creator controls.</div>
-      </section>
-    </div>
-    <div class="launched-manual-add">
-      <label class="field"><span>Can't find an older launch?</span><input id="launchedManualCollection" placeholder="Paste collection address" type="text"/><small>Relic Forge verifies that the connected wallet owns the collection before adding it to this dashboard.</small></label>
-      <button class="ghost-btn" id="launchedManualAddBtn" type="button">Add Collection</button>
-    </div>
-  </section>
-</div>
 
-  <script src="./relicforge-config.js?v=11.0.8"></script>
+  <script src="./relicforge-config.js?v=11.1.0"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./cloud.js?v=11.0.8" defer></script>
-  <script src="./app.js?v=11.0.8" defer></script>
-  <script src="./forge.js?v=11.0.8" defer></script>
-  <script src="./project-storage.js?v=11.0.8" defer></script>
+  <script src="./cloud.js?v=11.1.0" defer></script>
+  <script src="./app.js?v=11.1.0" defer></script>
+  <script src="./forge.js?v=11.1.0" defer></script>
+  <script src="./project-storage.js?v=11.1.0" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# RelicForge V11.0.8 — Railway + Alchemy Setup
+# RelicForge V11.1.0 — Railway + Alchemy Setup
 
 This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test deployment.
 
@@ -6,7 +6,7 @@ This guide takes the V11 ZIP from static files to a cloud-backed RelicForge test
 
 - The V11 repository pushed to GitHub.
 - A Railway account.
-- An Alchemy account. V11.0.8 uses one private API key with a built-in EVM endpoint registry instead of one Railway variable per chain.
+- An Alchemy account. V11.1.0 uses one private API key with a built-in EVM endpoint registry instead of one Railway variable per chain.
 - Your existing static frontend host (GitHub Pages or Vercel is fine).
 - Preferably a stable API hostname you control, e.g. `api.relicforge.xyz`.
 
@@ -104,7 +104,7 @@ Project files remain private; cross-device restore gets an authenticated presign
 
 ## 4. Add Alchemy — one key, all mapped EVM endpoints
 
-V11.0.8 no longer stores a full Alchemy URL per network. Add **one private variable** to the Railway API service:
+V11.1.0 no longer stores a full Alchemy URL per network. Add **one private variable** to the Railway API service:
 
 ```text
 ALCHEMY_API_KEY=YOUR_PRIVATE_ALCHEMY_KEY
@@ -196,7 +196,7 @@ Paste the output directly into Railway's `SESSION_SECRET` variable.
 
 For temporary testing, Railway's generated domain is fine.
 
-Before you **seal** any collection that might use flattened render mode, use a hostname you intend to keep permanently, for example:
+Before you **seal** any collection that might use Offchain Render mode, use a hostname you intend to keep permanently, for example:
 
 ```text
 https://api.relicforge.xyz
@@ -227,7 +227,7 @@ window.RELICFORGE_CONFIG = Object.freeze({
   apiBase: 'https://api.relicforge.xyz',
   renderBase: 'https://api.relicforge.xyz',
   cloudEnabled: true,
-  version: '11.0.8'
+  version: '11.1.0'
 });
 ```
 
@@ -251,7 +251,7 @@ Expected shape:
 {
   "ok": true,
   "service": "relicforge-cloud-api",
-  "version": "11.0.8"
+  "version": "11.1.0"
 }
 ```
 
@@ -317,7 +317,7 @@ For at least one revealed token verify:
 1. `renderToken(tokenId)` returns the complete canonical SVG.
 2. `tokenURI()` in mode `0` contains an onchain SVG data URI.
 3. The renderer URL returns one complete PNG.
-4. The current holder switches to **Flattened PNG** from **My NFTs**.
+4. The current holder switches to **Offchain Render** from **My NFTs**.
 5. `renderMode(tokenId)` becomes `1`.
 6. `tokenURI()` now advertises the renderer PNG URL.
 7. The holder switches back to **Onchain SVG**.

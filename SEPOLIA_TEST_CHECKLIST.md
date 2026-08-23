@@ -1,8 +1,8 @@
-# Relic Forge V11.0.8 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.1.0 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.0.8" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.1.0" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -77,13 +77,13 @@
 - [ ] My NFTs shows current ownership after transfers.
 - [ ] Mainnet source-collection whitelist snapshot can use the Alchemy-backed read route.
 
-## J. Holder render modes / flattened PNG
+## J. Holder render modes / adaptive offchain render
 - [ ] Creator configures a stable renderer base URI before sealing.
 - [ ] Default `0` returns fully onchain SVG in `tokenURI()`.
 - [ ] `renderToken(tokenId)` returns the same canonical complete SVG regardless of selected render mode.
-- [ ] `/api/public/render/<chain>/<collection>/<token>.png` returns a complete single PNG for a revealed token.
-- [ ] Re-requesting the PNG uses the cached render record/object.
-- [ ] Token owner selects **Flattened PNG** in My NFTs.
+- [ ] `/api/public/render/<chain>/<collection>/<token>.png` returns a valid image response for a revealed token (PNG for static output or SVG content type when animation must be preserved).
+- [ ] Re-requesting the image uses the adaptive v2 cached render record/object.
+- [ ] Token owner selects **Offchain Render** in My NFTs.
 - [ ] `renderMode(tokenId) == 1`.
 - [ ] `tokenURI()` `image` becomes the stable flattened renderer URL.
 - [ ] ERC-4906 `MetadataUpdate(tokenId)` is emitted.
@@ -107,7 +107,7 @@
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
 
-## Animated GIF acceptance (V11.0.8)
+## Animated GIF acceptance (V11.1.0)
 
 - [ ] Upload an animated GIF as a normal trait using folder import.
 - [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
@@ -122,10 +122,10 @@
 - [ ] Upload an animated full 1/1 and confirm its onchain render remains animated.
 - [ ] Upload GIF mint-page collection art/banner and confirm Cloud/Railway restores and serves it on another device.
 - [ ] If Creator Reveal is used, upload a small GIF placeholder and confirm the unrevealed token animation is preserved.
-- [ ] Confirm holder-selected flattened PNG mode is static by design and does not replace the canonical animated `renderToken()` output.
+- [ ] Confirm holder-selected Offchain Render preserves an animated GIF token and does not replace the canonical animated `renderToken()` output.
 
 
-## V11.0.8 public gas + full preview acceptance
+## V11.1.0 public gas + full preview acceptance
 
 - [ ] Compile a collection while no wallet is connected and confirm Current GWEI populates from a public Sepolia RPC when available.
 - [ ] Confirm the gas-price network requests go directly to public Sepolia RPC hosts and not `/api/public/rpc/11155111`.
@@ -133,3 +133,10 @@
 - [ ] Build a collection larger than 12 tokens and confirm every token can be reached through Preview pagination.
 - [ ] Verify 24 / 48 / 96 page-size options, Previous/Next disabling, token ranges, and page counts.
 - [ ] Verify animated GIF traits remain animated on paginated preview pages.
+
+
+## V11.1.0 layer delineation acceptance
+
+- [ ] Each rarity layer is visually enclosed by a stronger rounded border and clearly separated from adjacent layers.
+- [ ] Layer header, rarity-order hint, and trait grid read as three distinct internal bands.
+- [ ] Trait cells remain usable at desktop and mobile breakpoints with no behavior changes to rarity, metadata, drag ordering, or incremental trait editing.

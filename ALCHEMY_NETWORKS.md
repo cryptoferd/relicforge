@@ -1,4 +1,4 @@
-# RelicForge V11.0.8 — Alchemy EVM Endpoint Registry
+# RelicForge V11.1.0 — Alchemy EVM Endpoint Registry
 
 Registry snapshot: **2026-08-23**. Endpoint bases are non-secret and are sourced from Alchemy's supported-network catalog. `ALCHEMY_API_KEY` is appended only on the Railway server.
 

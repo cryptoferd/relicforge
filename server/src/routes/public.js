@@ -160,13 +160,13 @@ export default async function publicRoutes(app) {
     const registered = await one('SELECT 1 FROM collections WHERE chain_id=$1 AND contract_address=$2', [chainId, contractAddress]);
     if (!registered) return reply.code(404).send({ error: 'Collection is not registered with RelicForge Cloud.' });
     const cached = await one(
-      `SELECT a.object_key FROM render_cache r JOIN assets a ON a.id=r.asset_id
-       WHERE r.chain_id=$1 AND r.contract_address=$2 AND r.token_id=$3 AND a.status='ready'`,
+      `SELECT a.object_key, a.content_type FROM render_cache r JOIN assets a ON a.id=r.asset_id
+       WHERE r.chain_id=$1 AND r.contract_address=$2 AND r.token_id=$3 AND a.status='ready' AND a.purpose='render-v2'`,
       [chainId, contractAddress, tokenId]
     );
     if (cached) {
       const body = await getBuffer(cached.object_key);
-      reply.type('image/png');
+      reply.type(cached.content_type || 'application/octet-stream');
       reply.header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
       return reply.send(body);
     }
@@ -175,30 +175,53 @@ export default async function publicRoutes(app) {
     const [svg, owner] = await Promise.all([c.renderToken(tokenId), c.owner().catch(() => '0x0000000000000000000000000000000000000000')]);
     const svgBytes = Buffer.byteLength(svg, 'utf8');
     if (svgBytes > 8 * 1024 * 1024) return reply.code(413).send({ error: 'Rendered SVG exceeds the 8 MB renderer safety limit.' });
-    let image = sharp(Buffer.from(svg));
-    const metadata = await image.metadata();
-    const maxSide = Math.max(Number(metadata.width || 0), Number(metadata.height || 0));
-    if (maxSide > 0 && maxSide < 512) {
-      const factor = Math.max(1, Math.floor(512 / maxSide));
-      image = image.resize({ width: Number(metadata.width) * factor, height: Number(metadata.height) * factor, kernel: sharp.kernel.nearest });
+
+    // The contract's legacy mode-1 URL ends in .png, but the HTTP response is now adaptive.
+    // Animation-capable GIF/WebP/AVIF and embedded SVG content must not be flattened to a static frame. For those tokens we
+    // cache and serve the canonical SVG with the correct Content-Type. Static SVGs are still
+    // rasterized to PNG for broad marketplace compatibility. If Sharp cannot decode a source
+    // image type, fall back to canonical SVG instead of making offchain rendering fail.
+    const animationSensitive = /data:image\/(?:gif|webp|avif|svg\+xml)(?:;|,)|<animate(?:Transform|Motion)?\b|<set\b/i.test(svg);
+    let body;
+    let contentType;
+    let filename;
+    if (animationSensitive) {
+      body = Buffer.from(svg, 'utf8');
+      contentType = 'image/svg+xml';
+      filename = `${tokenId}.svg`;
+    } else {
+      try {
+        let image = sharp(Buffer.from(svg));
+        const metadata = await image.metadata();
+        const maxSide = Math.max(Number(metadata.width || 0), Number(metadata.height || 0));
+        if (maxSide > 0 && maxSide < 512) {
+          const factor = Math.max(1, Math.floor(512 / maxSide));
+          image = image.resize({ width: Number(metadata.width) * factor, height: Number(metadata.height) * factor, kernel: sharp.kernel.nearest });
+        }
+        body = await image.png({ compressionLevel: 9 }).toBuffer();
+        contentType = 'image/png';
+        filename = `${tokenId}.png`;
+      } catch {
+        body = Buffer.from(svg, 'utf8');
+        contentType = 'image/svg+xml';
+        filename = `${tokenId}.svg`;
+      }
     }
-    const png = await image.png({ compressionLevel: 9 }).toBuffer();
-    const filename = `${tokenId}.png`;
-    const key = objectKey({ wallet: String(owner).toLowerCase(), purpose: `renders/${chainId}/${contractAddress}`, filename });
-    await putBuffer(key, png, 'image/png');
+    const key = objectKey({ wallet: String(owner).toLowerCase(), purpose: `renders-v2/${chainId}/${contractAddress}`, filename });
+    await putBuffer(key, body, contentType);
     const assetId = crypto.randomUUID();
     await db.query(
       `INSERT INTO assets(id,owner_wallet,object_key,filename,content_type,size_bytes,purpose,status,completed_at)
-       VALUES($1,$2,$3,$4,'image/png',$5,'render','ready',now())`,
-      [assetId, String(owner).toLowerCase(), key, filename, png.length]
+       VALUES($1,$2,$3,$4,$5,$6,'render-v2','ready',now())`,
+      [assetId, String(owner).toLowerCase(), key, filename, contentType, body.length]
     );
     await db.query(
       `INSERT INTO render_cache(chain_id,contract_address,token_id,asset_id) VALUES($1,$2,$3,$4)
        ON CONFLICT(chain_id,contract_address,token_id) DO UPDATE SET asset_id=EXCLUDED.asset_id,created_at=now()`,
       [chainId, contractAddress, tokenId, assetId]
     );
-    reply.type('image/png');
+    reply.type(contentType);
     reply.header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
-    return reply.send(png);
+    return reply.send(body);
   });
 }

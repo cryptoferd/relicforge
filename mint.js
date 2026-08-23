@@ -159,7 +159,7 @@
   }
   function getReadProvider(){
     // Mint-page reads are deliberately independent from the signing wallet.
-    // V11.0.8 defaults to public RPC first; Railway/Alchemy remains a fallback.
+    // V11.1.0 defaults to public RPC first; Railway/Alchemy remains a fallback.
     if(publicProvider)return publicProvider;
     const list=rpcCandidates(config.chainId);
     if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}
@@ -431,8 +431,8 @@
       let ownerActions='';
       if(wallet&&String(owner).toLowerCase()===wallet.toLowerCase()&&revealed){
         const mode=Number(await c.renderMode(tokenId).catch(()=>0));
-        const png=API_BASE?apiUrl(`/api/public/render/${config.chainId}/${config.contract}/${tokenId}.png`):'';
-        ownerActions=`<div class="token-owner-actions"><button class="small-btn" data-render-token="${tokenId}" data-render-mode="${mode===1?0:1}" type="button">${mode===1?'Use Onchain SVG':'Use Flattened PNG'}</button>${png?`<a class="small-btn link-btn" href="${esc(png)}" target="_blank" rel="noreferrer">Open PNG</a>`:''}</div>`;
+        const viewImage=String(meta.image||'');
+        ownerActions=`<div class="token-owner-actions"><button class="small-btn render-toggle-btn" data-render-token="${tokenId}" data-render-mode="${mode===1?0:1}" type="button">${mode===1?'Render Onchain':'Render Offchain'}</button>${viewImage?`<a class="small-btn link-btn view-image-btn" href="${esc(viewImage)}" target="_blank" rel="noreferrer">View Image</a>`:''}</div>`;
       }
       return `<article class="minted-token-card" data-token-id="${tokenId}"><div class="minted-token-thumb">${imageMarkup(meta.image,meta.name)}</div><div class="minted-token-info"><div><strong>${esc(meta.name||`Token #${tokenId}`)}</strong><span>#${tokenId}</span></div><small>${revealed?'Revealed':'Unrevealed'} · ${esc(shortAddr(owner))}</small>${ownerActions}</div></article>`;
     }catch(e){return `<article class="minted-token-card"><div class="minted-token-thumb"><div class="minted-thumb-empty">#${tokenId}</div></div><div class="minted-token-info"><div><strong>Token #${tokenId}</strong></div><small>${esc(e.shortMessage||e.message)}</small></div></article>`}
@@ -541,7 +541,7 @@
   async function setTokenRenderMode(tokenId,mode){
     try{
       if(!wallet)await connect();
-      status(`${Number(mode)===1?'Switching to flattened PNG':'Switching to fully onchain SVG'} for token #${tokenId}…`);
+      status(`${Number(mode)===1?'Switching to offchain render':'Switching to fully onchain SVG'} for token #${tokenId}…`);
       const tx=await contract.setRenderMode(Number(tokenId),Number(mode));await tx.wait();
       status(`Token #${tokenId} display updated. Marketplaces can refresh from the ERC-4906 MetadataUpdate event.`);
       await renderMyNfts();

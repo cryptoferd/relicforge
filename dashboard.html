@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080808" />
+  <title>Relic Forge — Creator Dashboard</title>
+  <meta name="description" content="Manage collections launched through Relic Forge." />
+  <link rel="stylesheet" href="./styles.css?v=11.1.0" />
+</head>
+<body class="dashboard-page-body">
+  <div class="dashboard-shell">
+    <header class="topbar dashboard-topbar">
+      <a aria-label="Return to Relic Forge home" class="brand" href="./index.html">
+        <img alt="" class="brand-logo" src="./relic-forge-logo.svg" />
+        <div><strong>RELIC FORGE</strong><span>Creator Dashboard</span></div>
+      </a>
+      <div class="dashboard-nav-actions">
+        <a class="ghost-btn link-btn" href="./studio.html">Open Studio</a>
+        <button class="ghost-btn" id="launchedConnectBtn" type="button">Connect Wallet</button>
+      </div>
+    </header>
+
+    <main class="dashboard-main">
+      <section class="dashboard-heading">
+        <div>
+          <div class="eyebrow">CREATOR DASHBOARD</div>
+          <h1>Launched Projects</h1>
+          <p>Reconnect your creator wallet to rediscover and manage collections launched through Relic Forge.</p>
+        </div>
+        <div class="project-wallet-strip dashboard-wallet-strip">
+          <span>Creator wallet</span>
+          <strong id="launchedDashboardWallet">Connect wallet to load launches</strong>
+        </div>
+      </section>
+
+      <section class="dashboard-workspace">
+        <div class="launched-discovery-bar">
+          <label class="field"><span>Older / additional Factory (optional)</span><input id="launchedFactoryInput" placeholder="0x..." type="text"/><small>Current and previously used Sepolia factories saved in this browser are searched automatically. Cloud-registered launches are also discovered.</small></label>
+          <div class="inline-actions">
+            <button class="primary-btn" id="launchedRefreshBtn" type="button">Refresh Launched Projects</button>
+          </div>
+        </div>
+        <div class="forge-inline-status" id="launchedDashboardStatus">Connect your creator wallet to rediscover launched collections.</div>
+        <div class="launched-dashboard-layout dashboard-launched-layout">
+          <aside class="launched-list" id="launchedCollectionList"><div class="forge-market-empty">Connect your wallet to load launched projects.</div></aside>
+          <section class="launched-detail" id="launchedCollectionDetail"><div class="forge-market-empty">Choose a launched collection to open its creator controls.</div></section>
+        </div>
+        <div class="launched-manual-add">
+          <label class="field"><span>Can't find an older launch?</span><input id="launchedManualCollection" placeholder="Paste collection address" type="text"/><small>Relic Forge verifies that the connected wallet owns the collection before adding it to this dashboard.</small></label>
+          <button class="ghost-btn" id="launchedManualAddBtn" type="button">Add Collection</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="dashboard-footer"><span>Relic Forge Creator Dashboard</span><span>Creator actions are signed directly by your connected wallet.</span></footer>
+  </div>
+  <script src="./relicforge-config.js?v=11.1.0"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="./cloud.js?v=11.1.0" defer></script>
+  <script src="./forge.js?v=11.1.0" defer></script>
+</body>
+</html>
