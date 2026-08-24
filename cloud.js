@@ -27,35 +27,28 @@
   }
 
   async function requestWalletAccount({ forceChooser = false } = {}) {
+    if (window.RelicForgeWallets?.requestAccount) return window.RelicForgeWallets.requestAccount({ forceChooser });
     if (!window.ethereum?.request) throw new Error('No injected EVM wallet found.');
-    if (forceChooser) {
-      let chooserRequested = false;
-      try {
-        await window.ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
-        chooserRequested = true;
-      } catch (error) {
-        if (Number(error?.code) === 4001) throw error;
-        if (!permissionMethodUnsupported(error)) console.debug('Wallet permission revoke was not available:', error);
-      }
-      if (!chooserRequested) {
-        try {
-          await window.ethereum.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
-        } catch (error) {
-          if (Number(error?.code) === 4001) throw error;
-          if (!permissionMethodUnsupported(error)) console.debug('Wallet account chooser was not available:', error);
-        }
-      }
-    }
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
     return accounts[0];
   }
 
+  function activeWalletProvider() {
+    if (window.RelicForgeWallets) return window.RelicForgeWallets.getProvider?.() || null;
+    return window.ethereum || null;
+  }
+
   async function disconnectWalletProvider({ revoke = true } = {}) {
     clearSession();
-    if (!revoke || !window.ethereum?.request) return;
+    if (window.RelicForgeWallets?.disconnect) {
+      await window.RelicForgeWallets.disconnect({ revoke, clearSelection: true });
+      return;
+    }
+    const provider = activeWalletProvider();
+    if (!revoke || !provider?.request) return;
     try {
-      await window.ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+      await provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
     } catch (error) {
       if (!permissionMethodUnsupported(error) && Number(error?.code) !== 4001) console.debug('Wallet provider does not support permission revocation:', error);
     }
@@ -81,7 +74,9 @@
   }
   async function performSignIn(normalized, epochAtStart) {
     const challenge = await json('/api/auth/challenge', { method: 'POST', body: JSON.stringify({ wallet: normalized }) });
-    const provider = new window.ethers.BrowserProvider(window.ethereum);
+    const injected = activeWalletProvider();
+    if (!injected) throw new Error('The selected wallet provider is unavailable. Reconnect your wallet.');
+    const provider = new window.ethers.BrowserProvider(injected);
     const signer = await provider.getSigner();
     const signerAddress = window.ethers.getAddress(await signer.getAddress());
     if (signerAddress.toLowerCase() !== normalized.toLowerCase()) throw new Error('Connected wallet changed before cloud sign-in.');
@@ -95,7 +90,8 @@
 
   async function signIn(wallet) {
     if (!enabled()) return null;
-    if (!window.ethereum || !window.ethers) throw new Error('Wallet provider unavailable.');
+    if (!window.ethers) throw new Error('ethers.js is unavailable.');
+    if (!activeWalletProvider()) throw new Error('Wallet provider unavailable. Connect a wallet first.');
     const normalized = window.ethers.getAddress(wallet);
     const walletKey = normalized.toLowerCase();
     const existing = loadSession();
@@ -237,11 +233,13 @@
   window.RelicForgeWalletSession = {
     requestAccount: requestWalletAccount,
     disconnect: disconnectWalletProvider,
+    getProvider: activeWalletProvider,
+    getProviderInfo: () => window.RelicForgeWallets?.getInfo?.() || null,
     clearCloudSession: clearSession,
   };
 
   window.RelicForgeCloud = {
-    version: '11.1.4', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.5', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();

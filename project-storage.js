@@ -219,10 +219,6 @@
   }
 
   async function connectWallet({ forceChooser = false, requireCloud = false } = {}) {
-    if (!window.ethereum) {
-      setStatus('No injected EVM wallet was found.', 'error');
-      throw new Error('No injected EVM wallet found.');
-    }
     const address = await requestWalletAccount({ forceChooser });
     setWallet(address);
     window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address } }));
@@ -522,7 +518,7 @@
     const snapshot = await encodeBackupValue({ studio, forge }, assets, fileMap);
     return {
       schema: BACKUP_SCHEMA,
-      relicForgeVersion: '11.1.4',
+      relicForgeVersion: '11.1.5',
       exportedAt: new Date().toISOString(),
       project: {
         name: String(name || studio?.ui?.collectionName || 'Untitled Collection'),
@@ -575,7 +571,7 @@
     try { backup = JSON.parse(await file.text()); }
     catch { throw new Error('That file is not a valid Relic Forge project backup.'); }
     if (backup?.schema !== BACKUP_SCHEMA || !backup?.project?.snapshot?.studio) {
-      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.1.4 .relicforge backup for portable projects.');
+      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.1.5 .relicforge backup for portable projects.');
       throw new Error('Unsupported Relic Forge backup format.');
     }
     const assetMap = new Map();
@@ -673,32 +669,51 @@
     document.body.classList.remove('modal-open');
   }
 
+  function handleWalletAccountsChanged(accounts) {
+    const next = accounts?.[0] || null;
+    const previous = wallet;
+    if (!next) {
+      window.RelicForgeCloud?.clearSession?.();
+      setWallet(null);
+      window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
+      setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected in extension' : 'Wallet disconnected in extension', hasUnsavedChanges ? 'warning' : '');
+      return;
+    }
+    if (!previous || previous.toLowerCase() !== String(next).toLowerCase()) window.RelicForgeCloud?.clearSession?.();
+    setWallet(next);
+    window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: next } }));
+    if (previous && previous.toLowerCase() !== String(next).toLowerCase()) setStatus('Wallet account changed. Sign in before your next global save.', 'warning');
+  }
+
   async function initWalletState() {
-    if (!window.ethereum) {
+    let provider = null;
+    if (window.RelicForgeWallets?.ready) {
+      try {
+        await window.RelicForgeWallets.ready();
+        provider = window.RelicForgeWallets.getProvider?.() || null;
+      } catch {}
+      window.addEventListener('relicforge:wallet-accounts-changed', event => handleWalletAccountsChanged(event.detail?.accounts || []));
+      window.addEventListener('relicforge:wallet-provider-changed', event => {
+        if (!event.detail?.provider) {
+          window.RelicForgeCloud?.clearSession?.();
+          setWallet(null, 'provider-change');
+          updateSaveGate();
+        }
+      });
+    } else if (window.ethereum?.request) {
+      provider = window.ethereum;
+      window.ethereum.on?.('accountsChanged', handleWalletAccountsChanged);
+    }
+    if (!provider?.request) {
       setWallet(null, 'init');
       return;
     }
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const accounts = await provider.request({ method: 'eth_accounts' });
       setWallet(accounts?.[0] || null, 'init');
     } catch {
       setWallet(null, 'init');
     }
-    window.ethereum.on?.('accountsChanged', accounts => {
-      const next = accounts?.[0] || null;
-      const previous = wallet;
-      if (!next) {
-        window.RelicForgeCloud?.clearSession?.();
-        setWallet(null);
-        window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
-        setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected in extension' : 'Wallet disconnected in extension', hasUnsavedChanges ? 'warning' : '');
-        return;
-      }
-      if (!previous || previous.toLowerCase() !== String(next).toLowerCase()) window.RelicForgeCloud?.clearSession?.();
-      setWallet(next);
-      window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: next } }));
-      if (previous && previous.toLowerCase() !== String(next).toLowerCase()) setStatus('Wallet account changed. Sign in before your next global save.', 'warning');
-    });
   }
 
   function bind() {
@@ -796,7 +811,7 @@
   }
 
   window.RelicForgeProjects = {
-    version: '11.1.4',
+    version: '11.1.5',
     connectWallet,
     changeWallet,
     disconnectWallet,

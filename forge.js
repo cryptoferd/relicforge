@@ -274,14 +274,20 @@
   }
 
   async function downloadMintPageFromConfig(config, filenameBase = 'relicforge') {
-    const [templateRes, scriptRes] = await Promise.all([fetch('./mint.html', { cache: 'no-store' }), fetch('./mint.js?v=11.1.4', { cache: 'no-store' })]);
-    if (!templateRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
+    const [templateRes, walletRes, scriptRes] = await Promise.all([
+      fetch('./mint.html', { cache: 'no-store' }),
+      fetch('./wallet.js?v=11.1.5', { cache: 'no-store' }),
+      fetch('./mint.js?v=11.1.5', { cache: 'no-store' })
+    ]);
+    if (!templateRes.ok || !walletRes.ok || !scriptRes.ok) throw new Error('Unable to load the mint page template.');
     let html = await templateRes.text();
+    const walletScript = await walletRes.text();
     const script = await scriptRes.text();
     const configJson = JSON.stringify(config).replace(/<\/script/gi, '<\\/script');
-    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.1.4' }).replace(/<\/script/gi, '<\\/script');
+    const runtimeConfigJson = JSON.stringify({ apiBase: window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '', renderBase: window.RELICFORGE_CONFIG?.renderBase || '', cloudEnabled: true, mintRpcMode: window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first', version: '11.1.5' }).replace(/<\/script/gi, '<\\/script');
     html = html.replace(/<script src="\.\/relicforge-config\.js(?:\?v=[^"]+)?"><\/script>/, `<script>window.RELICFORGE_CONFIG = ${runtimeConfigJson};<\/script>`);
     html = html.replace('<script>window.RELICFORGE_MINT_CONFIG = null;</script>', `<script>window.RELICFORGE_MINT_CONFIG = ${configJson};<\/script>`);
+    html = html.replace(/<script src="\.\/wallet\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${walletScript.replace(/<\/script/gi, '<\\/script')}<\/script>`);
     html = html.replace(/<script src="\.\/mint\.js(?:\?v=[^"]+)?"><\/script>/, `<script>${script.replace(/<\/script/gi, '<\\/script')}<\/script>`);
     html = html.replace(/href="\.\/index\.html"/g, 'href="https://cryptoferd.github.io/relicforge/"');
     html = html.replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
@@ -749,7 +755,7 @@ ${await file.text()}`;
       encodingCode = 0;
       encoding = 'animated-gif-svg';
       if (chosenData.length > MAX_TRAIT_BYTES) {
-        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.1.4 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
+        throw new Error(`${source.name || source.file.name} is an animated GIF using ${fmtBytes(sourceData.length)} (${fmtBytes(chosenData.length)} when embedded onchain). V11.1.5 preserves GIF animation without requiring a new factory, but the current single-artwork shard limit is ${fmtBytes(MAX_TRAIT_BYTES)}. Optimize the GIF (fewer frames/colors or a smaller canvas) and re-upload it.`);
       }
     }
     // PNG is already highly compressed. Vectorizing every pixel can be much larger,
@@ -1288,15 +1294,21 @@ ${await file.text()}`;
     $('forgeCostBreakdown').innerHTML = labels.map(([name, gas]) => `<div class="forge-row"><span>${esc(name)}</span><strong>~${gas.toLocaleString()} gas</strong></div>`).join('');
   }
 
-  async function switchSepolia() {
-    if (!window.ethereum) throw new Error('No injected EVM wallet found.');
-    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+  function activeInjectedWallet() {
+    if (window.RelicForgeWalletSession?.getProvider) return window.RelicForgeWalletSession.getProvider() || null;
+    if (window.RelicForgeWallets) return window.RelicForgeWallets.getProvider?.() || null;
+    return window.ethereum || null;
+  }
+
+  async function switchSepolia(provider = activeInjectedWallet()) {
+    if (!provider?.request) throw new Error('No selected EVM wallet provider found.');
+    const chainId = await provider.request({ method: 'eth_chainId' });
     if (chainId.toLowerCase() === SEPOLIA_CHAIN_ID_HEX) return;
     try {
-      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }] });
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }] });
     } catch (error) {
-      if (error.code !== 4902) throw error;
-      await window.ethereum.request({
+      if (Number(error.code) !== 4902) throw error;
+      await provider.request({
         method: 'wallet_addEthereumChain',
         params: [{ chainId: SEPOLIA_CHAIN_ID_HEX, chainName: 'Sepolia', nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'], blockExplorerUrls: ['https://sepolia.etherscan.io'] }],
       });
@@ -1319,6 +1331,7 @@ ${await file.text()}`;
 
   async function requestForgeAccount({ forceChooser = false } = {}) {
     if (window.RelicForgeWalletSession?.requestAccount) return window.RelicForgeWalletSession.requestAccount({ forceChooser });
+    if (window.RelicForgeWallets?.requestAccount) return window.RelicForgeWallets.requestAccount({ forceChooser });
     if (!window.ethereum?.request) throw new Error('No injected EVM wallet found.');
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
@@ -1328,10 +1341,11 @@ ${await file.text()}`;
   async function connectWallet({ forceChooser = false } = {}) {
     try {
       if (!window.ethers) throw new Error('ethers.js did not load. Check the internet connection and reload.');
-      if (!window.ethereum) throw new Error('No injected EVM wallet found.');
       await requestForgeAccount({ forceChooser });
-      await switchSepolia();
-      forgeState.provider = new window.ethers.BrowserProvider(window.ethereum);
+      const injected = activeInjectedWallet();
+      if (!injected) throw new Error('No selected EVM wallet provider found.');
+      await switchSepolia(injected);
+      forgeState.provider = new window.ethers.BrowserProvider(injected);
       forgeState.signer = await forgeState.provider.getSigner();
       forgeState.wallet = await forgeState.signer.getAddress();
       window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
@@ -1387,7 +1401,7 @@ ${await file.text()}`;
     const source = await sourceResponse.text();
     log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
-      const worker = new Worker('./js/solc-worker.js?v=11.1.4');
+      const worker = new Worker('./js/solc-worker.js?v=11.1.5');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
       worker.onmessage = event => {
         clearTimeout(timer); worker.terminate();
@@ -2540,25 +2554,35 @@ ${await file.text()}`;
     $('launchedDisconnectBtn')?.addEventListener('click', () => disconnectForgeWallet().catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
     $('launchedRefreshBtn')?.addEventListener('click', () => loadLaunchedProjects().catch(error => { if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`; }));
     $('launchedManualAddBtn')?.addEventListener('click', addManualLaunchedCollection);
-    window.ethereum?.on?.('accountsChanged', accounts => {
+    const onAccountsChanged = accounts => {
       window.RelicForgeCloud?.clearSession?.();
       const next = accounts?.[0] || null;
       resetWalletSessionUi(next ? 'Wallet account changed.' : 'Wallet disconnected.');
       if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = next
         ? 'Wallet account changed in your extension. Click Connect Wallet to sign in and load this account’s launched projects.'
         : 'Wallet disconnected. Connect a creator wallet to rediscover launched collections.';
-    });
+    };
+    if (window.RelicForgeWallets?.ready) {
+      window.addEventListener('relicforge:wallet-accounts-changed', event => onAccountsChanged(event.detail?.accounts || []));
+      window.addEventListener('relicforge:wallet-provider-changed', event => {
+        if (!event.detail?.provider) onAccountsChanged([]);
+      });
+      try { await window.RelicForgeWallets.ready(); } catch {}
+    } else {
+      window.ethereum?.on?.('accountsChanged', onAccountsChanged);
+    }
     restoreInfra();
     if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = 'Connect your creator wallet to rediscover launched collections.';
     try {
-      const accounts = await window.ethereum?.request?.({ method: 'eth_accounts' });
+      const injected = activeInjectedWallet();
+      const accounts = await injected?.request?.({ method: 'eth_accounts' });
       if (accounts?.[0]) { await connectWallet(); await loadLaunchedProjects(); }
     } catch (error) {
       if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Dashboard: ${error.message}`;
     }
   }
 
-  window.RelicForgeForge = { version: '11.1.4', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet };
+  window.RelicForgeForge = { version: '11.1.5', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();

@@ -1,8 +1,8 @@
-# Relic Forge V11.1.4 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.1.5 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.1.4" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.1.5" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -107,7 +107,7 @@
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
 
-## Animated GIF acceptance (V11.1.4)
+## Animated GIF acceptance (V11.1.5)
 
 - [ ] Upload an animated GIF as a normal trait using folder import.
 - [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
@@ -125,7 +125,7 @@
 - [ ] Confirm holder-selected Offchain Render preserves an animated GIF token and does not replace the canonical animated `renderToken()` output.
 
 
-## V11.1.4 public gas + full preview acceptance
+## V11.1.5 public gas + full preview acceptance
 
 - [ ] Compile a collection while no wallet is connected and confirm Current GWEI populates from a public Sepolia RPC when available.
 - [ ] Confirm the gas-price network requests go directly to public Sepolia RPC hosts and not `/api/public/rpc/11155111`.
@@ -135,14 +135,14 @@
 - [ ] Verify animated GIF traits remain animated on paginated preview pages.
 
 
-## V11.1.4 layer delineation acceptance
+## V11.1.5 layer delineation acceptance
 
 - [ ] Each rarity layer is visually enclosed by a stronger rounded border and clearly separated from adjacent layers.
 - [ ] Layer header, rarity-order hint, and trait grid read as three distinct internal bands.
 - [ ] Trait cells remain usable at desktop and mobile breakpoints with no behavior changes to rarity, metadata, drag ordering, or incremental trait editing.
 
 
-## V11.1.4 wallet session + save-gate acceptance
+## V11.1.5 wallet session + save-gate acceptance
 
 - [ ] Open Studio with no wallet connected and confirm the save gate says a wallet/signature is required to save.
 - [ ] Click **Save Project** while disconnected and confirm the wallet connection flow starts instead of silently creating a local-only save.
@@ -157,9 +157,20 @@
 - [ ] Test both MetaMask and Rabby. If a provider does not support `wallet_revokePermissions` / `wallet_requestPermissions`, verify the fallback still allows account switching through the extension.
 
 
-## V11.1.4 single-sign-in acceptance
+## V11.1.5 single-sign-in acceptance
 
 - [ ] With no active Cloud session, connect a wallet and trigger Save Project. Confirm exactly one message-signature prompt appears.
 - [ ] While that prompt is pending, click another Cloud-backed action. Confirm no second signature prompt appears.
 - [ ] After signing once, open My Projects / Forge / Creator Dashboard actions and confirm the existing session is reused.
 - [ ] Disconnect during a pending sign-in and confirm the stale completion does not restore the disconnected session.
+
+## V11.1.5 multi-wallet acceptance
+
+- [ ] Install/enable at least two injected wallets (for example Rabby + MetaMask).
+- [ ] With no wallet selected, click Connect Wallet and verify Relic Forge shows its own wallet chooser.
+- [ ] Choose Rabby and verify the account request, Cloud sign-in signature, Studio save, and Forge signer all come from Rabby.
+- [ ] Disconnect, reconnect, choose MetaMask, and verify no Rabby prompt appears.
+- [ ] Use Connect Different Wallet and verify the chooser lists all discovered providers and identifies the current one.
+- [ ] Reload with a previously selected provider and verify Relic Forge remembers the provider without silently switching to another extension.
+- [ ] Confirm one Cloud sign-in still produces only one message-signature prompt.
+- [ ] Open a public mint page with multiple wallets installed and verify its Connect Wallet button also uses the chooser.
