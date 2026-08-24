@@ -3,6 +3,8 @@
   const TOKEN_KEY = 'relicforge_cloud_session_v1';
   const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
   let session = null;
+  let signInFlight = null;
+  let authEpoch = 0;
 
   function apiBase() {
     const query = new URLSearchParams(location.search).get('api');
@@ -14,7 +16,11 @@
     try { session = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null'); } catch { session = null; }
     return session;
   }
-  function clearSession() { session = null; try { sessionStorage.removeItem(TOKEN_KEY); } catch {} }
+  function clearSession() {
+    session = null;
+    authEpoch += 1;
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  }
 
   function permissionMethodUnsupported(error) {
     return [-32601, 4200, -32004].includes(Number(error?.code));
@@ -73,12 +79,7 @@
     }
     return data;
   }
-  async function signIn(wallet) {
-    if (!enabled()) return null;
-    if (!window.ethereum || !window.ethers) throw new Error('Wallet provider unavailable.');
-    const normalized = window.ethers.getAddress(wallet);
-    const existing = loadSession();
-    if (existing?.wallet?.toLowerCase() === normalized.toLowerCase() && existing?.token) return existing;
+  async function performSignIn(normalized, epochAtStart) {
     const challenge = await json('/api/auth/challenge', { method: 'POST', body: JSON.stringify({ wallet: normalized }) });
     const provider = new window.ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
@@ -86,9 +87,32 @@
     if (signerAddress.toLowerCase() !== normalized.toLowerCase()) throw new Error('Connected wallet changed before cloud sign-in.');
     const signature = await signer.signMessage(challenge.message);
     const verified = await json('/api/auth/verify', { method: 'POST', body: JSON.stringify({ wallet: normalized, signature }) });
+    if (epochAtStart !== authEpoch) throw new Error('Wallet session changed while sign-in was in progress. Please sign in again.');
     session = { token: verified.token, wallet: verified.wallet, signedInAt: new Date().toISOString() };
     sessionStorage.setItem(TOKEN_KEY, JSON.stringify(session));
     return session;
+  }
+
+  async function signIn(wallet) {
+    if (!enabled()) return null;
+    if (!window.ethereum || !window.ethers) throw new Error('Wallet provider unavailable.');
+    const normalized = window.ethers.getAddress(wallet);
+    const walletKey = normalized.toLowerCase();
+    const existing = loadSession();
+    if (existing?.wallet?.toLowerCase() === walletKey && existing?.token) return existing;
+
+    // Multiple Studio modules can request Cloud auth at the same time (project save,
+    // Forge, dashboard discovery, asset upload). Reuse one in-flight login so the
+    // wallet receives exactly one signature request and Railway receives one nonce.
+    if (signInFlight?.wallet === walletKey) return signInFlight.promise;
+
+    const epochAtStart = authEpoch;
+    let promise;
+    promise = performSignIn(normalized, epochAtStart).finally(() => {
+      if (signInFlight?.promise === promise) signInFlight = null;
+    });
+    signInFlight = { wallet: walletKey, promise };
+    return promise;
   }
   async function ensureSignedIn(wallet) {
     const active = loadSession();
@@ -217,7 +241,7 @@
   };
 
   window.RelicForgeCloud = {
-    version: '11.1.3', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.4', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();

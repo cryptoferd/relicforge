@@ -37,7 +37,7 @@ export function rpcUrl(chainId) {
   const bulkOverride = String(jsonOverrides()[String(id)] || '').trim();
   if (bulkOverride) return bulkOverride;
 
-  // Normal V11.1.3 path: one ALCHEMY_API_KEY + built-in endpoint registry.
+  // Normal V11.1.4 path: one ALCHEMY_API_KEY + built-in endpoint registry.
   return alchemyRpcUrl(id);
 }
 
