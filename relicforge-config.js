@@ -14,5 +14,5 @@ window.RELICFORGE_CONFIG = Object.freeze({
   studioGasRpcMode: 'public-only',
   maxCloudProjects: 10,
   mintPageMaxBytes: 2 * 1024 * 1024,
-  version: '11.1.5'
+  version: '11.1.6'
 });

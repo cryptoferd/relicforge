@@ -1,6 +1,6 @@
 {
   "name": "relicforge-cloud-api",
-  "version": "11.1.5",
+  "version": "11.1.6",
   "private": true,
   "type": "module",
   "engines": {

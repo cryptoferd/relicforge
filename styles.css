@@ -1424,7 +1424,7 @@ body.modal-open { overflow: hidden; }
 
 @media (max-width: 720px) { .collection-preview-toolbar { margin-left:20px; margin-right:20px; align-items:stretch; flex-direction:column; } .collection-preview-pagination { justify-content:flex-start; } .preview-grid { grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); padding-left:20px; padding-right:20px; } }
 
-/* V11.1.5 — stronger visual delineation for rarity/layer configuration */
+/* V11.1.6 — stronger visual delineation for rarity/layer configuration */
 .trait-setup {
   gap: 20px;
   padding-top: 4px;
@@ -1586,7 +1586,7 @@ body.modal-open { overflow: hidden; }
 }
 
 /* =========================================================
-   V11.1.5 — Studio navigation, save safety, dashboard page,
+   V11.1.6 — Studio navigation, save safety, dashboard page,
    layer hierarchy, and unified Relic Forge typography
    ========================================================= */
 
@@ -1859,7 +1859,7 @@ body.modal-open { overflow: hidden; }
   .trait-config-toolbar .exact-total { margin-left: 0; justify-self: end; }
 }
 
-/* V11.1.5 — keep per-trait rarity tier names readable. */
+/* V11.1.6 — keep per-trait rarity tier names readable. */
 .trait-config-controls.tier-mode {
   grid-template-columns: minmax(112px, 1fr);
 }
@@ -1881,7 +1881,7 @@ body.modal-open { overflow: hidden; }
   }
 }
 
-/* V11.1.5 — EIP-6963 multi-wallet chooser */
+/* V11.1.6 — EIP-6963 multi-wallet chooser */
 .rf-wallet-chooser{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
 .rf-wallet-chooser.hidden{display:none}
 .rf-wallet-chooser-panel{width:min(460px,100%);max-height:min(680px,calc(100vh - 40px));overflow:auto;border:1px solid rgba(255,255,255,.18);border-radius:22px;background:#0d0d0d;box-shadow:0 24px 80px rgba(0,0,0,.6);padding:22px}

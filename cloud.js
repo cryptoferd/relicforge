@@ -239,7 +239,7 @@
   };
 
   window.RelicForgeCloud = {
-    version: '11.1.5', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.6', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();

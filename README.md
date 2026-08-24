@@ -1,3 +1,10 @@
+## V11.1.6 — social link previews + SVG favicon
+
+- Uses `relic-forge-preview.png` as the Open Graph/Twitter/Discord link-preview image across landing, Studio, Creator Dashboard, and mint pages.
+- Adds `summary_large_image` Twitter cards and complete Open Graph title, description, URL, image, dimensions, and alt metadata.
+- Uses the existing `relic-forge-logo.svg` as the site favicon/shortcut icon.
+- Current canonical/social URLs target `https://cryptoferd.github.io/relicforge/`; update those absolute URLs if Relic Forge moves to a custom production domain.
+
 ## V11.1.5 — multi-wallet provider selection
 
 - Uses EIP-6963 discovery when multiple injected EVM wallets are installed.

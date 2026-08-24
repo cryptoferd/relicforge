@@ -325,7 +325,7 @@
   async function list() { await beginDiscovery(); return entries.map(({ info }) => ({ ...info })); }
 
   window.RelicForgeWallets = {
-    version: '11.1.5',
+    version: '11.1.6',
     ready: beginDiscovery,
     list,
     chooseProvider,

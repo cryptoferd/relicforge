@@ -174,7 +174,7 @@
   }
   function getReadProvider(){
     // Mint-page reads are deliberately independent from the signing wallet.
-    // V11.1.5 defaults to public RPC first; Railway/Alchemy remains a fallback.
+    // V11.1.6 defaults to public RPC first; Railway/Alchemy remains a fallback.
     if(publicProvider)return publicProvider;
     const list=rpcCandidates(config.chainId);
     if(list.length){activeReadRpc=list[0];publicProvider=new ethers.JsonRpcProvider(list[0],Number(config.chainId),{staticNetwork:true,batchMaxCount:20});return publicProvider}

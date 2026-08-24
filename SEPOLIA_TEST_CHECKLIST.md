@@ -1,3 +1,10 @@
+## V11.1.6 social preview / favicon checks
+
+- [ ] Landing page source contains Open Graph + Twitter card metadata and `relic-forge-preview.png` resolves publicly.
+- [ ] Studio, Creator Dashboard, and mint pages use the same social preview image and SVG favicon.
+- [ ] Pasting the public Relic Forge URL into Discord/X link-preview tools produces the branded large-image preview after crawler cache refresh.
+- [ ] Browser tab displays the Relic Forge SVG mark as favicon.
+
 # Relic Forge V11.1.5 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
