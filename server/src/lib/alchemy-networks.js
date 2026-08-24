@@ -1,6 +1,6 @@
 // RelicForge Alchemy network registry.
 // Endpoint bases are server-side configuration, not secrets. The only Alchemy
-// secret required by V11.1.2 is ALCHEMY_API_KEY.
+// secret required by V11.1.3 is ALCHEMY_API_KEY.
 // Endpoint catalog synchronized with Alchemy's supported-network documentation
 // on 2026-08-23. Some newly launched networks do not yet have a stable/verified
 // EIP-155 chain ID in this registry; their endpoint is still cataloged and can be

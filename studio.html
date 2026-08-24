@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Relic Forge Studio for building layered onchain NFT collections." />
-  <link rel="stylesheet" href="./styles.css?v=11.1.2" />
+  <link rel="stylesheet" href="./styles.css?v=11.1.3" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -21,8 +21,15 @@
 <div class="studio-action-shell">
 <button class="studio-menu-btn" id="studioMenuBtn" type="button" aria-expanded="false" aria-controls="studioProjectActions" aria-label="Open Studio menu"><span></span><span></span><span></span></button>
 <div class="topbar-actions studio-project-actions" id="studioProjectActions">
-<button class="ghost-btn project-wallet-btn" id="projectWalletBtn" type="button">Connect Wallet</button>
-<button class="ghost-btn" disabled id="saveProjectBtn" type="button">Save Project</button>
+<div class="wallet-session-control">
+<button class="ghost-btn project-wallet-btn" id="projectWalletBtn" type="button" aria-haspopup="menu" aria-expanded="false">Connect Wallet</button>
+<div class="wallet-session-menu hidden" id="projectWalletMenu" role="menu">
+<div class="wallet-session-summary"><span>Connected wallet</span><strong id="projectWalletMenuAddress">No wallet connected</strong></div>
+<button class="ghost-btn" id="changeProjectWalletBtn" type="button" role="menuitem">Connect Different Wallet</button>
+<button class="ghost-btn danger-btn" id="disconnectProjectWalletBtn" type="button" role="menuitem">Disconnect Wallet</button>
+</div>
+</div>
+<button class="ghost-btn" id="saveProjectBtn" type="button">Save Project</button>
 <button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
 <a class="ghost-btn link-btn studio-dashboard-link" href="./dashboard.html">Creator Dashboard</a>
 <button class="ghost-btn" id="importProjectBtn" type="button">Import Backup</button>
@@ -31,7 +38,11 @@
 </div>
 </div>
 </header>
-<div class="project-save-status" id="projectSaveStatus"><strong>Unsaved project</strong><span>Not saved yet · Closing this tab will lose unsaved progress.</span></div>
+<div class="project-save-status" id="projectSaveStatus"><strong>Wallet required to save</strong><span>Not saved yet · Connect and sign in with a wallet before closing if you want to keep this project.</span></div>
+<div class="wallet-save-gate" id="walletSaveGate">
+<div><strong id="walletSaveGateTitle">Sign in with a wallet to save this project</strong><span id="walletSaveGateCopy">Relic Forge ties cloud projects to your EVM wallet. Connect and sign a one-time message before closing this tab if you want this project available on other devices.</span></div>
+<button class="primary-btn" id="walletSaveGateBtn" type="button">Connect Wallet to Save</button>
+</div>
 <main>
 <section class="hero-panel studio-hero-panel">
 <div>
@@ -631,11 +642,11 @@
 </div>
 
 
-  <script src="./relicforge-config.js?v=11.1.2"></script>
+  <script src="./relicforge-config.js?v=11.1.3"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="./cloud.js?v=11.1.2" defer></script>
-  <script src="./app.js?v=11.1.2" defer></script>
-  <script src="./forge.js?v=11.1.2" defer></script>
-  <script src="./project-storage.js?v=11.1.2" defer></script>
+  <script src="./cloud.js?v=11.1.3" defer></script>
+  <script src="./app.js?v=11.1.3" defer></script>
+  <script src="./forge.js?v=11.1.3" defer></script>
+  <script src="./project-storage.js?v=11.1.3" defer></script>
 </body>
 </html>

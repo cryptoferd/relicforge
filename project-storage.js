@@ -89,9 +89,45 @@
     });
   }
 
+  function cloudSessionReady() {
+    const active = window.RelicForgeCloud?.loadSession?.();
+    return !!(wallet && active?.token && active?.wallet?.toLowerCase() === wallet);
+  }
+
+  function updateSaveGate() {
+    const gate = $('walletSaveGate');
+    if (!gate) return;
+    const title = $('walletSaveGateTitle');
+    const copy = $('walletSaveGateCopy');
+    const action = $('walletSaveGateBtn');
+    const cloudEnabled = !!window.RelicForgeCloud?.enabled?.();
+
+    if (wallet && (!cloudEnabled || cloudSessionReady())) {
+      gate.classList.add('hidden');
+      return;
+    }
+
+    gate.classList.remove('hidden');
+    if (!wallet) {
+      if (title) title.textContent = 'Sign in with a wallet to save this project';
+      if (copy) copy.textContent = 'Relic Forge ties cloud projects to your EVM wallet. Connect and sign a one-time message before closing this tab if you want this project available on other devices.';
+      if (action) action.textContent = 'Connect Wallet to Save';
+    } else {
+      if (title) title.textContent = 'Wallet connected — cloud sign-in required';
+      if (copy) copy.textContent = 'Sign the Relic Forge login message to enable global saves for this wallet. The signature does not send a transaction or cost gas.';
+      if (action) action.textContent = 'Sign In to Save';
+    }
+  }
+
+  function closeWalletMenu() {
+    $('projectWalletMenu')?.classList.add('hidden');
+    $('projectWalletBtn')?.setAttribute('aria-expanded', 'false');
+  }
+
   function setWallet(address, source = 'wallet') {
     const normalized = address ? address.toLowerCase() : null;
-    const changed = wallet && normalized && wallet !== normalized;
+    const previous = wallet;
+    const changed = previous && normalized && previous !== normalized;
     wallet = normalized;
     if (changed && currentProjectOwner && currentProjectOwner !== wallet) {
       currentProjectId = null;
@@ -100,16 +136,24 @@
     }
     const btn = $('projectWalletBtn');
     if (btn) {
-      btn.textContent = wallet ? shortAddress(wallet) : 'Connect Wallet';
+      btn.textContent = wallet ? `${shortAddress(wallet)}  ▾` : 'Connect Wallet';
       btn.classList.toggle('wallet-connected', !!wallet);
-      btn.title = wallet ? `Project wallet: ${wallet}` : 'Connect an EVM wallet to save projects';
+      btn.title = wallet ? `Project wallet: ${wallet}. Click for wallet options.` : 'Connect an EVM wallet to save projects';
+      btn.setAttribute('aria-expanded', 'false');
     }
+    const menuAddress = $('projectWalletMenuAddress');
+    if (menuAddress) menuAddress.textContent = wallet || 'No wallet connected';
     const save = $('saveProjectBtn');
-    if (save) save.disabled = !wallet;
+    if (save) {
+      save.disabled = false;
+      save.title = wallet ? 'Save this project to your wallet-scoped Relic Forge Cloud account' : 'Connect and sign in with a wallet to save this project';
+    }
     const open = $('openProjectsBtn');
     if (open) open.disabled = !wallet;
     const modalWallet = $('projectManagerWallet');
     if (modalWallet) modalWallet.textContent = wallet ? wallet : 'No wallet connected';
+    closeWalletMenu();
+    updateSaveGate();
     if (source !== 'init') renderProjects().catch(() => {});
   }
 
@@ -122,7 +166,10 @@
 
   function saveSafetyText() {
     if (hasUnsavedChanges) return `${saveTimeLabel(lastSavedAt)} · Closing this tab will lose unsaved progress.`;
-    return lastSavedAt ? `${saveTimeLabel(lastSavedAt)} · All current changes are saved.` : 'Not saved yet · No changes to protect yet.';
+    if (lastSavedAt) return `${saveTimeLabel(lastSavedAt)} · All current changes are saved.`;
+    if (!wallet) return 'Not saved yet · Connect and sign in with a wallet before closing if you want to keep this project.';
+    if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) return 'Not saved yet · Wallet connected, but cloud sign-in is still required.';
+    return 'Not saved yet · No changes to protect yet.';
   }
 
   function setStatus(message, type = '') {
@@ -151,29 +198,87 @@
     const cloud = window.RelicForgeCloud;
     if (!wallet || !cloud?.enabled?.()) return null;
     const active = cloud.loadSession?.();
-    if (active?.wallet?.toLowerCase() === wallet) return active;
-    setStatus('Wallet connected. Sign once to enable private cloud sync…');
+    if (active?.wallet?.toLowerCase() === wallet && active?.token) {
+      updateSaveGate();
+      return active;
+    }
+    setStatus('Wallet connected. Sign once to enable global project saves…');
     const signed = await cloud.ensureSignedIn(wallet);
-    setStatus(`Cloud sync enabled for ${shortAddress(wallet)}.`, 'success');
+    updateSaveGate();
+    setStatus(`Signed in · global saves enabled for ${shortAddress(wallet)}.`, 'success');
     return signed;
   }
 
-  async function connectWallet() {
+  async function requestWalletAccount({ forceChooser = false } = {}) {
+    const helper = window.RelicForgeWalletSession;
+    if (helper?.requestAccount) return helper.requestAccount({ forceChooser });
+    if (!window.ethereum) throw new Error('No injected EVM wallet found.');
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
+    return accounts[0];
+  }
+
+  async function connectWallet({ forceChooser = false, requireCloud = false } = {}) {
     if (!window.ethereum) {
       setStatus('No injected EVM wallet was found.', 'error');
       throw new Error('No injected EVM wallet found.');
     }
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
-    setWallet(accounts[0]);
-    window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: accounts[0] } }));
+    const address = await requestWalletAccount({ forceChooser });
+    setWallet(address);
+    window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address } }));
     if (window.RelicForgeCloud?.enabled?.()) {
-      try { await ensureCloudSession(); }
-      catch (error) { setStatus(`Wallet connected. Local saves work; cloud sign-in was not completed: ${error.message}`, 'warning'); }
+      try {
+        await ensureCloudSession();
+      } catch (error) {
+        updateSaveGate();
+        setStatus(`Wallet connected, but cloud sign-in was not completed: ${error.message}`, 'warning');
+        if (requireCloud) throw new Error(`Cloud sign-in is required to save projects: ${error.message}`);
+      }
     } else {
-      setStatus(`Projects are scoped to ${shortAddress(accounts[0])}. Cloud API not configured yet.`, 'success');
+      setStatus(`Projects are scoped to ${shortAddress(address)}. Cloud API not configured yet.`, 'success');
     }
-    return accounts[0];
+    return address;
+  }
+
+  async function disconnectWallet({ revoke = true } = {}) {
+    closeWalletMenu();
+    try {
+      if (window.RelicForgeWalletSession?.disconnect) await window.RelicForgeWalletSession.disconnect({ revoke });
+      else window.RelicForgeCloud?.clearSession?.();
+    } catch (_) {
+      window.RelicForgeCloud?.clearSession?.();
+    }
+    setWallet(null, 'disconnect');
+    window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
+    setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected' : 'Wallet disconnected', hasUnsavedChanges ? 'warning' : '');
+    updateSaveGate();
+  }
+
+  async function changeWallet() {
+    const prior = wallet;
+    if (hasUnsavedChanges && currentProjectOwner && prior && currentProjectOwner === prior) {
+      const ok = window.confirm('You have unsaved changes. Switching wallets will keep the current work open, but the next save will belong to the newly connected wallet. Continue?');
+      if (!ok) return prior;
+    }
+    window.RelicForgeCloud?.clearSession?.();
+    setWallet(null, 'change');
+    window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
+    try {
+      const address = await requestWalletAccount({ forceChooser: true });
+      setWallet(address);
+      window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address } }));
+      if (window.RelicForgeCloud?.enabled?.()) await ensureCloudSession();
+      if (prior && String(prior).toLowerCase() === String(address).toLowerCase()) {
+        setStatus(`Reconnected ${shortAddress(address)}. To use another account, choose it in your wallet extension and try Change Wallet again.`, 'warning');
+      } else {
+        setStatus(`Connected ${shortAddress(address)}. Global saves will use this wallet.`, 'success');
+      }
+      return address;
+    } catch (error) {
+      setWallet(null, 'change-cancelled');
+      setStatus(`Wallet change not completed: ${error.message}`, 'warning');
+      throw error;
+    }
   }
 
   function approximateProjectBytes(studio, forge) {
@@ -205,7 +310,8 @@
   }
 
   async function saveProject({ asNew = false } = {}) {
-    if (!wallet) await connectWallet();
+    if (!wallet) await connectWallet({ requireCloud: !!window.RelicForgeCloud?.enabled?.() });
+    if (window.RelicForgeCloud?.enabled?.()) await ensureCloudSession();
     const studioBridge = window.RelicForgeStudioBridge;
     if (!studioBridge?.getStudioProjectSnapshot) {
       throw new Error('Studio core did not finish loading. Refresh the page (Ctrl+Shift+R) and try again.');
@@ -248,18 +354,20 @@
     }
     currentProjectId = id;
     currentProjectOwner = wallet;
-    hasUnsavedChanges = false;
-    lastSavedAt = now;
     if (window.RelicForgeCloud?.enabled?.()) {
       try {
-        await ensureCloudSession();
-        setStatus(`Saved locally · syncing “${name}” to RelicForge Cloud…`);
+        setStatus(`Local cache ready · syncing “${name}” to RelicForge Cloud…`);
         await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
-        setStatus(`Saved locally + globally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+        markSaved(now);
+        setStatus(`Saved globally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
       } catch (error) {
-        setStatus(`Saved locally. Cloud sync pending: ${error.message}`, 'warning');
+        hasUnsavedChanges = true;
+        updateSaveGate();
+        setStatus(`Global save failed. Your browser has a temporary cache, but this project is not safely saved yet: ${error.message}`, 'error');
+        throw error;
       }
     } else {
+      markSaved(now);
       setStatus(`Saved locally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
     }
     await renderProjects();
@@ -414,7 +522,7 @@
     const snapshot = await encodeBackupValue({ studio, forge }, assets, fileMap);
     return {
       schema: BACKUP_SCHEMA,
-      relicForgeVersion: '11.1.2',
+      relicForgeVersion: '11.1.3',
       exportedAt: new Date().toISOString(),
       project: {
         name: String(name || studio?.ui?.collectionName || 'Untitled Collection'),
@@ -467,7 +575,7 @@
     try { backup = JSON.parse(await file.text()); }
     catch { throw new Error('That file is not a valid Relic Forge project backup.'); }
     if (backup?.schema !== BACKUP_SCHEMA || !backup?.project?.snapshot?.studio) {
-      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.1.2 .relicforge backup for portable projects.');
+      if (backup?.schema === 'relic-forge/project@0.1') throw new Error('This is a legacy settings-only export and does not contain the artwork binaries needed for full restore. Use a V11.1.3 .relicforge backup for portable projects.');
       throw new Error('Unsupported Relic Forge backup format.');
     }
     const assetMap = new Map();
@@ -576,11 +684,38 @@
     } catch {
       setWallet(null, 'init');
     }
-    window.ethereum.on?.('accountsChanged', accounts => setWallet(accounts?.[0] || null));
+    window.ethereum.on?.('accountsChanged', accounts => {
+      const next = accounts?.[0] || null;
+      const previous = wallet;
+      if (!next) {
+        window.RelicForgeCloud?.clearSession?.();
+        setWallet(null);
+        window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
+        setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected in extension' : 'Wallet disconnected in extension', hasUnsavedChanges ? 'warning' : '');
+        return;
+      }
+      if (!previous || previous.toLowerCase() !== String(next).toLowerCase()) window.RelicForgeCloud?.clearSession?.();
+      setWallet(next);
+      window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: next } }));
+      if (previous && previous.toLowerCase() !== String(next).toLowerCase()) setStatus('Wallet account changed. Sign in before your next global save.', 'warning');
+    });
   }
 
   function bind() {
-    $('projectWalletBtn')?.addEventListener('click', () => connectWallet().catch(error => setStatus(error.message, 'error')));
+    $('projectWalletBtn')?.addEventListener('click', event => {
+      event.stopPropagation();
+      if (!wallet) { connectWallet().catch(error => setStatus(error.message, 'error')); return; }
+      const menu = $('projectWalletMenu');
+      const willOpen = !!menu?.classList.contains('hidden');
+      menu?.classList.toggle('hidden', !willOpen);
+      $('projectWalletBtn')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+    $('changeProjectWalletBtn')?.addEventListener('click', () => changeWallet().catch(() => {}));
+    $('disconnectProjectWalletBtn')?.addEventListener('click', () => disconnectWallet().catch(error => setStatus(error.message, 'error')));
+    $('walletSaveGateBtn')?.addEventListener('click', () => {
+      const action = wallet ? ensureCloudSession() : connectWallet({ requireCloud: !!window.RelicForgeCloud?.enabled?.() });
+      Promise.resolve(action).catch(error => setStatus(error.message, 'error'));
+    });
     $('saveProjectBtn')?.addEventListener('click', () => saveProject().catch(error => setStatus(error.message, 'error')));
     $('openProjectsBtn')?.addEventListener('click', openManager);
     $('projectManagerCloseBtn')?.addEventListener('click', closeManager);
@@ -624,6 +759,8 @@
       menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
     document.addEventListener('click', event => {
+      const walletControl = event.target.closest?.('.wallet-session-control');
+      if (!walletControl) closeWalletMenu();
       if (!menu?.classList.contains('mobile-open')) return;
       if (menu.contains(event.target) || menuBtn?.contains(event.target)) return;
       menu.classList.remove('mobile-open');
@@ -651,13 +788,18 @@
     initWalletState();
     setTimeout(() => {
       dirtyTrackingReady = true;
-      setStatus('No unsaved changes', '');
+      updateSaveGate();
+      if (!wallet) setStatus('Wallet required to save', 'warning');
+      else if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) setStatus('Wallet connected · sign in to enable global saves', 'warning');
+      else setStatus('No unsaved changes', '');
     }, 0);
   }
 
   window.RelicForgeProjects = {
-    version: '11.1.2',
+    version: '11.1.3',
     connectWallet,
+    changeWallet,
+    disconnectWallet,
     saveProject,
     openManager,
     getWallet: () => wallet,

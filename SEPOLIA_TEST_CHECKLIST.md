@@ -1,8 +1,8 @@
-# Relic Forge V11.1.2 — Sepolia / Cloud acceptance checklist
+# Relic Forge V11.1.3 — Sepolia / Cloud acceptance checklist
 
 ## A. Railway + Alchemy
 - [ ] Railway API deploys from repository root directory `/server`.
-- [ ] `/health` returns `{ ok: true, version: "11.1.2" }` and reports Alchemy configured.
+- [ ] `/health` returns `{ ok: true, version: "11.1.3" }` and reports Alchemy configured.
 - [ ] API has `DATABASE_URL` and `DATABASE_UNPOOLED_URL` (when PgBouncer is enabled).
 - [ ] Railway Bucket credentials are injected into the API service.
 - [ ] Bucket CORS allows the exact frontend origin to `PUT` with `Content-Type`.
@@ -107,7 +107,7 @@
 - [ ] Confirm Alchemy plan/rate limits for expected traffic.
 - [ ] Backups/monitoring/alerts configured.
 
-## Animated GIF acceptance (V11.1.2)
+## Animated GIF acceptance (V11.1.3)
 
 - [ ] Upload an animated GIF as a normal trait using folder import.
 - [ ] Upload an animated GIF using Add Trait Artwork / Upload Trait Category.
@@ -125,7 +125,7 @@
 - [ ] Confirm holder-selected Offchain Render preserves an animated GIF token and does not replace the canonical animated `renderToken()` output.
 
 
-## V11.1.2 public gas + full preview acceptance
+## V11.1.3 public gas + full preview acceptance
 
 - [ ] Compile a collection while no wallet is connected and confirm Current GWEI populates from a public Sepolia RPC when available.
 - [ ] Confirm the gas-price network requests go directly to public Sepolia RPC hosts and not `/api/public/rpc/11155111`.
@@ -135,8 +135,23 @@
 - [ ] Verify animated GIF traits remain animated on paginated preview pages.
 
 
-## V11.1.2 layer delineation acceptance
+## V11.1.3 layer delineation acceptance
 
 - [ ] Each rarity layer is visually enclosed by a stronger rounded border and clearly separated from adjacent layers.
 - [ ] Layer header, rarity-order hint, and trait grid read as three distinct internal bands.
 - [ ] Trait cells remain usable at desktop and mobile breakpoints with no behavior changes to rarity, metadata, drag ordering, or incremental trait editing.
+
+
+## V11.1.3 wallet session + save-gate acceptance
+
+- [ ] Open Studio with no wallet connected and confirm the save gate says a wallet/signature is required to save.
+- [ ] Click **Save Project** while disconnected and confirm the wallet connection flow starts instead of silently creating a local-only save.
+- [ ] Connect a wallet, decline the Relic Forge sign-in signature, and confirm Studio still shows **cloud sign-in required** and does not claim the project is globally saved.
+- [ ] Sign the login message and confirm the save gate disappears.
+- [ ] Save a project and confirm the status shows **Saved globally** with the latest timestamp.
+- [ ] Disconnect from the Studio wallet menu and confirm the Cloud session is cleared while the current unsaved workspace remains visible.
+- [ ] Reconnect the same wallet and confirm its cloud projects are visible again.
+- [ ] Choose **Connect Different Wallet**, select another account, sign in, and confirm My Projects now reflects that wallet.
+- [ ] With unsaved edits, switch wallets and confirm the warning explains that the current work stays open but the next save belongs to the new wallet.
+- [ ] On Creator Dashboard, verify **Change Wallet** and **Disconnect** update the launched-project list and creator-control state correctly.
+- [ ] Test both MetaMask and Rabby. If a provider does not support `wallet_revokePermissions` / `wallet_requestPermissions`, verify the fallback still allows account switching through the extension.

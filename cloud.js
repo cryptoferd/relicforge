@@ -15,6 +15,45 @@
     return session;
   }
   function clearSession() { session = null; try { sessionStorage.removeItem(TOKEN_KEY); } catch {} }
+
+  function permissionMethodUnsupported(error) {
+    return [-32601, 4200, -32004].includes(Number(error?.code));
+  }
+
+  async function requestWalletAccount({ forceChooser = false } = {}) {
+    if (!window.ethereum?.request) throw new Error('No injected EVM wallet found.');
+    if (forceChooser) {
+      let chooserRequested = false;
+      try {
+        await window.ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+        chooserRequested = true;
+      } catch (error) {
+        if (Number(error?.code) === 4001) throw error;
+        if (!permissionMethodUnsupported(error)) console.debug('Wallet permission revoke was not available:', error);
+      }
+      if (!chooserRequested) {
+        try {
+          await window.ethereum.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+        } catch (error) {
+          if (Number(error?.code) === 4001) throw error;
+          if (!permissionMethodUnsupported(error)) console.debug('Wallet account chooser was not available:', error);
+        }
+      }
+    }
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts?.[0]) throw new Error('Wallet did not return an account.');
+    return accounts[0];
+  }
+
+  async function disconnectWalletProvider({ revoke = true } = {}) {
+    clearSession();
+    if (!revoke || !window.ethereum?.request) return;
+    try {
+      await window.ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+    } catch (error) {
+      if (!permissionMethodUnsupported(error) && Number(error?.code) !== 4001) console.debug('Wallet provider does not support permission revocation:', error);
+    }
+  }
   async function json(path, options = {}, authenticated = false) {
     if (!enabled()) throw new Error('RelicForge Cloud API is not configured yet.');
     const headers = { ...(options.headers || {}) };
@@ -171,8 +210,14 @@
   }
   function publicUrl(path) { return `${apiBase()}${path}`; }
 
+  window.RelicForgeWalletSession = {
+    requestAccount: requestWalletAccount,
+    disconnect: disconnectWalletProvider,
+    clearCloudSession: clearSession,
+  };
+
   window.RelicForgeCloud = {
-    version: '11.1.2', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.3', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
   };
 })();
