@@ -249,3 +249,9 @@ Railway API -> Postgres / Bucket (persistent app data)
 - Contract source has structural/static checks, but this environment could not download the solc binary or npm dependencies because outbound package DNS was unavailable.
 
 **The in-Studio Solidity 0.8.30 Compile Contracts step is therefore a required deployment gate.** Verify zero errors and confirm the collection implementation runtime is below the EVM 24,576-byte contract-code limit before deploying test infrastructure.
+
+---
+
+## Contracts V1 development branch
+
+The `contracts-v1-production` branch contains a parallel production-oriented release candidate under `contracts/production/`. The existing `contracts/RelicForgeTest.sol` Sepolia system is intentionally retained while V1 is hardened. See `V1_RELEASE_CANDIDATE.md` and `docs/v1/` before working on V1.
