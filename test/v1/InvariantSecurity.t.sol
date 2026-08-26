@@ -85,6 +85,11 @@ contract RevealInvariantHandlerV1 {
 contract RelicForgeStatefulInvariantTest is TestBase {
     RevealInvariantHandlerV1 internal handler;
     RelicCollectionV1 internal collection;
+    address[] private _targetedContracts;
+
+    function targetContracts() public view returns (address[] memory) {
+        return _targetedContracts;
+    }
 
     function setUp() public {
         RelicCollectionV1 collectionImpl = new RelicCollectionV1();
@@ -96,7 +101,7 @@ contract RelicForgeStatefulInvariantTest is TestBase {
         );
         handler = new RevealInvariantHandlerV1(factory, randomness);
         collection = handler.collection();
-        vm.targetContract(address(handler));
+        _targetedContracts.push(address(handler));
     }
 
     function invariantSupplyAndAssignmentsNeverExceedBounds() public view {

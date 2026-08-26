@@ -162,7 +162,7 @@ contract RevealSecurityTest is RelicForgeV1Fixture {
         randomness.fulfill(1, 999);
     }
 
-    function testFailedDeliveryReplaysSameWordAndSuccessfulReplayIsIdempotent() public {
+    function testReplayAfterFailedDeliveryUsesSameWordAndIsIdempotent() public {
         FlakyRandomnessConsumerV1 consumer = new FlakyRandomnessConsumerV1(randomness);
         uint256 id = consumer.request();
         randomness.fulfill(id, 424242); // callback fails, word remains recorded

@@ -12,7 +12,6 @@ interface Vm {
     function expectRevert() external;
     function expectRevert(bytes4) external;
     function expectRevert(bytes calldata) external;
-    function targetContract(address) external;
 }
 
 abstract contract TestBase {

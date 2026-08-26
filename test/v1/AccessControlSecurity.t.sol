@@ -34,9 +34,10 @@ contract AccessControlSecurityTest is RelicForgeV1Fixture {
         vm.prank(BOB);
         collection.setPhaseEnabled(phase, false);
 
+        uint8 forgeMode = collection.REVEAL_FORGE();
         vm.expectRevert(RF_NotController.selector);
         vm.prank(BOB);
-        collection.setFutureRevealMode(collection.REVEAL_FORGE());
+        collection.setFutureRevealMode(forgeMode);
     }
 
     function testRelicForgeInfrastructureHasNoAdminAuthority() public {

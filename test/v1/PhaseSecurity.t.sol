@@ -213,8 +213,9 @@ contract PhaseSecurityTest is RelicForgeV1Fixture {
     function testBatchLimitEnforced() public {
         uint32 phase = _createPublicPhase(0, uint64(block.timestamp));
         collection.setMasterMintEnabled(true);
+        uint32 overLimit = collection.MAX_MINT_BATCH() + 1;
         vm.expectRevert(RF_BatchLimit.selector);
         vm.prank(BOB);
-        collection.mint(phase, collection.MAX_MINT_BATCH() + 1, 0, new bytes32[](0));
+        collection.mint(phase, overLimit, 0, new bytes32[](0));
     }
 }
