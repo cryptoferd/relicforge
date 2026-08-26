@@ -18,20 +18,26 @@ on:
       - "script/v1/**"
       - "foundry.toml"
 
+permissions:
+  contents: read
+
 jobs:
   contracts-v1:
     name: Compile, Size and Security Test V1
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          # RC2.1 green baseline. Pin tool behavior during security hardening.
+          version: v1.7.1
 
       - name: Compile contracts
         run: forge build
@@ -60,6 +66,32 @@ jobs:
           check_size RelicRendererV1
           check_size RelicForgeFactoryV1
           check_size RelicRandomnessMockV1
+          check_size RelicChainlinkVRFV25DirectFundingAdapterV1
 
-      - name: Run unit, fuzz and invariant tests
+      - name: Run unit, fuzz, invariant, VRF and gas-DoS tests
         run: forge test -vvv
+
+      - name: Install Slither
+        id: slither_install
+        continue-on-error: true
+        run: pipx install slither-analyzer
+
+      - name: Run Slither RC3 baseline
+        id: slither
+        if: steps.slither_install.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          slither . \
+            --filter-paths "test/v1|script/v1" \
+            --exclude-informational \
+            --exclude-optimization \
+            --json slither-rc3.json
+
+      - name: Upload Slither RC3 baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-rc3
+          path: slither-rc3.json
+          if-no-files-found: ignore
