@@ -50,7 +50,3 @@ The included mock proves the expected consumer interface and same-word replay se
 ## Before mainnet
 
 Do not deploy this RC to mainnet until compilation, gas/runtime snapshots, unit tests, fuzz/invariant tests, static analysis, formal checks of critical invariants, testnet rehearsal, and an independent audit are complete.
-
-## RC2 security hardening
-
-RC2 adds explicit DNA read bounds, bounded seal-time behavior, uint64 reveal cursors, overflow-safe royalty arithmetic, immutable render policy after content seal, fail-closed randomness-consumer authorization hooks for production adapters, and idempotent successful randomness delivery. See `docs/v1/RC2_HARDENING.md` and `docs/v1/SECURITY_TEST_MATRIX.md`.

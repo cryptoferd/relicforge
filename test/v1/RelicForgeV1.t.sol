@@ -1,9 +1,67 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "./RelicForgeV1Fixture.sol";
+import "./TestBase.sol";
+import "../../contracts/production/RFCoreV1.sol";
+import "../../contracts/production/RelicProjectDataV1.sol";
+import "../../contracts/production/RelicCollectionV1.sol";
+import "../../contracts/production/RelicRendererV1.sol";
+import "../../contracts/production/RelicForgeFactoryV1.sol";
+import "../../contracts/production/RelicRandomnessMockV1.sol";
 
-contract RelicForgeV1SmokeTest is RelicForgeV1Fixture {
+contract RelicForgeV1Test is TestBase {
+    RelicCollectionV1 internal collection;
+    RelicProjectDataV1 internal data;
+    RelicRandomnessMockV1 internal randomness;
+    RelicForgeFactoryV1 internal factory;
+
+    address internal constant BOB = address(0xB0B);
+    address internal constant PAYOUT = address(0xCAFE);
+    address internal constant ROYALTY = address(0xFEE);
+
+    function setUp() public {
+        RelicCollectionV1 collectionImpl = new RelicCollectionV1();
+        RelicProjectDataV1 dataImpl = new RelicProjectDataV1();
+        RelicRendererV1 renderer = new RelicRendererV1();
+        randomness = new RelicRandomnessMockV1();
+        factory = new RelicForgeFactoryV1(address(collectionImpl), address(dataImpl), address(renderer), address(randomness));
+
+        (address collectionAddress, address dataAddress) = factory.createCollection(
+            "Relic Test", "RLT", "V1 test", 2, 32, 32, 1, PAYOUT, ROYALTY, 500
+        );
+        collection = RelicCollectionV1(collectionAddress);
+        data = RelicProjectDataV1(dataAddress);
+        _configureAndSealData();
+        vm.deal(BOB, 10 ether);
+    }
+
+    function _configureAndSealData() internal {
+        bytes memory trait0 = bytes('<rect x="0" y="0" width="32" height="32" fill="#111"/>');
+        bytes memory trait1 = bytes('<rect x="0" y="0" width="32" height="32" fill="#eee"/>');
+        bytes memory art = abi.encodePacked(trait0, trait1);
+        address shard = data.addArtShard(art);
+
+        RelicProjectDataV1.TraitInput[] memory inputs = new RelicProjectDataV1.TraitInput[](2);
+        inputs[0] = RelicProjectDataV1.TraitInput(0, 0, "Dark", shard, 0, uint32(trait0.length), 0, false);
+        inputs[1] = RelicProjectDataV1.TraitInput(0, 1, "Light", shard, uint32(trait0.length), uint32(trait1.length), 0, false);
+        data.addTraits(inputs);
+
+        string[] memory names = new string[](1);
+        names[0] = "Background";
+        data.setLayerNames(names);
+        bool[] memory hidden = new bool[](1);
+        data.setLayerMetadataVisibility(hidden);
+        data.setPlaceholder(bytes('<rect x="0" y="0" width="32" height="32" fill="#777"/>'));
+        data.addDnaShard(hex"0001");
+        data.setDNAConfig(2, 2);
+        data.validateNextRecipes(2);
+        data.sealContent(keccak256("relicforge-v1-test"));
+    }
+
+    function _createPublicPhase(uint96 price, uint64 startTime) internal returns (uint32) {
+        return collection.createPhase(price, startTime, 0, 0, 0, bytes32(0), 0, 100, true);
+    }
+
     function testCollectionStartsPaused() public {
         uint32 phase = _createPublicPhase(1 ether, uint64(block.timestamp));
         vm.expectRevert(RF_PublicSalePaused.selector);
@@ -30,23 +88,25 @@ contract RelicForgeV1SmokeTest is RelicForgeV1Fixture {
         collection.setMasterMintEnabled(true);
 
         vm.prank(BOB);
-        collection.mint(phase, 1, 0, new bytes32[](0));
-        collection.requestRevealEpoch();
+        collection.mint(phase, 1, 0, new bytes32[](0)); // token 1 deferred
+        collection.requestRevealEpoch(); // request 1 / sequence 1
 
         collection.setFutureRevealMode(collection.REVEAL_FORGE());
         vm.prank(BOB);
-        collection.mint(phase, 1, 0, new bytes32[](0));
+        collection.mint(phase, 1, 0, new bytes32[](0)); // token 2 forge / request 2
 
-        randomness.fulfill(2, 222);
+        randomness.fulfill(2, 222); // later Forge callback arrives first
         collection.processReveal(10);
-        assertFalse(collection.isRevealed(2), "sequence 2 must wait for sequence 1");
+        assertTrue(!collection.isRevealed(2), "sequence 2 must wait for sequence 1");
 
         randomness.fulfill(1, 111);
         collection.processReveal(10);
 
         assertTrue(collection.isRevealed(1), "epoch token should reveal");
         assertTrue(collection.isRevealed(2), "forge token should reveal");
-        assertNotEq(collection.recipeForToken(1), collection.recipeForToken(2), "recipes must be unique");
+        uint256 recipe1 = collection.recipeForToken(1);
+        uint256 recipe2 = collection.recipeForToken(2);
+        assertNotEq(recipe1, recipe2, "shared pool must never duplicate recipes");
     }
 
     function testRenouncePreservesRoyaltyAndPayout() public {
