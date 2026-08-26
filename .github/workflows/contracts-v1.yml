@@ -32,8 +32,33 @@ jobs:
         with:
           version: stable
 
-      - name: Build and measure contracts
-        run: forge build --sizes
+      - name: Compile contracts
+        run: forge build
+
+      - name: Enforce production runtime size limits
+        shell: bash
+        run: |
+          set -e
+
+          check_size() {
+            CONTRACT="$1"
+            BYTECODE=$(forge inspect "$CONTRACT" deployedBytecode)
+            HEX="${BYTECODE#0x}"
+            BYTES=$((${#HEX} / 2))
+
+            echo "$CONTRACT runtime: $BYTES bytes"
+
+            if [ "$BYTES" -gt 24576 ]; then
+              echo "::error::$CONTRACT exceeds EIP-170: $BYTES bytes"
+              exit 1
+            fi
+          }
+
+          check_size RelicCollectionV1
+          check_size RelicProjectDataV1
+          check_size RelicRendererV1
+          check_size RelicForgeFactoryV1
+          check_size RelicRandomnessMockV1
 
       - name: Run tests
         run: forge test -vvv
