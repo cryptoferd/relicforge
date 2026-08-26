@@ -63,7 +63,7 @@ contract RelicProjectDataV1 {
 
     uint32 public recipeCount;
     uint16 public recipesPerShard;
-    uint32 public validatedRecipeCursor;
+    uint64 public validatedRecipeCursor;
     address public placeholderShard;
     uint32 public placeholderLength;
 
@@ -177,6 +177,9 @@ contract RelicProjectDataV1 {
 
     function setDNAConfig(uint32 recipeCount_, uint16 recipesPerShard_) external onlyCreator beforeSeal {
         if (recipeCount_ != maxSupply || recipesPerShard_ == 0) revert RF_BadConfig();
+        // Any actually used configured DNA shard must fit inside the immutable shard ceiling.
+        uint256 recipesInLargestUsedShard = recipeCount_ > recipesPerShard_ ? recipesPerShard_ : recipeCount_;
+        if (recipesInLargestUsedShard * layerCount > 23_000) revert RF_BadConfig();
         recipeCount = recipeCount_;
         recipesPerShard = recipesPerShard_;
         validatedRecipeCursor = 0;
@@ -241,7 +244,12 @@ contract RelicProjectDataV1 {
         uint256 shardIndex = recipeId / recipesPerShard;
         uint256 local = recipeId % recipesPerShard;
         if (shardIndex >= dnaShards.length) revert RF_BadShard();
-        return RFDataReaderV1.read(dnaShards[shardIndex], local * layerCount, layerCount);
+        address shard = dnaShards[shardIndex];
+        uint256 byteOffset = local * layerCount;
+        uint256 available = RFDataReaderV1.dataLength(shard);
+        // extcodecopy zero-pads reads beyond runtime code, so bounds must be enforced explicitly.
+        if (byteOffset > available || layerCount > available - byteOffset) revert RF_DataBounds();
+        return RFDataReaderV1.read(shard, byteOffset, layerCount);
     }
 
     /// @notice Validates the next sequential batch of recipes. Validation is reset if DNA or traits change.
@@ -249,7 +257,7 @@ contract RelicProjectDataV1 {
         if (quantity == 0 || quantity > MAX_VALIDATE_BATCH) revert RF_BatchLimit();
         if (uint256(quantity) * layerCount > MAX_VALIDATE_TRAIT_CHECKS) revert RF_BatchLimit();
         if (recipeCount != maxSupply || recipesPerShard == 0) revert RF_BadConfig();
-        uint256 end = uint256(validatedRecipeCursor) + quantity;
+        uint64 end = validatedRecipeCursor + uint64(quantity);
         if (end > recipeCount) end = recipeCount;
         for (uint256 recipeId = validatedRecipeCursor; recipeId < end; ++recipeId) {
             bytes memory dna = readRecipe(recipeId);
@@ -257,7 +265,7 @@ contract RelicProjectDataV1 {
                 if (!_traits[layer][uint8(dna[layer])].exists) revert RF_MissingTrait();
             }
         }
-        validatedRecipeCursor = uint32(end);
+        validatedRecipeCursor = end;
     }
 
     function sealContent(bytes32 provenanceHash_) external onlyCreator beforeSeal {
@@ -273,15 +281,8 @@ contract RelicProjectDataV1 {
 
         uint256 requiredShards = (uint256(recipeCount) + recipesPerShard - 1) / recipesPerShard;
         if (dnaShards.length < requiredShards) revert RF_MissingData();
-        for (uint256 i; i < requiredShards; ++i) {
-            uint256 recipesInShard = recipesPerShard;
-            if (i == requiredShards - 1) {
-                uint256 usedBefore = i * recipesPerShard;
-                recipesInShard = uint256(recipeCount) - usedBefore;
-            }
-            uint256 requiredBytes = recipesInShard * layerCount;
-            if (RFDataReaderV1.dataLength(dnaShards[i]) < requiredBytes) revert RF_DataBounds();
-        }
+        // Every used recipe byte range was already bounds-checked by validateNextRecipes/readRecipe.
+        // Avoid an unbounded seal-time loop over every DNA shard.
 
         provenanceHash = provenanceHash_;
         contentSealed = true;

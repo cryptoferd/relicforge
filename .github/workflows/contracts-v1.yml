@@ -20,8 +20,9 @@ on:
 
 jobs:
   contracts-v1:
-    name: Compile and Test V1
+    name: Compile, Size and Security Test V1
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -60,7 +61,5 @@ jobs:
           check_size RelicForgeFactoryV1
           check_size RelicRandomnessMockV1
 
-      - name: Run tests
+      - name: Run unit, fuzz and invariant tests
         run: forge test -vvv
-
-# RC2 security CI trigger

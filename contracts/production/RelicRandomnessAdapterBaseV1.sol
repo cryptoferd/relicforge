@@ -27,6 +27,7 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
     event RandomnessDelivery(uint256 indexed requestId, bool delivered);
 
     function requestRandomness(uint256 context) external virtual returns (uint256 requestId) {
+        _requireAuthorizedConsumer(msg.sender);
         requestId = nextRequestId++;
         deliveries[requestId] = Delivery({
             consumer: msg.sender,
@@ -38,6 +39,10 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
         _requestUpstream(requestId, context);
         emit RandomnessRequested(requestId, msg.sender, context);
     }
+
+    /// @dev Production adapters MUST fail closed here (for example, factory registry validation).
+    ///      This prevents arbitrary callers from draining a shared VRF subscription or fee balance.
+    function _requireAuthorizedConsumer(address consumer) internal view virtual;
 
     function _requestUpstream(uint256 localRequestId, uint256 context) internal virtual;
 
@@ -54,6 +59,7 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
     function replayFulfillment(uint256 localRequestId) external returns (bool delivered) {
         Delivery storage d = deliveries[localRequestId];
         if (d.consumer == address(0) || !d.wordReady) revert RF_BadRequest();
+        if (d.delivered) return true;
         delivered = _deliver(localRequestId, d);
     }
 

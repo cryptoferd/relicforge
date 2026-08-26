@@ -1,17 +1,18 @@
-# V1 RC Compile Status
+# RelicForge Contracts V1 — Compile / CI Status
 
-This package is a development release candidate, not a mainnet artifact.
+## RC1 verified baseline
+GitHub Actions on `contracts-v1-production` successfully compiled the V1 stack with Solidity 0.8.30 using optimizer runs=1, viaIR=true, Cancun EVM.
 
-## Checks completed before packaging
+Verified RC1 deployed-runtime sizes:
+- RelicCollectionV1: 15,835 bytes
+- RelicProjectDataV1: 9,767 bytes
+- RelicRendererV1: 8,307 bytes
+- RelicForgeFactoryV1: 2,032 bytes
+- RelicRandomnessMockV1: 1,082 bytes
 
-- All production Solidity import targets are present in the package.
-- Custom `RF_*` errors referenced by `revert` statements are declared.
-- Production Solidity brace/parenthesis balance was checked.
-- The legacy v11.1.6 Studio/testnet stack is retained unchanged except for documentation additions.
-- A GitHub Actions Foundry build/test gate is included.
+RC1 smoke tests: 4 passed, 0 failed.
 
-## Compiler execution
+## RC2 status
+RC2 adds contract hardening plus expanded unit/fuzz/invariant suites. The RC2 overlay must be pushed to `contracts-v1-production` and pass the branch GitHub Actions workflow before these new bytecode sizes/tests are considered verified.
 
-The package assembly environment did not have a local Solidity/Foundry binary and outbound compiler download was unavailable, so **this RC has not been claimed as successfully compiled locally**. The first branch gate after upload is `.github/workflows/contracts-v1.yml`, which runs `forge build --sizes` and `forge test -vvv` using the pinned Solidity 0.8.30 Foundry configuration.
-
-Do not deploy V1 even to a public testnet until that build passes and any compiler findings are corrected. Do not deploy to mainnet until the complete security release gates in `SECURITY_MODEL.md` are satisfied.
+Do not deploy RC2 to mainnet merely because CI is green. External audit/formal/security gates remain required.
