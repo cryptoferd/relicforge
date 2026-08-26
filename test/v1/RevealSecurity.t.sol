@@ -4,8 +4,13 @@ pragma solidity 0.8.30;
 import "./RelicForgeV1Fixture.sol";
 
 contract DenyRandomnessAdapterV1 is RelicRandomnessAdapterBaseV1 {
-    function _requireAuthorizedConsumer(address) internal view override { revert RF_NotAuthorized(); }
-    function _requestUpstream(uint256, uint256) internal override {}
+    bool public deny = true;
+
+    function setDeny(bool value) external { deny = value; }
+    function _requireAuthorizedConsumer(address) internal view override {
+        if (deny) revert RF_NotAuthorized();
+    }
+    function _requestUpstream(uint256, uint256) internal pure override {}
     function record(uint256 id, uint256 word) external { _recordWord(id, word); }
 }
 
@@ -33,6 +38,12 @@ contract RevealSecurityTest is RelicForgeV1Fixture {
         DenyRandomnessAdapterV1 denied = new DenyRandomnessAdapterV1();
         vm.expectRevert(RF_NotAuthorized.selector);
         denied.requestRandomness(1);
+
+        // Keep the allow branch reachable so the compiler can analyze the production base path
+        // without emitting a false unreachable-code warning from this test-only deny adapter.
+        denied.setDeny(false);
+        uint256 requestId = denied.requestRandomness(2);
+        assertEq(requestId, 1, "authorized request works");
     }
 
     function testEpochRequiresDeferredTokens() public {

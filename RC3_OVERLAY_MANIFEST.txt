@@ -1,0 +1,30 @@
+RelicForge Contracts V1 — RC3 Overlay Manifest
+===============================================
+
+Base branch: contracts-v1-production
+Base RC2.1 commit: 487f69e532b91ed1f40e8507315e3959eccb9cfc
+Solidity target: 0.8.30
+Foundry CI pin: v1.7.1
+Chainlink ABI review source commit: 6def3ab75f9f8216691e60b921833f26bbe0a448
+
+Package status:
+- Flat branch-only overlay; no top-level wrapper directory.
+- No PowerShell patch/helper scripts.
+- Static structure/YAML/import-oriented review completed.
+- Current Chainlink VRF v2.5 wrapper native ABI and ExtraArgsV1 encoding reviewed against official source.
+- Local Solidity compile was NOT executed because this runtime does not have solc/forge and cannot resolve external downloads.
+- RC3 must not be called green until GitHub Actions compiles, size-checks, runs the full Foundry suite, and produces the Slither baseline.
+
+Files (manifest excludes its own self-hash):
+7a6fb82ffa8c142c9f18e0598289f3ac5b67516e9a0ce3c1713a89fdba8c6e85      2479  .github/workflows/contracts-v1.yml
+d94a5bd5d6b2f362dd769511678863c0b9cdc6d8b85c3253af3a9a875d0bbce2       914  RC3_APPLY.md
+fba11882a0fba773215b059cf4414798722e53f697c88c830265cc6b4297125e      9292  contracts/production/RelicChainlinkVRFV25DirectFundingAdapterV1.sol
+2dc8f128ddfead4d867545e70b10c3029e8e168df3e1dd84dbeb674383e0ec0d      3974  contracts/production/RelicRandomnessAdapterBaseV1.sol
+cece653da6d8f3d1c9b9c2b25781202b311eafe9231964954534c07d25d244b8       859  contracts/production/RelicRandomnessMockV1.sol
+a0b026b6c80aaf801957c28ac7ccc235148c52e0597ee8127e864ed137134d7e      3500  docs/v1/CHAINLINK_VRF_V25_DIRECT_FUNDING.md
+7cc08e8314b26f605247dd6394e5a9c252fdbb78d9dbeea4f7f13e4f4d8e77ee      5942  docs/v1/RC3_HARDENING.md
+f22e8c8e0756c5b2c2cc853b5765a73d5ce808c988bd5bacb6a988edc4c9b8d0      3208  script/v1/DeployChainlinkDirectFundingV1.s.sol
+b3b2c5054bf720cd129fdaf8e1d0d88273eb9dcd158f190170db92c2f5e55036     18381  test/v1/ChainlinkDirectFundingSecurity.t.sol
+70fb6838be7ff31b0a72c698939220f0e2a524c2a8411b7de38e4c6af3519659      3303  test/v1/GasDoSSecurity.t.sol
+d83db0639e08ab126984b8c92cd3355b9298d9fb3047fce0410bfe27cf183707      3242  test/v1/RandomnessDeliverySecurity.t.sol
+f1fb53b20769853ed40935c1a42c33f946d3e135f6af09bdbc6f596680f54d12      8276  test/v1/RevealSecurity.t.sol

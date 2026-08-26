@@ -11,6 +11,11 @@ import "./RFCoreV1.sol";
  *      the exact same word; it can never request a replacement word for the same local request.
  */
 abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
+    // Collection.fulfillRandomness() is intentionally tiny; capping the forwarded gas prevents a
+    // malicious or broken consumer from exhausting the provider callback and erasing a verified word.
+    uint256 public constant CONSUMER_DELIVERY_GAS = 150_000;
+    uint256 public constant DELIVERY_GAS_RESERVE = 50_000;
+
     struct Delivery {
         address consumer;
         uint256 context;
@@ -40,8 +45,8 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
         emit RandomnessRequested(requestId, msg.sender, context);
     }
 
-    /// @dev Production adapters MUST fail closed here (for example, factory registry validation).
-    ///      This prevents arbitrary callers from draining a shared VRF subscription or fee balance.
+    /// @dev Production adapters MUST fail closed here. This prevents arbitrary callers from consuming
+    ///      provider funds or creating billable requests outside canonical RelicForge collections.
     function _requireAuthorizedConsumer(address consumer) internal view virtual;
 
     function _requestUpstream(uint256 localRequestId, uint256 context) internal virtual;
@@ -50,12 +55,16 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
         Delivery storage d = deliveries[localRequestId];
         if (d.consumer == address(0)) revert RF_BadRequest();
         if (d.wordReady) revert RF_AlreadyFulfilled();
+
+        // Critical ordering: commit the verified word before any untrusted consumer callback.
         d.wordReady = true;
         d.word = randomWord;
         emit RandomWordRecorded(localRequestId, randomWord);
+
         _deliver(localRequestId, d);
     }
 
+    /// @notice Permissionless recovery for a failed callback. It can only replay the stored word.
     function replayFulfillment(uint256 localRequestId) external returns (bool delivered) {
         Delivery storage d = deliveries[localRequestId];
         if (d.consumer == address(0) || !d.wordReady) revert RF_BadRequest();
@@ -64,7 +73,14 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
     }
 
     function _deliver(uint256 localRequestId, Delivery storage d) internal returns (bool delivered) {
-        (delivered,) = d.consumer.call(
+        // If the provider callback arrives with too little gas to safely attempt collection delivery,
+        // keep the word recorded and let anyone replay later with a fresh transaction.
+        if (gasleft() <= CONSUMER_DELIVERY_GAS + DELIVERY_GAS_RESERVE) {
+            emit RandomnessDelivery(localRequestId, false);
+            return false;
+        }
+
+        (delivered,) = d.consumer.call{gas: CONSUMER_DELIVERY_GAS}(
             abi.encodeCall(IRelicRandomnessConsumerV1.fulfillRandomness, (localRequestId, d.word))
         );
         if (delivered) d.delivered = true;
