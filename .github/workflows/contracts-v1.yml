@@ -62,3 +62,5 @@ jobs:
 
       - name: Run tests
         run: forge test -vvv
+
+# RC2 security CI trigger
