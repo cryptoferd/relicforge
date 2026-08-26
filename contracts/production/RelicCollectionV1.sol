@@ -34,9 +34,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
     struct RevealRequest {
         RequestKind kind;
-        uint32 startTokenId;
-        uint32 endTokenId;
-        uint32 cursor;
+        uint64 startTokenId;
+        uint64 endTokenId;
+        uint64 cursor;
         uint32 assignmentNonce;
         bool fulfilled;
         uint256 seed;
@@ -54,7 +54,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     event PhaseUpdated(uint32 indexed phaseId);
     event PhaseEnabled(uint32 indexed phaseId, bool enabled);
     event FutureRevealModeSet(uint8 mode);
-    event RevealRequested(uint64 indexed sequence, uint256 indexed requestId, RequestKind kind, uint32 startTokenId, uint32 endTokenId);
+    event RevealRequested(uint64 indexed sequence, uint256 indexed requestId, RequestKind kind, uint64 startTokenId, uint64 endTokenId);
     event RevealRandomnessStored(uint64 indexed sequence, uint256 indexed requestId);
     event RevealRequestProcessed(uint64 indexed sequence);
     event ControllerRenounced(address indexed creator);
@@ -106,7 +106,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     mapping(uint64 => RevealRequest) public revealRequests;
     uint64 public nextRequestSequence;
     uint64 public nextProcessSequence;
-    uint32 public nextEpochStartToken;
+    uint64 public nextEpochStartToken;
 
     mapping(uint256 => uint8) private _tokenRenderMode;
     mapping(uint256 => bool) private _tokenRenderModeSet;
@@ -308,6 +308,8 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     }
 
     function setRenderConfig(string calldata baseURI, bool holderEnabled, uint8 defaultMode) external onlyController {
+        // Render policy is part of immutable collection content, not a sale control.
+        if (IRelicProjectDataV1(dataContract).contentSealed()) revert RF_ContentSealed();
         if (defaultMode > 1) revert RF_BadRenderMode();
         flattenedRenderBaseURI = baseURI;
         holderRenderModeEnabled = holderEnabled;
@@ -349,17 +351,17 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         if (!phase.enabled) revert RF_PhaseDisabled();
         if (block.timestamp < phase.startTime) revert RF_PhaseNotStarted();
         if (phase.endTime != 0 && block.timestamp >= phase.endTime) revert RF_PhaseClosed();
-        if (totalMinted + quantity > maxSupply) revert RF_SoldOut();
-        if (phase.phaseSupply != 0 && phase.minted + quantity > phase.phaseSupply) revert RF_PhaseSoldOut();
+        if (uint256(totalMinted) + quantity > maxSupply) revert RF_SoldOut();
+        if (phase.phaseSupply != 0 && uint256(phase.minted) + quantity > phase.phaseSupply) revert RF_PhaseSoldOut();
         if (msg.value != uint256(phase.price) * quantity) revert RF_WrongPrice();
 
         uint32 walletMinted = phaseWalletMinted[phaseId][msg.sender];
-        if (phase.maxPerWallet != 0 && walletMinted + quantity > phase.maxPerWallet) revert RF_WalletLimit();
+        if (phase.maxPerWallet != 0 && uint256(walletMinted) + quantity > phase.maxPerWallet) revert RF_WalletLimit();
 
         if (phase.accessType == ACCESS_MERKLE) {
             bytes32 leaf = keccak256(abi.encode(block.chainid, address(this), phaseId, msg.sender, allowance));
             if (!RFMerkleProofV1.verify(proof, phase.merkleRoot, leaf)) revert RF_BadProof();
-            if (walletMinted + quantity > allowance) revert RF_InsufficientAllowance();
+            if (uint256(walletMinted) + quantity > allowance) revert RF_InsufficientAllowance();
         }
 
         phaseWalletMinted[phaseId][msg.sender] = walletMinted + quantity;
@@ -371,15 +373,18 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         if (to == address(0)) revert RF_ZeroAddress();
         if (quantity == 0) revert RF_ZeroQuantity();
         if (quantity > MAX_MINT_BATCH) revert RF_BatchLimit();
-        if (totalMinted + quantity > maxSupply) revert RF_SoldOut();
+        if (uint256(totalMinted) + quantity > maxSupply) revert RF_SoldOut();
         startTokenId = _mintBatch(to, quantity);
     }
 
     function _mintBatch(address to, uint32 quantity) internal returns (uint256 startTokenId) {
         if (!IRelicProjectDataV1(dataContract).contentSealed()) revert RF_ContentNotSealed();
-        startTokenId = uint256(totalMinted) + 1;
+        if (uint256(totalMinted) + quantity > maxSupply) revert RF_SoldOut();
+
+        uint32 startTokenId32 = totalMinted + 1;
+        startTokenId = startTokenId32;
         for (uint32 i; i < quantity; ++i) {
-            uint256 tokenId = startTokenId + i;
+            uint256 tokenId = uint256(startTokenId32) + i;
             _ownerOf[tokenId] = to;
             ++_balanceOf[to];
             emit Transfer(address(0), to, tokenId);
@@ -387,9 +392,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         totalMinted += quantity;
 
         if (futureRevealMode == REVEAL_FORGE) {
-            _requestReveal(RequestKind.ForgeBatch, uint32(startTokenId), uint32(startTokenId + quantity - 1));
+            _requestReveal(RequestKind.ForgeBatch, startTokenId32, totalMinted);
         } else {
-            for (uint32 i; i < quantity; ++i) pendingDeferred[startTokenId + i] = true;
+            for (uint32 i; i < quantity; ++i) pendingDeferred[uint256(startTokenId32) + i] = true;
             deferredPendingCount += quantity;
         }
     }
@@ -398,14 +403,14 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
     function requestRevealEpoch() external onlyController returns (uint64 sequence, uint256 requestId) {
         if (deferredPendingCount == 0) revert RF_NoDeferredTokens();
-        uint32 endToken = totalMinted;
-        uint32 startToken = nextEpochStartToken;
+        uint64 endToken = totalMinted;
+        uint64 startToken = nextEpochStartToken;
         if (startToken > endToken) revert RF_NoDeferredTokens();
         nextEpochStartToken = endToken + 1;
         (sequence, requestId) = _requestReveal(RequestKind.EpochRange, startToken, endToken);
     }
 
-    function _requestReveal(RequestKind kind, uint32 startTokenId, uint32 endTokenId)
+    function _requestReveal(RequestKind kind, uint64 startTokenId, uint64 endTokenId)
         internal returns (uint64 sequence, uint256 requestId)
     {
         if (!IRelicProjectDataV1(dataContract).contentSealed()) revert RF_ContentNotSealed();
@@ -446,7 +451,8 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
             if (!req.fulfilled) break;
 
             while (remainingSteps != 0 && req.cursor <= req.endTokenId) {
-                uint256 tokenId = req.cursor++;
+                uint256 tokenId = req.cursor;
+                ++req.cursor;
                 --remainingSteps;
 
                 if (req.kind == RequestKind.ForgeBatch) {
@@ -533,7 +539,10 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
     function royaltyInfo(uint256, uint256 salePrice) external view returns (address receiver, uint256 royaltyAmount) {
         receiver = royaltyReceiver;
-        royaltyAmount = (salePrice * royaltyBps) / 10_000;
+        // Overflow-safe equivalent of salePrice * royaltyBps / 10_000 for the full uint256 domain.
+        uint256 quotient = salePrice / 10_000;
+        uint256 remainder = salePrice % 10_000;
+        royaltyAmount = quotient * royaltyBps + (remainder * royaltyBps) / 10_000;
     }
 
     /// @notice Anyone may trigger payout, but the destination is permanently constrained to payoutReceiver.
