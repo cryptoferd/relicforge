@@ -1,0 +1,39 @@
+name: RelicForge Contracts V1
+
+on:
+  push:
+    branches:
+      - contracts-v1-production
+    paths:
+      - "contracts/production/**"
+      - "test/v1/**"
+      - "script/v1/**"
+      - "foundry.toml"
+      - ".github/workflows/contracts-v1.yml"
+
+  pull_request:
+    paths:
+      - "contracts/production/**"
+      - "test/v1/**"
+      - "script/v1/**"
+      - "foundry.toml"
+
+jobs:
+  contracts-v1:
+    name: Compile and Test V1
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build and measure contracts
+        run: forge build --sizes
+
+      - name: Run tests
+        run: forge test -vvv
