@@ -1,0 +1,65 @@
+name: RelicForge Contracts V1
+
+on:
+  push:
+    branches:
+      - contracts-v1-production
+    paths:
+      - "contracts/production/**"
+      - "test/v1/**"
+      - "script/v1/**"
+      - "foundry.toml"
+      - ".github/workflows/contracts-v1.yml"
+
+  pull_request:
+    paths:
+      - "contracts/production/**"
+      - "test/v1/**"
+      - "script/v1/**"
+      - "foundry.toml"
+
+jobs:
+  contracts-v1:
+    name: Compile, Size and Security Test V1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Compile contracts
+        run: forge build
+
+      - name: Enforce production runtime size limits
+        shell: bash
+        run: |
+          set -e
+
+          check_size() {
+            CONTRACT="$1"
+            BYTECODE=$(forge inspect "$CONTRACT" deployedBytecode)
+            HEX="${BYTECODE#0x}"
+            BYTES=$((${#HEX} / 2))
+
+            echo "$CONTRACT runtime: $BYTES bytes"
+
+            if [ "$BYTES" -gt 24576 ]; then
+              echo "::error::$CONTRACT exceeds EIP-170: $BYTES bytes"
+              exit 1
+            fi
+          }
+
+          check_size RelicCollectionV1
+          check_size RelicProjectDataV1
+          check_size RelicRendererV1
+          check_size RelicForgeFactoryV1
+          check_size RelicRandomnessMockV1
+
+      - name: Run unit, fuzz and invariant tests
+        run: forge test -vvv
