@@ -27,7 +27,7 @@
   <meta name="twitter:description" content="Create layered onchain NFT collections, control rarity and trait rules, preview every token, and prepare your collection for launch." />
   <meta name="twitter:image" content="https://cryptoferd.github.io/relicforge/relic-forge-preview.png" />
   <meta name="twitter:image:alt" content="Relic Forge — Your artwork. Your collection. No code." />
-  <link rel="stylesheet" href="./styles.css?v=11.1.6" />
+  <link rel="stylesheet" href="./styles.css?v=rc4.6" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -53,6 +53,7 @@
 <button class="ghost-btn" id="saveProjectBtn" type="button">Save Project</button>
 <button class="ghost-btn" disabled id="openProjectsBtn" type="button">My Projects</button>
 <a class="ghost-btn link-btn studio-dashboard-link" href="./dashboard.html">Creator Dashboard</a>
+<button class="ghost-btn founder-console-btn hidden" id="founderConsoleBtn" type="button">Founder Console</button>
 <button class="ghost-btn" id="importProjectBtn" type="button">Import Backup</button>
 <button class="ghost-btn" id="exportProjectBtn" type="button">Download Backup</button>
 <input class="hidden" id="projectBackupInput" accept=".relicforge,.json,application/json,application/vnd.relicforge.project+json" type="file"/>
@@ -63,6 +64,23 @@
 <div class="wallet-save-gate" id="walletSaveGate">
 <div><strong id="walletSaveGateTitle">Sign in with a wallet to save this project</strong><span id="walletSaveGateCopy">Relic Forge ties cloud projects to your EVM wallet. Connect and sign a one-time message before closing this tab if you want this project available on other devices.</span></div>
 <button class="primary-btn" id="walletSaveGateBtn" type="button">Connect Wallet to Save</button>
+</div>
+<div class="founder-support-banner hidden" id="founderSupportBanner">
+  <div class="founder-support-identity">
+    <span>FOUNDER SUPPORT MODE</span>
+    <strong id="founderSupportProjectName">Creator Project</strong>
+    <code id="founderSupportProjectOwner"></code>
+    <small id="founderSupportProjectVersion">Version -</small>
+  </div>
+  <div class="founder-support-save">
+    <label class="field"><span>Troubleshooting note</span><input id="founderSupportNote" maxlength="1000" placeholder="What did you inspect or change?" type="text"/></label>
+    <div class="inline-actions">
+      <button class="primary-btn" id="founderSupportSaveBtn" type="button">Save Troubleshooting Version</button>
+      <button class="ghost-btn" id="founderSupportConsoleBtn" type="button">Founder Console</button>
+      <button class="ghost-btn danger-btn" id="founderSupportExitBtn" type="button">Exit Support Mode</button>
+    </div>
+    <div class="founder-support-status" id="founderSupportStatus">Creator project is open in support mode. Onchain creator authority is not available.</div>
+  </div>
 </div>
 <main>
 <section class="hero-panel studio-hero-panel">
@@ -682,13 +700,116 @@
 </div>
 
 
+
+<div class="project-modal hidden founder-console-modal" id="founderConsoleModal" role="dialog" aria-modal="true" aria-labelledby="founderConsoleTitle">
+  <div class="project-modal-backdrop" id="founderConsoleBackdrop"></div>
+  <section class="project-modal-panel founder-console-panel">
+    <div class="project-modal-heading">
+      <div>
+        <div class="eyebrow">RELIC FORGE FOUNDER</div>
+        <h2 id="founderConsoleTitle">Founder Console</h2>
+        <p>Support creator projects and administer Relic Forge platform fees. Founder project access never grants creator signing authority.</p>
+      </div>
+      <button class="icon-btn" id="founderConsoleCloseBtn" type="button" aria-label="Close founder console">x</button>
+    </div>
+
+    <div class="founder-console-tabs">
+      <button class="active" data-founder-tab="projects" type="button">Creator Projects</button>
+      <button data-founder-tab="fees" type="button">Platform Fees</button>
+    </div>
+
+    <div class="founder-console-status" id="founderConsoleStatus">Founder session ready.</div>
+
+    <section class="founder-console-panel-body" id="founderProjectsPanel">
+      <div class="founder-search-row">
+        <label class="field"><span>Search projects</span><input id="founderProjectSearch" placeholder="Creator wallet, project name, or project ID" type="text"/></label>
+        <button class="primary-btn" id="founderProjectSearchBtn" type="button">Search</button>
+        <button class="ghost-btn" id="founderProjectRefreshBtn" type="button">Refresh</button>
+      </div>
+      <div class="founder-security-note">
+        <strong>Support access only</strong>
+        <span>Opening a project is logged. Saving creates a new creator-owned cloud version and requires a troubleshooting note. You cannot sign creator transactions or obtain their private key.</span>
+      </div>
+      <div class="founder-project-list" id="founderProjectList"></div>
+
+      <div class="founder-audit-section">
+        <div class="founder-section-heading">
+          <div><strong>Current Support Audit</strong><small>Open/save events for the project currently loaded in Support Mode.</small></div>
+        </div>
+        <div class="founder-audit-list" id="founderAuditList"><div class="empty-state">Open a creator project to view its support history.</div></div>
+      </div>
+    </section>
+
+    <section class="founder-console-panel-body hidden" id="founderFeesPanel">
+      <div class="founder-security-note">
+        <strong>Narrow fee authority</strong>
+        <span>The platform admin can change Relic Forge fee policy only. These controls cannot alter creator artwork, supply, mint proceeds, royalties, phases, reveal state, controller, or NFT ownership.</span>
+      </div>
+
+      <div class="founder-policy-summary">
+        <div><span>FeePolicy</span><code id="founderPolicyAddress">Loading...</code></div>
+        <div><span>Platform admin</span><code id="founderPlatformAdmin">Loading...</code></div>
+        <div><span>Treasury</span><code id="founderTreasuryCurrent">Loading...</code></div>
+        <div><span>Accrued fees</span><strong id="founderAccruedFees">-</strong></div>
+        <div><span>V1 hard ceiling</span><strong id="founderFeeCap">$5.00 / NFT</strong></div>
+      </div>
+      <div class="forge-inline-status" id="founderFeeAdminStatus">Checking the connected onchain platform admin...</div>
+
+      <div class="founder-admin-section">
+        <div class="founder-section-heading">
+          <div><strong>Collection Fee Control</strong><small>Load a canonical V1 collection and change only that collection.</small></div>
+        </div>
+        <div class="founder-search-row">
+          <label class="field"><span>Collection address</span><input id="founderCollectionAddress" placeholder="0x..." type="text"/></label>
+          <button class="primary-btn" id="founderCollectionLoadBtn" type="button">Load Collection</button>
+        </div>
+        <div class="founder-fee-collection-detail hidden" id="founderFeeCollectionDetail"></div>
+        <div class="founder-minter-fee-controls hidden" id="founderMinterFeeControls">
+          <div class="founder-fee-actions">
+            <button class="ghost-btn" id="founderToggleFeeBtn" type="button">Disable Fee</button>
+            <label class="field"><span>Current platform fee / NFT</span><div class="input-suffix"><input id="founderCollectionFeeRate" min="0" max="5" step="0.01" type="number"/><span>USD</span></div></label>
+            <button class="primary-btn" id="founderSetFeeBtn" type="button">Set Collection Fee</button>
+            <button class="ghost-btn" id="founderResetFeeBtn" type="button">Reset to Locked Base</button>
+            <button class="ghost-btn danger-btn" id="founderWaiveFeeBtn" type="button">Permanently Waive</button>
+          </div>
+          <small class="forge-footnote">Waiver is irreversible. Enabling/disabling and rate changes affect only this Minter Supported collection.</small>
+        </div>
+      </div>
+
+      <div class="founder-admin-grid">
+        <div class="founder-admin-section">
+          <div class="founder-section-heading">
+            <div><strong>Future Collection Defaults</strong><small>Existing collection locked base rates are not changed.</small></div>
+          </div>
+          <label class="field"><span>Sponsored default / max-supply NFT</span><div class="input-suffix"><input id="founderDefaultSponsored" min="0" max="5" step="0.01" type="number"/><span>USD</span></div></label>
+          <label class="field"><span>Minter Supported default / minted NFT</span><div class="input-suffix"><input id="founderDefaultMinter" min="0" max="5" step="0.01" type="number"/><span>USD</span></div></label>
+          <button class="primary-btn" id="founderSaveDefaultsBtn" type="button">Save Future Defaults</button>
+        </div>
+
+        <div class="founder-admin-section">
+          <div class="founder-section-heading">
+            <div><strong>Platform Treasury</strong><small>Platform fee withdrawals can only be sent to the configured treasury.</small></div>
+          </div>
+          <label class="field"><span>Treasury address</span><input id="founderTreasuryInput" placeholder="0x..." type="text"/></label>
+          <div class="inline-actions">
+            <button class="primary-btn" id="founderSaveTreasuryBtn" type="button">Update Treasury</button>
+            <button class="ghost-btn" id="founderWithdrawFeesBtn" type="button">Send Accrued Fees</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+</div>
+
   <script src="./relicforge-config.js?v=11.1.6"></script>
+
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=11.1.6" defer></script>
   <script src="./app.js?v=11.1.6" defer></script>
   <script src="./forge.js?v=11.1.6" defer></script>
-  <script src="./project-storage.js?v=11.1.6" defer></script>
+  <script src="./project-storage.js?v=rc4.6" defer></script>
+  <script src="./founder-console.js?v=rc4.6" defer></script>
 </body>
 </html>

@@ -306,6 +306,9 @@
   }
 
   async function saveProject({ asNew = false } = {}) {
+    if (window.RelicForgeFounderSupportActive) {
+      throw new Error('Founder Support Mode is active. Use Save Troubleshooting Version so the creator project is updated through the audited founder path.');
+    }
     if (!wallet) await connectWallet({ requireCloud: !!window.RelicForgeCloud?.enabled?.() });
     if (window.RelicForgeCloud?.enabled?.()) await ensureCloudSession();
     const studioBridge = window.RelicForgeStudioBridge;
@@ -821,6 +824,7 @@
     getCurrentProjectId: () => currentProjectId,
     hasUnsavedChanges: () => hasUnsavedChanges,
     markDirty,
+    markSaved,
     ensureCloudSession,
     downloadCurrentProjectBackup,
     downloadProjectBackup,
