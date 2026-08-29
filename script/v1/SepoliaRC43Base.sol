@@ -26,7 +26,7 @@ abstract contract SepoliaRC43Base {
     uint256 internal constant ETHEREUM_SEPOLIA_CHAIN_ID = 11155111;
     address internal constant SEPOLIA_VRF_WRAPPER = 0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1;
     address internal constant SEPOLIA_VRF_COORDINATOR = 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B;
-    address internal constant SEPOLIA_LINK = 0x779877A7B0D9e8603169DdbD7836e478b4624789;
+    address internal constant SEPOLIA_LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
     address internal constant SEPOLIA_ETH_USD_FEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
 
     uint32 internal constant CALLBACK_GAS_LIMIT = 500_000;
