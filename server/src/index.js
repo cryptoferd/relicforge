@@ -12,12 +12,48 @@ import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 25 * 1024 * 1024 });
 const origins = String(process.env.CORS_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
+
+function originAllowed(origin) {
+  if (!origin || !origins.length) return true;
+  if (origins.includes(origin)) return true;
+
+  let candidate;
+  try { candidate = new URL(origin); }
+  catch { return false; }
+
+  // Wildcards are intentionally restricted to one HTTPS hostname label.
+  // Example:
+  // https://relicforge-*-cryptoferds-projects.vercel.app
+  for (const pattern of origins) {
+    if (!pattern.includes('*')) continue;
+
+    const stars = (pattern.match(/\*/g) || []).length;
+    if (stars !== 1 || !pattern.startsWith('https://')) continue;
+
+    const rawHostPattern = pattern.slice('https://'.length);
+    if (!rawHostPattern || rawHostPattern.includes('/') || rawHostPattern.includes('?') || rawHostPattern.includes('#')) continue;
+    if (candidate.protocol !== 'https:' || candidate.pathname !== '/' || candidate.search || candidate.hash) continue;
+
+    const pieces = rawHostPattern.split('*');
+    if (pieces.length !== 2) continue;
+
+    const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hostRegex = new RegExp(
+      '^' + escapeRegex(pieces[0]) + '[a-z0-9-]+' + escapeRegex(pieces[1]) + '$',
+      'i'
+    );
+
+    if (hostRegex.test(candidate.host)) return true;
+  }
+  return false;
+}
+
 if (String(process.env.NODE_ENV || '').toLowerCase() === 'production' && !origins.length) {
   throw new Error('CORS_ORIGINS is required in production.');
 }
 await app.register(cors, {
   origin(origin, cb) {
-    if (!origin || !origins.length || origins.includes(origin)) return cb(null, true);
+    if (originAllowed(origin)) return cb(null, true);
     cb(new Error('Origin not allowed.'), false);
   },
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
