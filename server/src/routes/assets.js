@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
-import { headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
+import { getBuffer, headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
 
 const PROJECT_ALLOWED_TYPES = new Set(['application/json','application/zip','text/plain','application/octet-stream']);
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
@@ -72,6 +72,26 @@ export default async function assetRoutes(app) {
     return { ok: true };
   });
 
+  app.get('/api/assets/:id/download', { preHandler: authenticate }, async (request, reply) => {
+    const asset = await one(
+      'SELECT id,object_key,filename,content_type,size_bytes FROM assets WHERE id=$1 AND owner_wallet=$2 AND status=$3',
+      [request.params.id, request.user.wallet, 'ready']
+    );
+    if (!asset) return reply.code(404).send({ error: 'Asset not found.' });
+
+    try {
+      const body = await getBuffer(asset.object_key);
+      reply
+        .type(asset.content_type || 'application/octet-stream')
+        .header('Cache-Control', 'private, no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Length', String(body.length));
+      return reply.send(body);
+    } catch (error) {
+      request.log.warn({ err: error, assetId: asset.id }, 'Private asset proxy download failed');
+      return reply.code(502).send({ error: 'Cloud artwork could not be read from private storage.' });
+    }
+  });
   app.get('/api/assets/:id/url', { preHandler: authenticate }, async (request, reply) => {
     const asset = await one('SELECT id,object_key,filename,content_type,size_bytes FROM assets WHERE id=$1 AND owner_wallet=$2 AND status=$3', [request.params.id, request.user.wallet, 'ready']);
     if (!asset) return reply.code(404).send({ error: 'Asset not found.' });

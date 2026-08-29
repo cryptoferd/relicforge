@@ -72,6 +72,32 @@
     }
     return data;
   }
+
+  async function fetchBlob(path, authenticated = false) {
+    if (!enabled()) throw new Error('RelicForge Cloud API is not configured yet.');
+    const headers = {};
+    if (authenticated) {
+      const active = loadSession();
+      if (!active?.token) throw new Error('Cloud sign-in required.');
+      headers.authorization = `Bearer ${active.token}`;
+    }
+
+    const res = await fetch(`${apiBase()}${path}`, { method: 'GET', headers });
+    if (!res.ok) {
+      if (res.status === 401) clearSession();
+      let message = `Cloud download failed (${res.status}).`;
+      try {
+        const text = await res.text();
+        if (text) {
+          try { message = JSON.parse(text)?.error || message; }
+          catch { message = text; }
+        }
+      } catch {}
+      throw new Error(message);
+    }
+    return res.blob();
+  }
+
   async function performSignIn(normalized, epochAtStart) {
     const challenge = await json('/api/auth/challenge', { method: 'POST', body: JSON.stringify({ wallet: normalized }) });
     const injected = activeWalletProvider();
@@ -167,12 +193,9 @@
     return value;
   }
   async function assetToFile(marker) {
-    const response = await json(`/api/assets/${marker.id}/url`, {}, true);
-    const fileRes = await fetch(response.url);
-    if (!fileRes.ok) throw new Error(`Could not restore ${marker.name || 'cloud artwork'}.`);
-    const blob = await fileRes.blob();
-    return new File([blob], marker.name || response.asset?.filename || 'asset', {
-      type: marker.type || response.asset?.content_type || blob.type,
+    const blob = await fetchBlob(`/api/assets/${encodeURIComponent(marker.id)}/download`, true);
+    return new File([blob], marker.name || 'asset', {
+      type: marker.type || blob.type || 'application/octet-stream',
       lastModified: marker.lastModified || Date.now()
     });
   }
@@ -240,6 +263,6 @@
 
   window.RelicForgeCloud = {
     version: '11.1.6', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
-    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json
+    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob
   };
 })();

@@ -204,16 +204,12 @@
     if (founderAssetCache.has(key)) return founderAssetCache.get(key);
 
     const promise = (async () => {
-      const response = await cloud().json(
-        `/api/founder/projects/${encodeURIComponent(owner)}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(marker.id)}/url`,
-        {},
+      const blob = await cloud().fetchBlob(
+        `/api/founder/projects/${encodeURIComponent(owner)}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(marker.id)}/download`,
         true
       );
-      const fileResponse = await fetch(response.url);
-      if (!fileResponse.ok) throw new Error(`Could not restore ${marker.name || 'creator artwork'}.`);
-      const blob = await fileResponse.blob();
-      const file = new File([blob], marker.name || response.asset?.filename || 'asset', {
-        type: marker.type || response.asset?.content_type || blob.type || 'application/octet-stream',
+      const file = new File([blob], marker.name || 'asset', {
+        type: marker.type || blob.type || 'application/octet-stream',
         lastModified: Number(marker.lastModified || Date.now())
       });
       originalAssetMarkers.set(file, { ...marker });

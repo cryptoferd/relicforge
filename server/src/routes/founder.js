@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, one } from '../lib/db.js';
 import { authenticateFounder, normalizeWallet } from '../lib/auth.js';
-import { headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
+import { getBuffer, headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
 
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
 const PROJECT_ALLOWED_TYPES = new Set([
@@ -210,6 +210,32 @@ export default async function founderRoutes(app) {
     return { ok: true };
   });
 
+  app.get('/api/founder/projects/:owner/:projectId/assets/:assetId/download', { preHandler: authenticateFounder }, async (request, reply) => {
+    const ownerWallet = normalizeWallet(request.params.owner);
+    const asset = await one(
+      `SELECT id,object_key,filename,content_type,size_bytes FROM assets
+       WHERE id=$1 AND owner_wallet=$2 AND project_id=$3
+         AND purpose='project' AND status='ready'`,
+      [request.params.assetId, ownerWallet, request.params.projectId]
+    );
+    if (!asset) return reply.code(404).send({ error: 'Asset not found.' });
+
+    try {
+      const body = await getBuffer(asset.object_key);
+      reply
+        .type(asset.content_type || 'application/octet-stream')
+        .header('Cache-Control', 'private, no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Length', String(body.length));
+      return reply.send(body);
+    } catch (error) {
+      request.log.warn(
+        { err: error, assetId: asset.id, ownerWallet, projectId: request.params.projectId },
+        'Founder private asset proxy download failed'
+      );
+      return reply.code(502).send({ error: 'Creator artwork could not be read from private storage.' });
+    }
+  });
   app.get('/api/founder/projects/:owner/:projectId/assets/:assetId/url', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
     const asset = await one(
