@@ -6,6 +6,7 @@ import projectRoutes from './routes/projects.js';
 import assetRoutes from './routes/assets.js';
 import collectionRoutes from './routes/collections.js';
 import publicRoutes from './routes/public.js';
+import founderRoutes from './routes/founder.js';
 import { db } from './lib/db.js';
 import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
@@ -31,6 +32,7 @@ app.get('/health', async () => {
 await app.register(authRoutes);
 await app.register(projectRoutes);
 await app.register(assetRoutes);
+await app.register(founderRoutes);
 await app.register(collectionRoutes);
 await app.register(publicRoutes);
 

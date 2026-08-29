@@ -8,6 +8,18 @@ if (secretText.length < 24) throw new Error('SESSION_SECRET must be at least 24 
 const secret = new TextEncoder().encode(secretText);
 const issuer = 'relicforge-cloud';
 
+const founderWallets = new Set(
+  String(process.env.FOUNDER_WALLETS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+    .map(value => normalizeWallet(value))
+);
+
+export function isFounderWallet(wallet) {
+  try { return founderWallets.has(normalizeWallet(wallet)); } catch { return false; }
+}
+
 export function normalizeWallet(value) {
   return getAddress(String(value || '')).toLowerCase();
 }
@@ -43,7 +55,7 @@ export async function verifyChallenge(walletInput, signature) {
     .setIssuedAt()
     .setExpirationTime('12h')
     .sign(secret);
-  return { token, wallet: getAddress(wallet), expiresIn: 43_200 };
+  return { token, wallet: getAddress(wallet), expiresIn: 43_200, isFounder: isFounderWallet(wallet) };
 }
 
 export async function authenticate(request, reply) {
@@ -51,8 +63,15 @@ export async function authenticate(request, reply) {
   if (!header.startsWith('Bearer ')) return reply.code(401).send({ error: 'Authentication required.' });
   try {
     const { payload } = await jwtVerify(header.slice(7), secret, { issuer });
-    request.user = { wallet: normalizeWallet(payload.wallet || payload.sub) };
+    const wallet = normalizeWallet(payload.wallet || payload.sub);
+    request.user = { wallet, isFounder: isFounderWallet(wallet) };
   } catch {
     return reply.code(401).send({ error: 'Session expired or invalid.' });
   }
+}
+
+export async function authenticateFounder(request, reply) {
+  await authenticate(request, reply);
+  if (reply.sent) return;
+  if (!request.user?.isFounder) return reply.code(403).send({ error: 'Founder access required.' });
 }

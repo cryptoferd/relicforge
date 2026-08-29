@@ -108,6 +108,10 @@ contract ChainlinkDirectFundingSecurityTest is RelicForgeV1Fixture {
         );
         c = RelicCollectionV1(cAddr);
         d = RelicProjectDataV1(dAddr);
+
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeesEnabled(cAddr, false);
+
         _configureAndSealData(d, supply);
     }
 

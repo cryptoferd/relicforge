@@ -6,16 +6,16 @@ import "./RFCoreV1.sol";
 /**
  * @title RelicForgeFeePolicyV1
  * @notice Narrow platform-fee policy for RelicForge V1.
- * @dev The platform admin controls fee policy only. It has no authority over collection content,
- *      creator sale controls, creator proceeds, royalties, reveal state, or NFT ownership.
- *      USD conversion fails open to zero fees when the immutable price feed is unhealthy/stale.
+ * @dev Platform authority is limited to fee economics only. It cannot modify collection
+ *      content, creator sale controls, creator proceeds, royalties, reveal state, or NFT ownership.
  */
 contract RelicForgeFeePolicyV1 {
     uint8 public constant FEE_MODE_SPONSORED = 1;
     uint8 public constant FEE_MODE_MINTER_SUPPORTED = 2;
 
-    // Safety cap for future defaults. Existing collections separately lock their fee cents at creation.
-    uint32 public constant MAX_DEFAULT_FEE_CENTS = 10_000; // $100.00 / NFT hard ceiling
+    // Founder/admin may adjust fees, but never beyond $5.00/NFT.
+    uint32 public constant MAX_DEFAULT_FEE_CENTS = 500;
+    uint32 public constant MAX_COLLECTION_FEE_CENTS = 500;
 
     address public immutable priceFeed;
     uint8 public immutable priceFeedDecimals;
@@ -24,16 +24,19 @@ contract RelicForgeFeePolicyV1 {
     address public platformAdmin;
     address public treasury;
 
-    bool public feesEnabled = true;
-    uint32 public sponsoredFeeCents = 25; // $0.25 * max supply, paid by creator at launch
-    uint32 public minterFeeCents = 50;    // $0.50 / NFT, paid by minter
+    uint32 public sponsoredFeeCents = 25;
+    uint32 public minterFeeCents = 50;
 
+    mapping(address => bool) private _collectionFeeDisabled;
     mapping(address => bool) public collectionFeeWaived;
+    mapping(address => bool) public collectionFeeOverrideSet;
+    mapping(address => uint32) private _collectionFeeCentsOverride;
 
     uint256 public accruedFees;
     uint256 private _entered;
 
-    event FeesEnabledSet(bool enabled);
+    event CollectionFeesEnabledSet(address indexed collection, bool enabled);
+    event CollectionFeeCentsSet(address indexed collection, uint32 feeCents);
     event DefaultFeeCentsSet(uint32 sponsoredFeeCents, uint32 minterFeeCents);
     event TreasurySet(address indexed treasury);
     event PlatformAdminTransferred(address indexed oldAdmin, address indexed newAdmin);
@@ -77,9 +80,55 @@ contract RelicForgeFeePolicyV1 {
         maxOracleAge = maxOracleAge_;
     }
 
-    function setFeesEnabled(bool enabled) external onlyPlatformAdmin {
-        feesEnabled = enabled;
-        emit FeesEnabledSet(enabled);
+    function _requireMinterCollection(address collection) internal view {
+        if (collection.code.length == 0) revert RF_BadConfig();
+        IRelicCollectionFeeViewV1 c = IRelicCollectionFeeViewV1(collection);
+        if (c.feePolicy() != address(this) || c.platformFeeMode() != FEE_MODE_MINTER_SUPPORTED) {
+            revert RF_BadConfig();
+        }
+    }
+
+    function collectionFeesEnabled(address collection) public view returns (bool) {
+        return !_collectionFeeDisabled[collection] && !collectionFeeWaived[collection];
+    }
+
+    function currentCollectionFeeCents(address collection, uint32 lockedFeeCents)
+        public view returns (uint32)
+    {
+        return collectionFeeOverrideSet[collection]
+            ? _collectionFeeCentsOverride[collection]
+            : lockedFeeCents;
+    }
+
+    function setCollectionFeesEnabled(address collection, bool enabled) external onlyPlatformAdmin {
+        _requireMinterCollection(collection);
+        if (enabled && collectionFeeWaived[collection]) revert RF_FeeWaived();
+
+        _collectionFeeDisabled[collection] = !enabled;
+        emit CollectionFeesEnabledSet(collection, enabled);
+    }
+
+    function setCollectionFeeCents(address collection, uint32 feeCents) external onlyPlatformAdmin {
+        _requireMinterCollection(collection);
+        if (collectionFeeWaived[collection]) revert RF_FeeWaived();
+        if (feeCents > MAX_COLLECTION_FEE_CENTS) revert RF_FeeLimit();
+
+        collectionFeeOverrideSet[collection] = true;
+        _collectionFeeCentsOverride[collection] = feeCents;
+        emit CollectionFeeCentsSet(collection, feeCents);
+    }
+
+    /// @notice Clears an override and returns the collection to its creation-time locked base rate.
+    function clearCollectionFeeOverride(address collection) external onlyPlatformAdmin {
+        _requireMinterCollection(collection);
+        if (collectionFeeWaived[collection]) revert RF_FeeWaived();
+
+        collectionFeeOverrideSet[collection] = false;
+        delete _collectionFeeCentsOverride[collection];
+        emit CollectionFeeCentsSet(
+            collection,
+            IRelicCollectionFeeViewV1(collection).lockedPlatformFeeCents()
+        );
     }
 
     /// @notice Changes defaults for collections created after this transaction only.
@@ -107,19 +156,18 @@ contract RelicForgeFeePolicyV1 {
 
     /// @notice One-way permanent waiver. There is intentionally no unwaive function.
     function waiveCollection(address collection) external onlyPlatformAdmin {
-        if (collection == address(0)) revert RF_ZeroAddress();
+        _requireMinterCollection(collection);
         if (!collectionFeeWaived[collection]) {
             collectionFeeWaived[collection] = true;
+            _collectionFeeDisabled[collection] = true;
+            emit CollectionFeesEnabledSet(collection, false);
             emit CollectionFeeWaived(collection);
         }
     }
 
     function quoteUsdCents(uint256 usdCents) public view returns (uint256 nativeAmount, bool oracleHealthy) {
         if (usdCents == 0) return (0, true);
-
-        // Protocol callers are bounded to uint32 supply/quantity and <= MAX_DEFAULT_FEE_CENTS.
-        // Treat absurd external quote requests as unhealthy instead of risking arithmetic overflow.
-        if (usdCents > uint256(type(uint32).max) * MAX_DEFAULT_FEE_CENTS) return (0, false);
+        if (usdCents > uint256(type(uint32).max) * MAX_COLLECTION_FEE_CENTS) return (0, false);
 
         try IRFAggregatorV3V1(priceFeed).latestRoundData() returns (
             uint80 roundId,
@@ -141,13 +189,12 @@ contract RelicForgeFeePolicyV1 {
             uint256 scale = 10 ** uint256(priceFeedDecimals);
             uint256 numerator = usdCents * 1 ether * scale;
 
-            // answer > 0 was checked above, so this signed-to-unsigned cast is safe.
+            // answer > 0 was checked above.
             // forge-lint: disable-next-line(unsafe-typecast)
             uint256 unsignedAnswer = uint256(answer);
             if (unsignedAnswer > type(uint256).max / 100) return (0, false);
             uint256 denominator = unsignedAnswer * 100;
 
-            // Overflow-safe ceil division: a healthy quote never under-collects by truncation.
             nativeAmount = numerator / denominator;
             if (numerator % denominator != 0) ++nativeAmount;
             oracleHealthy = true;
@@ -159,7 +206,7 @@ contract RelicForgeFeePolicyV1 {
     function quoteSponsoredFee(uint32 maxSupply)
         external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
     {
-        if (!feesEnabled || sponsoredFeeCents == 0 || maxSupply == 0) return (0, true, false);
+        if (sponsoredFeeCents == 0 || maxSupply == 0) return (0, true, false);
         (feeWei, oracleHealthy) = quoteUsdCents(uint256(sponsoredFeeCents) * maxSupply);
         feeActive = true;
     }
@@ -167,20 +214,15 @@ contract RelicForgeFeePolicyV1 {
     function quoteMintFee(address collection, uint32 lockedFeeCents, uint32 quantity)
         external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
     {
-        if (
-            !feesEnabled ||
-            collectionFeeWaived[collection] ||
-            lockedFeeCents == 0 ||
-            quantity == 0
-        ) {
-            return (0, true, false);
-        }
+        if (!collectionFeesEnabled(collection) || quantity == 0) return (0, true, false);
 
-        (feeWei, oracleHealthy) = quoteUsdCents(uint256(lockedFeeCents) * quantity);
+        uint32 feeCents = currentCollectionFeeCents(collection, lockedFeeCents);
+        if (feeCents == 0) return (0, true, false);
+
+        (feeWei, oracleHealthy) = quoteUsdCents(uint256(feeCents) * quantity);
         feeActive = true;
     }
 
-    /// @notice Called by a factory after configuring a sponsored collection.
     function recordSponsoredFee(
         address collection,
         address creator,
@@ -203,7 +245,6 @@ contract RelicForgeFeePolicyV1 {
         emit SponsoredFeeReceived(msg.sender, collection, creator, maxSupply, feeCents, msg.value);
     }
 
-    /// @notice Called by a canonical minter-supported collection to forward already-accrued fees.
     function depositMintFees(address collection) external payable {
         if (msg.sender != collection || collection == address(0)) revert RF_NotAuthorized();
 
@@ -217,7 +258,6 @@ contract RelicForgeFeePolicyV1 {
         emit MintFeesReceived(collection, msg.value);
     }
 
-    /// @notice Anyone may trigger withdrawal; only the configured platform treasury receives funds.
     function withdrawFees() external nonReentrant {
         uint256 amount = accruedFees;
         if (amount == 0) return;
@@ -230,6 +270,5 @@ contract RelicForgeFeePolicyV1 {
         emit PlatformFeesWithdrawn(receiver, amount);
     }
 
-    // Prevent unattributed direct transfers.
     receive() external payable { revert RF_BadRequest(); }
 }

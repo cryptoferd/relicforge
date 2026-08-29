@@ -1,4 +1,4 @@
-import { createChallenge, verifyChallenge } from '../lib/auth.js';
+import { authenticate, createChallenge, verifyChallenge } from '../lib/auth.js';
 
 export default async function authRoutes(app) {
   app.post('/api/auth/challenge', async (request, reply) => {
@@ -18,4 +18,8 @@ export default async function authRoutes(app) {
       return reply.code(401).send({ error: error.message });
     }
   });
+  app.get('/api/auth/me', { preHandler: authenticate }, async request => ({
+    wallet: request.user.wallet,
+    isFounder: Boolean(request.user.isFounder)
+  }));
 }

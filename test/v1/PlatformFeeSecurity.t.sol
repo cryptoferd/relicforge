@@ -8,9 +8,15 @@ contract RejectingFeeTreasuryV1 {
 }
 
 contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
-    function _setFeesEnabled(bool enabled) internal {
+    function setUp() public override {
+        super.setUp();
         vm.prank(PLATFORM_ADMIN);
-        feePolicy.setFeesEnabled(enabled);
+        feePolicy.setCollectionFeesEnabled(address(collection), true);
+    }
+
+    function _setCollectionFeesEnabled(address target, bool enabled) internal {
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeesEnabled(target, enabled);
     }
 
     function _setDefaults(uint32 sponsoredCents, uint32 minterCents) internal {
@@ -60,7 +66,7 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     function testOnlyPlatformAdminCanChangeFeePolicy() public {
         vm.expectRevert(RF_NotAuthorized.selector);
         vm.prank(BOB);
-        feePolicy.setFeesEnabled(true);
+        feePolicy.setCollectionFeesEnabled(address(collection), false);
 
         vm.expectRevert(RF_NotAuthorized.selector);
         vm.prank(BOB);
@@ -137,7 +143,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testSponsoredCreatorPaysSupplyBasedFeeUpfront() public {
-        _setFeesEnabled(true);
 
         uint32 supply = 100;
         (uint256 upfrontFee, uint32 cents, bool healthy, bool active) = _sponsoredQuote(supply);
@@ -156,7 +161,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testSponsoredLaunchRejectsWrongUpfrontPayment() public {
-        _setFeesEnabled(true);
 
         uint32 supply = 100;
         (uint256 upfrontFee,,,) = _sponsoredQuote(supply);
@@ -180,7 +184,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testSponsoredLaunchRequiresHealthyOracleWhileMinterModeCanStillLaunch() public {
-        _setFeesEnabled(true);
         feePriceFeed.setShouldRevert(true);
 
         uint8 sponsoredMode = factory.FEE_MODE_SPONSORED();
@@ -225,7 +228,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testSponsoredCollectionNeverChargesMintersLater() public {
-        _setFeesEnabled(true);
         (RelicCollectionV1 c, RelicProjectDataV1 d,) = _newSponsored(4);
         _configureAndSealData(d, 4);
 
@@ -253,7 +255,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testMinterSupportedChargesFiftyCentsPerNftEquivalent() public {
-        _setFeesEnabled(true);
 
         uint32 phase = _createPublicPhase(1 ether, uint64(block.timestamp));
         collection.setMasterMintEnabled(true);
@@ -280,42 +281,103 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testPlatformFeeScalesExactlyWithQuantity() public {
-        _setFeesEnabled(true);
 
         (uint256 one,,) = collection.platformMintFeeQuote(1);
         (uint256 four,,) = collection.platformMintFeeQuote(4);
         assertEq(four, one * 4, "four NFTs = four per-token fees at fixed oracle price");
     }
 
-    function testGlobalToggleCanPauseAndRestoreLockedMinterFee() public {
-        _setFeesEnabled(true);
+    function testCollectionToggleCanPauseAndRestoreLockedMinterFee() public {
+        (address otherAddr,) = factory.createCollection(
+            "Other", "OTH", "fee isolation", 4, 32, 32, 1, PAYOUT, ROYALTY, 500
+        );
+        RelicCollectionV1 other = RelicCollectionV1(otherAddr);
+
         (uint256 feeBefore, bool healthyBefore, bool activeBefore) = collection.platformMintFeeQuote(1);
-        assertTrue(healthyBefore && activeBefore, "fee initially active");
-        assertGt(feeBefore, 0, "fee quoted");
+        (uint256 otherBefore, bool otherHealthy, bool otherActive) = other.platformMintFeeQuote(1);
+        assertTrue(healthyBefore && activeBefore, "target initially active");
+        assertTrue(otherHealthy && otherActive, "other initially active");
 
-        _setFeesEnabled(false);
+        _setCollectionFeesEnabled(address(collection), false);
+
         (uint256 feeOff,, bool activeOff) = collection.platformMintFeeQuote(1);
-        assertEq(feeOff, 0, "fee paused");
-        assertFalse(activeOff, "inactive while globally off");
+        (uint256 otherAfter,, bool otherStillActive) = other.platformMintFeeQuote(1);
+        assertEq(feeOff, 0, "target paused");
+        assertFalse(activeOff, "target inactive");
+        assertEq(otherAfter, otherBefore, "other fee unchanged");
+        assertTrue(otherStillActive, "other remains active");
 
-        _setFeesEnabled(true);
+        _setCollectionFeesEnabled(address(collection), true);
+
         (uint256 feeAfter, bool healthyAfter, bool activeAfter) = collection.platformMintFeeQuote(1);
-        assertTrue(healthyAfter && activeAfter, "fee restored");
-        assertEq(feeAfter, feeBefore, "same locked cents restored");
+        assertTrue(healthyAfter && activeAfter, "target restored");
+        assertEq(feeAfter, feeBefore, "same fee restored");
     }
 
-    function testPermanentCollectionWaiverCannotBeReactivatedByGlobalToggle() public {
-        _setFeesEnabled(true);
+    function testFounderCanAdjustOneCollectionFeeWithoutChangingAnother() public {
+        (address otherAddr,) = factory.createCollection(
+            "Other Rate", "ORATE", "rate isolation", 4, 32, 32, 1, PAYOUT, ROYALTY, 500
+        );
+        RelicCollectionV1 other = RelicCollectionV1(otherAddr);
+
+        (, uint256 targetBefore,,,) = collection.quoteMint(_createPublicPhase(0, uint64(block.timestamp)), 1);
+        (uint256 otherBefore,,) = other.platformMintFeeQuote(1);
+
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeeCents(address(collection), 75);
+
+        (uint256 targetAfter,,) = collection.platformMintFeeQuote(1);
+        (uint256 otherAfter,,) = other.platformMintFeeQuote(1);
+
+        assertGt(targetAfter, targetBefore, "target fee increased");
+        assertEq(otherAfter, otherBefore, "other collection unaffected");
+        assertEq(
+            uint256(feePolicy.currentCollectionFeeCents(address(collection), collection.lockedPlatformFeeCents())),
+            75,
+            "target current cents"
+        );
+    }
+
+    function testCollectionFeeOverrideCanBeClearedBackToLockedBase() public {
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeeCents(address(collection), 125);
+        assertEq(
+            uint256(feePolicy.currentCollectionFeeCents(address(collection), collection.lockedPlatformFeeCents())),
+            125,
+            "override active"
+        );
+
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.clearCollectionFeeOverride(address(collection));
+
+        assertEq(
+            uint256(feePolicy.currentCollectionFeeCents(address(collection), collection.lockedPlatformFeeCents())),
+            uint256(collection.lockedPlatformFeeCents()),
+            "base restored"
+        );
+    }
+
+    function testCollectionFeeAdjustmentHardCap() public {
+        uint32 overCap = feePolicy.MAX_COLLECTION_FEE_CENTS() + 1;
+        vm.prank(PLATFORM_ADMIN);
+        vm.expectRevert(RF_FeeLimit.selector);
+        feePolicy.setCollectionFeeCents(address(collection), overCap);
+    }
+
+    function testPermanentCollectionWaiverCannotBeReenabled() public {
 
         vm.prank(PLATFORM_ADMIN);
         feePolicy.waiveCollection(address(collection));
 
-        _setFeesEnabled(false);
-        _setFeesEnabled(true);
 
         (uint256 fee,, bool active) = collection.platformMintFeeQuote(1);
         assertEq(fee, 0, "waiver remains zero");
         assertFalse(active, "waiver remains inactive");
+
+        vm.startPrank(PLATFORM_ADMIN);
+        vm.expectRevert(RF_FeeWaived.selector);
+        feePolicy.setCollectionFeesEnabled(address(collection), true);
+        vm.stopPrank();
 
         (bool ok,) = address(feePolicy).call(
             abi.encodeWithSignature("setCollectionWaived(address,bool)", address(collection), false)
@@ -324,7 +386,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testStaleOracleFailsOpenInsteadOfBlockingMint() public {
-        _setFeesEnabled(true);
 
         vm.warp(10 days);
         feePriceFeed.setUpdatedAt(1);
@@ -354,7 +415,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testRevertingOracleFailsOpenInsteadOfBlockingMint() public {
-        _setFeesEnabled(true);
         feePriceFeed.setShouldRevert(true);
 
         uint32 phase = _createPublicPhase(0, uint64(block.timestamp));
@@ -375,7 +435,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testCreatorWithdrawalCannotTakeReservedPlatformFees() public {
-        _setFeesEnabled(true);
 
         uint32 phase = _createPublicPhase(1 ether, uint64(block.timestamp));
         collection.setMasterMintEnabled(true);
@@ -394,7 +453,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testPlatformFeesForwardThenWithdrawOnlyToTreasury() public {
-        _setFeesEnabled(true);
 
         uint32 phase = _createPublicPhase(0, uint64(block.timestamp));
         collection.setMasterMintEnabled(true);
@@ -418,7 +476,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testRejectingTreasuryCannotBurnAccruedPlatformFees() public {
-        _setFeesEnabled(true);
 
         RejectingFeeTreasuryV1 rejector = new RejectingFeeTreasuryV1();
         vm.prank(PLATFORM_ADMIN);
@@ -440,7 +497,6 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
     }
 
     function testFeeAccountingSurvivesCreatorRenunciation() public {
-        _setFeesEnabled(true);
 
         collection.setFutureRevealMode(collection.REVEAL_FORGE());
         collection.renounceControl();

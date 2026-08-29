@@ -152,8 +152,8 @@ contract RelicForgeFactoryV1 {
             (upfrontFeeWei, oracleHealthy, feeActive) = policy.quoteSponsoredFee(maxSupply);
         } else if (feeMode == FEE_MODE_MINTER_SUPPORTED) {
             lockedFeeCents = policy.minterFeeCents();
-            feeActive = policy.feesEnabled();
-            if (feeActive && lockedFeeCents != 0) {
+            feeActive = lockedFeeCents != 0;
+            if (feeActive) {
                 (, oracleHealthy) = policy.quoteUsdCents(lockedFeeCents);
             } else {
                 oracleHealthy = true;

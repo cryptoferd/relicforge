@@ -159,7 +159,8 @@ interface IRFAggregatorV3V1 {
 interface IRelicForgeFeePolicyV1 {
     function platformAdmin() external view returns (address);
     function treasury() external view returns (address);
-    function feesEnabled() external view returns (bool);
+    function collectionFeesEnabled(address collection) external view returns (bool);
+    function currentCollectionFeeCents(address collection, uint32 lockedFeeCents) external view returns (uint32);
     function sponsoredFeeCents() external view returns (uint32);
     function minterFeeCents() external view returns (uint32);
     function quoteUsdCents(uint256 usdCents) external view returns (uint256 nativeAmount, bool oracleHealthy);
@@ -229,6 +230,7 @@ error RF_BadOracleConfig();
 error RF_FeeLimit();
 error RF_FeeOracleUnavailable();
 error RF_FeePolicyNotBound();
+error RF_FeeWaived();
 error RF_AlreadyInitialized();
 error RF_AlreadyRevealed();
 error RF_AttributeLimit();

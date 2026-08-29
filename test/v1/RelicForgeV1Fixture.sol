@@ -75,10 +75,6 @@ abstract contract RelicForgeV1Fixture is TestBase {
             1 days
         );
 
-        // Existing security suites remain fee-neutral. PlatformFeeSecurityTest explicitly enables fees.
-        vm.prank(PLATFORM_ADMIN);
-        feePolicy.setFeesEnabled(false);
-
         factory = new RelicForgeFactoryV1(
             address(collectionImpl),
             address(dataImpl),
@@ -92,6 +88,10 @@ abstract contract RelicForgeV1Fixture is TestBase {
         );
         collection = RelicCollectionV1(collectionAddress);
         data = RelicProjectDataV1(dataAddress);
+
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeesEnabled(collectionAddress, false);
+
         _configureAndSealData(data, SUPPLY);
 
         vm.deal(address(this), 100 ether);
@@ -141,6 +141,9 @@ abstract contract RelicForgeV1Fixture is TestBase {
         );
         c = RelicCollectionV1(cAddr);
         d = RelicProjectDataV1(dAddr);
+
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setCollectionFeesEnabled(cAddr, false);
     }
 
     function _createPublicPhase(uint96 price, uint64 startTime) internal returns (uint32) {
