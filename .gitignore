@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+
+# Foundry local artifacts
+broadcast/
+cache-v1/
+out-v1/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
