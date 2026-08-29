@@ -227,6 +227,7 @@ error RF_AlreadyFulfilled();
 error RF_BadFeeMode();
 error RF_BadOracleConfig();
 error RF_FeeLimit();
+error RF_FeeOracleUnavailable();
 error RF_FeePolicyNotBound();
 error RF_AlreadyInitialized();
 error RF_AlreadyRevealed();

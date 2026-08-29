@@ -140,10 +140,16 @@ contract RelicForgeFeePolicyV1 {
 
             uint256 scale = 10 ** uint256(priceFeedDecimals);
             uint256 numerator = usdCents * 1 ether * scale;
-            uint256 denominator = uint256(answer) * 100;
 
-            // Round upward so a healthy quote never under-collects by truncation.
-            nativeAmount = (numerator + denominator - 1) / denominator;
+            // answer > 0 was checked above, so this signed-to-unsigned cast is safe.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint256 unsignedAnswer = uint256(answer);
+            if (unsignedAnswer > type(uint256).max / 100) return (0, false);
+            uint256 denominator = unsignedAnswer * 100;
+
+            // Overflow-safe ceil division: a healthy quote never under-collects by truncation.
+            nativeAmount = numerator / denominator;
+            if (numerator % denominator != 0) ++nativeAmount;
             oracleHealthy = true;
         } catch {
             return (0, false);

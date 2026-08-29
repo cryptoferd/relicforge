@@ -187,6 +187,9 @@ contract RelicForgeFactoryV1 {
         ) = quoteCollectionFeeTerms(maxSupply, feeMode);
 
         if (feeMode == FEE_MODE_SPONSORED) {
+            // Sponsored status is permanent for the collection. Do not let a temporary
+            // oracle outage grant lifetime fee-free sponsorship while fees are active.
+            if (feeActive && !oracleHealthy) revert RF_FeeOracleUnavailable();
             if (msg.value != upfrontFeeWei) revert RF_WrongPrice();
         } else {
             if (msg.value != 0) revert RF_WrongPrice();

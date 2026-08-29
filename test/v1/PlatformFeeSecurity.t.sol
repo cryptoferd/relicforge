@@ -161,6 +161,7 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
         uint32 supply = 100;
         (uint256 upfrontFee,,,) = _sponsoredQuote(supply);
         assertGt(upfrontFee, 0, "nonzero quote");
+        uint8 sponsoredMode = factory.FEE_MODE_SPONSORED();
 
         vm.expectRevert(RF_WrongPrice.selector);
         factory.createCollectionWithFeeMode{value: upfrontFee - 1}(
@@ -174,8 +175,53 @@ contract PlatformFeeSecurityTest is RelicForgeV1Fixture {
             PAYOUT,
             ROYALTY,
             500,
-            factory.FEE_MODE_SPONSORED()
+            sponsoredMode
         );
+    }
+
+    function testSponsoredLaunchRequiresHealthyOracleWhileMinterModeCanStillLaunch() public {
+        _setFeesEnabled(true);
+        feePriceFeed.setShouldRevert(true);
+
+        uint8 sponsoredMode = factory.FEE_MODE_SPONSORED();
+
+        vm.expectRevert(RF_FeeOracleUnavailable.selector);
+        factory.createCollectionWithFeeMode(
+            "No Free Sponsor",
+            "NFS",
+            "oracle-down sponsored launch",
+            10,
+            32,
+            32,
+            1,
+            PAYOUT,
+            ROYALTY,
+            500,
+            sponsoredMode
+        );
+
+        // Minter Supported can still be created. If the oracle remains unhealthy at
+        // mint time, only the platform fee fails open; the creator's mint remains usable.
+        (address cAddr,) = factory.createCollection(
+            "Minter Still Live",
+            "MSL",
+            "oracle-down minter-supported launch",
+            10,
+            32,
+            32,
+            1,
+            PAYOUT,
+            ROYALTY,
+            500
+        );
+
+        RelicCollectionV1 c = RelicCollectionV1(cAddr);
+        assertEq(
+            uint256(c.platformFeeMode()),
+            uint256(factory.FEE_MODE_MINTER_SUPPORTED()),
+            "minter-supported launch remains available"
+        );
+        assertEq(uint256(c.lockedPlatformFeeCents()), 50, "locked cents preserved");
     }
 
     function testSponsoredCollectionNeverChargesMintersLater() public {

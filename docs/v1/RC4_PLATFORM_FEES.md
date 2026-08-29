@@ -56,7 +56,9 @@ The fee-policy admin **cannot** change:
 
 Native/USD conversion uses an immutable Chainlink-compatible feed and immutable maximum oracle age.
 
-If the feed is stale, invalid, or reverts, the platform fee fails open to zero. A platform oracle outage must not halt a creator's mint.
+For already-created Minter Supported collections, if the feed is stale, invalid, or reverts, the platform fee fails open to zero. A platform oracle outage must not halt a creator's mint.
+
+A new Sponsored collection is different because sponsorship is permanent. While sponsored fees are enabled and nonzero, creation requires a healthy oracle quote so a temporary outage cannot grant lifetime fee-free sponsorship. Minter Supported collection creation remains available during an oracle outage.
 
 When the oracle is healthy, underpayment reverts. Overpayment is never counted as extra platform revenue; it remains creator proceeds.
 

@@ -9,6 +9,14 @@ import "../../contracts/production/RelicRendererV1.sol";
 import "../../contracts/production/RelicForgeFactoryV1.sol";
 import "../../contracts/production/RelicRandomnessMockV1.sol";
 
+contract InvariantFeePolicyStubV1 {
+    address public constant platformAdmin = address(0xFEEA);
+    address public constant treasury = address(0xFEEB);
+    bool public constant feesEnabled = false;
+    uint32 public constant sponsoredFeeCents = 0;
+    uint32 public constant minterFeeCents = 0;
+}
+
 contract RevealInvariantHandlerV1 {
     uint32 public constant SUPPLY = 12;
     address public constant HOLDER = address(0xBEEF);
@@ -99,6 +107,8 @@ contract RelicForgeStatefulInvariantTest is TestBase {
         RelicForgeFactoryV1 factory = new RelicForgeFactoryV1(
             address(collectionImpl), address(dataImpl), address(renderer), address(randomness)
         );
+        InvariantFeePolicyStubV1 feePolicy = new InvariantFeePolicyStubV1();
+        factory.bindFeePolicy(address(feePolicy));
         handler = new RevealInvariantHandlerV1(factory, randomness);
         collection = handler.collection();
         _targetedContracts.push(address(handler));
