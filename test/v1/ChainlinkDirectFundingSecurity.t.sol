@@ -299,8 +299,9 @@ contract ChainlinkDirectFundingSecurityTest is RelicForgeV1Fixture {
 
         uint256[] memory words = new uint256[](1);
         words[0] = 123;
+        uint256 upstreamId = adapter.localToUpstreamRequestId(1);
         vm.expectRevert(RF_BadProvider.selector);
-        adapter.rawFulfillRandomWords(adapter.localToUpstreamRequestId(1), words);
+        adapter.rawFulfillRandomWords(upstreamId, words);
     }
 
     function testDuplicateWrapperFulfillmentCannotReroll() public {
@@ -340,8 +341,9 @@ contract ChainlinkDirectFundingSecurityTest is RelicForgeV1Fixture {
         c.mint(phase, 1, 0, new bytes32[](0));
 
         uint256[] memory words = new uint256[](0);
+        uint256 upstreamId = adapter.localToUpstreamRequestId(1);
         vm.expectRevert(RF_BadRequest.selector);
-        w.fulfillWords(adapter, adapter.localToUpstreamRequestId(1), words);
+        w.fulfillWords(adapter, upstreamId, words);
     }
 
     function testPayoutReceiverCanRecoverUnusedCredit() public {
@@ -397,10 +399,11 @@ contract ChainlinkDirectFundingSecurityTest is RelicForgeV1Fixture {
         ) = _deployDirectStack(8);
         f; d;
 
-        adapter.fundConsumer{value: w.price()}(address(c));
+        uint256 price = w.price();
+        adapter.fundConsumer{value: price}(address(c));
         vm.expectRevert(RF_CreditWithdrawalUnauthorized.selector);
         vm.prank(BOB);
-        adapter.withdrawConsumerCredit(address(c), w.price());
+        adapter.withdrawConsumerCredit(address(c), price);
     }
 
     function testCreditRecoveryStillWorksAfterCollectionRenunciation() public {

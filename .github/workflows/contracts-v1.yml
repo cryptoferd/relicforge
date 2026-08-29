@@ -73,12 +73,13 @@ jobs:
 
       - name: Install Slither
         id: slither_install
+        if: always()
         continue-on-error: true
         run: pipx install slither-analyzer
 
       - name: Run Slither RC3 baseline
         id: slither
-        if: steps.slither_install.outcome == 'success'
+        if: always() && steps.slither_install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
