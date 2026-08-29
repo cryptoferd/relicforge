@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 interface VmRC33 {
     function envUint(string calldata name) external returns (uint256 value);
+    function txGasPrice(uint256 newGasPrice) external;
     function addr(uint256 privateKey) external returns (address keyAddr);
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;

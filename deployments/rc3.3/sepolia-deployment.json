@@ -1,0 +1,17 @@
+{
+  "adapter": "0x898E28329c86F1a454090376e518e70E6629c101",
+  "callbackGasLimit": 500000,
+  "chainId": 11155111,
+  "chainlinkCoordinator": "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
+  "chainlinkWrapper": "0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1",
+  "collectionImplementation": "0x2E668Bd68dF946e48998d9c1A29fa3041314247D",
+  "dataImplementation": "0x5f806e47e6C94222B82dd25F205b1E50e7b2C5C6",
+  "deployer": "0x9A1c3f885393F9edef49773fd137C920F76A1111",
+  "factory": "0x332712B4100705aac9b0365043b8DaE45BD104Ea",
+  "initialQuoteWei": 893128429111810,
+  "keyHash": "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae",
+  "linkToken": "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+  "maxRequestPriceWei": 10000000000000000,
+  "renderer": "0x1f776328091a90e7DdE069E51BFed341DD6Dc312",
+  "requestConfirmations": 3
+}

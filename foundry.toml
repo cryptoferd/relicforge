@@ -11,6 +11,9 @@ via_ir = true
 evm_version = "cancun"
 bytecode_hash = "none"
 cbor_metadata = false
+fs_permissions = [
+    { access = "read-write", path = "./deployments" }
+]
 
 [fuzz]
 runs = 5000

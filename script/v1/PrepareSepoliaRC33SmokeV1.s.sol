@@ -22,6 +22,10 @@ contract PrepareSepoliaRC33SmokeV1 is SepoliaRC33Base {
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
 
+        uint256 simulationGasPrice = vm.envUint("RC33_SIM_GAS_PRICE_WEI");
+        require(simulationGasPrice != 0, "RC33: zero simulation gas price");
+        vm.txGasPrice(simulationGasPrice);
+
         RelicForgeFactoryV1 factory =
             RelicForgeFactoryV1(_deploymentAddress("factory"));
         RelicChainlinkVRFV25DirectFundingAdapterV1 adapter =
@@ -107,6 +111,10 @@ contract PrepareSepoliaRC33SmokeV1 is SepoliaRC33Base {
         // Fully fund up to the immutable single-request spend ceiling. Only the actual
         // wrapper request cost is consumed; FinalizeSepoliaRC33SmokeV1 returns the remainder.
         adapter.fundConsumer{value: MAX_REQUEST_PRICE_WEI}(address(collection));
+
+        // Broadcast simulation can reset transaction context between scripted transactions.
+        // Re-apply the real Sepolia gas price immediately before the billable VRF request.
+        vm.txGasPrice(simulationGasPrice);
 
         localRequestId = adapter.nextRequestId();
         collection.creatorMint(deployer, 1);

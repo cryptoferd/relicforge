@@ -130,7 +130,29 @@ Write-Host "Initial Chainlink quote (wei): $($deployment.initialQuoteWei)"
 Write-Host ""
 
 Write-Host "PHASE 2/5 - Create, seal, fund, and mint the disposable live probe..."
-Run-ForgeScript "script/v1/PrepareSepoliaRC33SmokeV1.s.sol:PrepareSepoliaRC33SmokeV1" $true $false
+
+# Chainlink direct-funding pricing uses tx.gasprice. Foundry's script replay can
+# expose GASPRICE=0 unless we explicitly set it and skip the secondary simulation.
+$gasPrice = (& cast gas-price --rpc-url $env:SEPOLIA_RPC_URL).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $gasPrice) {
+    Fail "Could not read the current Sepolia gas price."
+}
+
+$env:RC33_SIM_GAS_PRICE_WEI = $gasPrice
+Write-Host "Sepolia gas price for VRF simulation/broadcast (wei): $gasPrice"
+
+& forge script `
+    "script/v1/PrepareSepoliaRC33SmokeV1.s.sol:PrepareSepoliaRC33SmokeV1" `
+    --rpc-url $env:SEPOLIA_RPC_URL `
+    --gas-price $gasPrice `
+    --broadcast `
+    --skip-simulation `
+    --slow `
+    -vvvv
+
+if ($LASTEXITCODE -ne 0) {
+    Fail "Phase 2 live probe transaction sequence failed."
+}
 
 $smokePath = Join-Path $repoRoot "deployments/rc3.3/sepolia-smoke.json"
 if (-not (Test-Path $smokePath)) { Fail "Smoke manifest was not created." }
