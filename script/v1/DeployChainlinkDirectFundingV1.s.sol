@@ -41,7 +41,11 @@ contract DeployRelicForgeChainlinkDirectFundingV1 {
         uint256 maxRequestPriceWei = vm.envUint("RF_VRF_MAX_REQUEST_PRICE_WEI");
         require(callbackGasRaw <= type(uint32).max, "callback gas uint32 overflow");
         require(confirmationsRaw <= type(uint16).max, "confirmations uint16 overflow");
+        // Bounds checked immediately above.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint32 callbackGasLimit = uint32(callbackGasRaw);
+        // Bounds checked immediately above.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint16 requestConfirmations = uint16(confirmationsRaw);
 
         vm.startBroadcast(deployerKey);

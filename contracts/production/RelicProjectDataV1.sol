@@ -50,6 +50,7 @@ contract RelicProjectDataV1 {
     event ArtShardAdded(uint256 indexed index, address indexed shard, uint256 dataLength);
     event DnaShardAdded(uint256 indexed index, address indexed shard, uint256 dataLength);
     event PlaceholderSet(address indexed shard, uint32 length);
+    event DNAConfigSet(uint32 recipeCount, uint16 recipesPerShard);
     event ContentSealed(bytes32 indexed provenanceHash);
 
     address public creator;
@@ -183,6 +184,7 @@ contract RelicProjectDataV1 {
         recipeCount = recipeCount_;
         recipesPerShard = recipesPerShard_;
         validatedRecipeCursor = 0;
+        emit DNAConfigSet(recipeCount_, recipesPerShard_);
     }
 
     function setOneOfOneMetadata(

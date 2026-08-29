@@ -34,11 +34,10 @@ contract RelicRendererV1 is IRelicRendererV1 {
         bytes memory raw = RFDataReaderV1.read(shard, offset, length);
         if (encoding == 0) return raw;
 
-        string memory mime;
-        if (encoding == 1) mime = "image/png";
-        else if (encoding == 2) mime = "image/jpeg";
+        string memory mime = "image/png";
+        if (encoding == 2) mime = "image/jpeg";
         else if (encoding == 3) mime = "image/webp";
-        else revert RF_BadEncoding();
+        else if (encoding != 1) revert RF_BadEncoding();
 
         return abi.encodePacked(
             '<image x="0" y="0" width="', uint256(data.canvasWidth()).toString(),

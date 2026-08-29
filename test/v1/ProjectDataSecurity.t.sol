@@ -33,6 +33,16 @@ contract ProjectDataSecurityTest is RelicForgeV1Fixture {
         d.addTraits(inputs);
     }
 
+    function testDataShardRejectsPlainEthTransfer() public {
+        (, RelicProjectDataV1 d) = _newUnsealed(1, 1);
+        address shard = d.addArtShard(hex"010203");
+
+        vm.deal(address(this), 1 ether);
+        (bool ok,) = payable(shard).call{value: 1 wei, gas: 10_000}("");
+        assertFalse(ok, "ordinary value transfer to immutable shard must revert");
+        assertEq(shard.balance, 0, "shard must not trap ordinary ETH");
+    }
+
     function testShortDnaCannotPassValidationViaExtcodecopyPadding() public {
         (, RelicProjectDataV1 d) = _newUnsealed(2, 1);
         _addSingleTrait(d);

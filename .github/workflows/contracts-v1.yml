@@ -77,7 +77,7 @@ jobs:
         continue-on-error: true
         run: pipx install slither-analyzer
 
-      - name: Run Slither RC3 baseline
+      - name: Run Slither RC3.2 remediation baseline
         id: slither
         if: always() && steps.slither_install.outcome == 'success'
         continue-on-error: true
@@ -87,12 +87,12 @@ jobs:
             --filter-paths "test/v1|script/v1" \
             --exclude-informational \
             --exclude-optimization \
-            --json slither-rc3.json
+            --json slither-rc3.2.json
 
-      - name: Upload Slither RC3 baseline
+      - name: Upload Slither RC3.2 baseline
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: slither-rc3
-          path: slither-rc3.json
+          name: slither-rc3.2
+          path: slither-rc3.2.json
           if-no-files-found: ignore

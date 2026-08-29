@@ -80,10 +80,13 @@ abstract contract RelicRandomnessAdapterBaseV1 is IRelicRandomnessProviderV1 {
             return false;
         }
 
+        // Reentrancy pre-lock: replayFulfillment() must not recursively call the consumer while
+        // this delivery is in progress. If the call fails, restore replayability for the same word.
+        d.delivered = true;
         (delivered,) = d.consumer.call{gas: CONSUMER_DELIVERY_GAS}(
             abi.encodeCall(IRelicRandomnessConsumerV1.fulfillRandomness, (localRequestId, d.word))
         );
-        if (delivered) d.delivered = true;
+        if (!delivered) d.delivered = false;
         emit RandomnessDelivery(localRequestId, delivered);
     }
 }

@@ -108,8 +108,10 @@ library RFMerkleProofV1 {
 }
 
 contract RelicDataShardV1 {
-    constructor(bytes memory data) payable {
-        bytes memory runtime = abi.encodePacked(hex"00", data);
+    constructor(bytes memory data) {
+        // 0xfe INVALID makes ordinary calls/value transfers revert instead of silently trapping ETH.
+        // The prefix remains exactly one byte, preserving RFDataReaderV1 offsets.
+        bytes memory runtime = abi.encodePacked(hex"fe", data);
         assembly ("memory-safe") { return(add(runtime, 0x20), mload(runtime)) }
     }
 }

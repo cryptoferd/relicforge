@@ -34,6 +34,22 @@ contract GasBombRandomnessConsumerV1 is IRelicRandomnessConsumerV1 {
     }
 }
 
+contract ReentrantReplayConsumerV1 is IRelicRandomnessConsumerV1 {
+    OpenReplaySafeAdapterV1 public immutable adapter;
+    uint256 public callbacks;
+    bool public nestedReplayResult;
+
+    constructor(OpenReplaySafeAdapterV1 adapter_) { adapter = adapter_; }
+
+    function request() external returns (uint256) { return adapter.requestRandomness(456); }
+
+    function fulfillRandomness(uint256 requestId, uint256) external {
+        require(msg.sender == address(adapter), "adapter only");
+        ++callbacks;
+        nestedReplayResult = adapter.replayFulfillment(requestId);
+    }
+}
+
 contract RandomnessDeliverySecurityTest is TestBase {
     function testGasBombCannotEraseRecordedRandomWord() public {
         OpenReplaySafeAdapterV1 adapter = new OpenReplaySafeAdapterV1();
@@ -66,6 +82,19 @@ contract RandomnessDeliverySecurityTest is TestBase {
 
         assertTrue(adapter.replayFulfillment(requestId), "idempotent replay reports success");
         assertEq(consumer.callbacks(), 1, "consumer not called twice");
+    }
+
+    function testReentrantReplayCannotRecursivelyRedeliver() public {
+        OpenReplaySafeAdapterV1 adapter = new OpenReplaySafeAdapterV1();
+        ReentrantReplayConsumerV1 consumer = new ReentrantReplayConsumerV1(adapter);
+
+        uint256 requestId = consumer.request();
+        adapter.fulfill(requestId, 0x1234);
+
+        assertEq(consumer.callbacks(), 1, "consumer called exactly once");
+        assertTrue(consumer.nestedReplayResult(), "nested replay sees pre-lock as delivered");
+        (,,,, bool delivered) = adapter.deliveries(requestId);
+        assertTrue(delivered, "delivery remains finalized");
     }
 
     function testUnknownReplayRejected() public {

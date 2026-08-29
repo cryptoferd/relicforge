@@ -483,7 +483,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
     function _assignRecipe(uint256 tokenId, uint256 seed, uint64 sequence, uint32 nonce) internal {
         if (assignedRecipePlusOne[tokenId] != 0) revert RF_AlreadyRevealed();
-        uint256 recipeCount = IRelicProjectDataV1(dataContract).maxSupply();
+        uint256 recipeCount = maxSupply;
         uint256 remaining = recipeCount - totalAssignedRecipes;
         if (remaining == 0) revert RF_NoRecipes();
         uint256 word = uint256(keccak256(abi.encode(seed, address(this), sequence, nonce, tokenId)));
