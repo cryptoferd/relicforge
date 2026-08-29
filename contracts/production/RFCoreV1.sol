@@ -150,6 +150,36 @@ interface IRelicRendererV1 {
     function renderPlaceholder(address dataContract) external view returns (string memory);
 }
 
+interface IRFAggregatorV3V1 {
+    function decimals() external view returns (uint8);
+    function latestRoundData()
+        external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
+interface IRelicForgeFeePolicyV1 {
+    function platformAdmin() external view returns (address);
+    function treasury() external view returns (address);
+    function feesEnabled() external view returns (bool);
+    function sponsoredFeeCents() external view returns (uint32);
+    function minterFeeCents() external view returns (uint32);
+    function quoteUsdCents(uint256 usdCents) external view returns (uint256 nativeAmount, bool oracleHealthy);
+    function quoteSponsoredFee(uint32 maxSupply)
+        external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive);
+    function quoteMintFee(address collection, uint32 lockedFeeCents, uint32 quantity)
+        external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive);
+    function recordSponsoredFee(address collection, address creator, uint32 maxSupply, uint32 feeCents) external payable;
+    function depositMintFees(address collection) external payable;
+}
+
+interface IRelicCollectionFeeViewV1 {
+    function factory() external view returns (address);
+    function creator() external view returns (address);
+    function maxSupply() external view returns (uint32);
+    function feePolicy() external view returns (address);
+    function platformFeeMode() external view returns (uint8);
+    function lockedPlatformFeeCents() external view returns (uint32);
+}
+
 interface IRelicProjectDataV1 {
     function creator() external view returns (address);
     function maxSupply() external view returns (uint32);
@@ -192,7 +222,12 @@ interface IRelicCollectionViewV1 {
     function flattenedRenderBaseURI() external view returns (string memory);
 }
 
+error RF_AlreadyConfigured();
 error RF_AlreadyFulfilled();
+error RF_BadFeeMode();
+error RF_BadOracleConfig();
+error RF_FeeLimit();
+error RF_FeePolicyNotBound();
 error RF_AlreadyInitialized();
 error RF_AlreadyRevealed();
 error RF_AttributeLimit();

@@ -100,6 +100,7 @@ contract ChainlinkDirectFundingSecurityTest is RelicForgeV1Fixture {
         vrfFactory = new RelicForgeFactoryV1(
             address(collectionImpl), address(dataImpl), address(vrfRenderer), address(adapter)
         );
+        vrfFactory.bindFeePolicy(address(feePolicy));
         adapter.bindFactory(address(vrfFactory));
 
         (address cAddr, address dAddr) = vrfFactory.createCollection(

@@ -16,6 +16,8 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     uint8 public constant ACCESS_MERKLE = 1;
     uint8 public constant REVEAL_DEFERRED = 0;
     uint8 public constant REVEAL_FORGE = 1;
+    uint8 public constant FEE_MODE_SPONSORED = 1;
+    uint8 public constant FEE_MODE_MINTER_SUPPORTED = 2;
 
     enum RequestKind { None, ForgeBatch, EpochRange }
 
@@ -62,6 +64,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     event RoyaltySet(address indexed receiver, uint96 bps);
     event RenderConfigUpdated(string flattenedRenderBaseURI, bool holderRenderModeEnabled, uint8 defaultRenderMode);
     event RenderModeUpdated(uint256 indexed tokenId, uint8 mode);
+    event PlatformFeeTermsConfigured(address indexed feePolicy, uint8 indexed feeMode, uint32 lockedFeeCents);
+    event PlatformFeeAccrued(address indexed payer, uint32 quantity, uint256 amount);
+    event PlatformFeesForwarded(address indexed feePolicy, uint256 amount);
 
     string public name;
     string public symbol;
@@ -77,6 +82,9 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     address public renderer;
     address public randomnessProvider;
 
+    address public factory;
+    address public feePolicy;
+
     uint32 public maxSupply;
     uint32 public totalMinted;
     uint32 public totalAssignedRecipes;
@@ -85,6 +93,11 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
     bool public masterMintEnabled;
     uint8 public futureRevealMode;
     uint32 public phaseCount;
+
+    bool public platformFeeConfigured;
+    uint8 public platformFeeMode;
+    uint32 public lockedPlatformFeeCents;
+    uint256 public accruedPlatformFees;
 
     string public flattenedRenderBaseURI;
     bool public holderRenderModeEnabled;
@@ -152,6 +165,7 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         if (IRelicProjectDataV1(dataContract_).creator() != creator_) revert RF_BadConfig();
 
         _initialized = true;
+        factory = msg.sender;
         name = name_;
         symbol = symbol_;
         description = description_;
@@ -169,6 +183,22 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         nextRequestSequence = 1;
         nextProcessSequence = 1;
         nextEpochStartToken = 1;
+    }
+
+    /// @notice Factory-only one-time fee configuration. Creator/platform cannot change locked terms later.
+    function configurePlatformFees(address feePolicy_, uint8 feeMode_, uint32 lockedFeeCents_) external {
+        if (msg.sender != factory || factory == address(0)) revert RF_NotAuthorized();
+        if (platformFeeConfigured) revert RF_AlreadyConfigured();
+        if (feePolicy_.code.length == 0) revert RF_BadConfig();
+        if (feeMode_ != FEE_MODE_SPONSORED && feeMode_ != FEE_MODE_MINTER_SUPPORTED) revert RF_BadFeeMode();
+        if (lockedFeeCents_ > 10_000) revert RF_FeeLimit();
+
+        feePolicy = feePolicy_;
+        platformFeeMode = feeMode_;
+        lockedPlatformFeeCents = lockedFeeCents_;
+        platformFeeConfigured = true;
+
+        emit PlatformFeeTermsConfigured(feePolicy_, feeMode_, lockedFeeCents_);
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
@@ -328,6 +358,42 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
     // ---------------------------- Minting ----------------------------
 
+    function platformMintFeeQuote(uint32 quantity)
+        public view returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
+    {
+        if (
+            !platformFeeConfigured ||
+            platformFeeMode != FEE_MODE_MINTER_SUPPORTED ||
+            quantity == 0
+        ) {
+            return (0, true, false);
+        }
+
+        return IRelicForgeFeePolicyV1(feePolicy).quoteMintFee(
+            address(this),
+            lockedPlatformFeeCents,
+            quantity
+        );
+    }
+
+    /// @notice UI-friendly quote. minimumValue is the value required at the current oracle state.
+    function quoteMint(uint32 phaseId, uint32 quantity)
+        external view
+        returns (
+            uint256 creatorPrice,
+            uint256 platformFeeWei,
+            uint256 minimumValue,
+            bool oracleHealthy,
+            bool feeActive
+        )
+    {
+        if (phaseId == 0 || phaseId > phaseCount) revert RF_BadPhase();
+        creatorPrice = uint256(phases[phaseId].price) * quantity;
+        (platformFeeWei, oracleHealthy, feeActive) = platformMintFeeQuote(quantity);
+        minimumValue = creatorPrice;
+        if (feeActive && oracleHealthy) minimumValue += platformFeeWei;
+    }
+
     function phaseIsOpen(uint32 phaseId) public view returns (bool) {
         if (!masterMintEnabled) return false;
         MintPhase storage phase = phases[phaseId];
@@ -353,7 +419,15 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         if (phase.endTime != 0 && block.timestamp >= phase.endTime) revert RF_PhaseClosed();
         if (uint256(totalMinted) + quantity > maxSupply) revert RF_SoldOut();
         if (phase.phaseSupply != 0 && uint256(phase.minted) + quantity > phase.phaseSupply) revert RF_PhaseSoldOut();
-        if (msg.value != uint256(phase.price) * quantity) revert RF_WrongPrice();
+
+        uint256 creatorPrice = uint256(phase.price) * quantity;
+        (uint256 platformFeeWei, bool oracleHealthy, bool feeActive) = platformMintFeeQuote(quantity);
+        uint256 requiredValue = creatorPrice;
+        if (feeActive && oracleHealthy) requiredValue += platformFeeWei;
+
+        // Dynamic USD conversion can move between an eth_call quote and inclusion. Never accept
+        // underpayment; harmless overpayment remains creator proceeds rather than platform revenue.
+        if (msg.value < requiredValue) revert RF_WrongPrice();
 
         uint32 walletMinted = phaseWalletMinted[phaseId][msg.sender];
         if (phase.maxPerWallet != 0 && uint256(walletMinted) + quantity > phase.maxPerWallet) revert RF_WalletLimit();
@@ -366,6 +440,12 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
 
         phaseWalletMinted[phaseId][msg.sender] = walletMinted + quantity;
         phase.minted += quantity;
+
+        if (feeActive && oracleHealthy && platformFeeWei != 0) {
+            accruedPlatformFees += platformFeeWei;
+            emit PlatformFeeAccrued(msg.sender, quantity, platformFeeWei);
+        }
+
         startTokenId = _mintBatch(msg.sender, quantity);
     }
 
@@ -545,11 +625,30 @@ contract RelicCollectionV1 is IRelicRandomnessConsumerV1 {
         royaltyAmount = quotient * royaltyBps + (remainder * royaltyBps) / 10_000;
     }
 
-    /// @notice Anyone may trigger payout, but the destination is permanently constrained to payoutReceiver.
+    /// @notice Anyone may forward reserved minter-supported platform fees to the immutable collection fee policy.
+    function withdrawPlatformFees() external nonReentrant {
+        uint256 amount = accruedPlatformFees;
+        if (amount == 0) return;
+        if (feePolicy == address(0)) revert RF_BadConfig();
+
+        accruedPlatformFees = 0;
+        IRelicForgeFeePolicyV1(feePolicy).depositMintFees{value: amount}(address(this));
+        emit PlatformFeesForwarded(feePolicy, amount);
+    }
+
+    /// @notice Anyone may trigger payout, but only creator proceeds can reach payoutReceiver.
     function withdraw() external nonReentrant {
         address receiver = payoutReceiver;
         if (receiver == address(0)) revert RF_InvalidRecipient();
-        (bool ok,) = payable(receiver).call{value: address(this).balance}("");
+
+        uint256 balance = address(this).balance;
+        uint256 reserved = accruedPlatformFees;
+        if (reserved > balance) revert RF_BadConfig();
+
+        uint256 creatorAmount = balance - reserved;
+        if (creatorAmount == 0) return;
+
+        (bool ok,) = payable(receiver).call{value: creatorAmount}("");
         if (!ok) revert RF_WithdrawFailed();
     }
 }

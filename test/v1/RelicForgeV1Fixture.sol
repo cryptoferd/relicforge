@@ -8,6 +8,39 @@ import "../../contracts/production/RelicCollectionV1.sol";
 import "../../contracts/production/RelicRendererV1.sol";
 import "../../contracts/production/RelicForgeFactoryV1.sol";
 import "../../contracts/production/RelicRandomnessMockV1.sol";
+import "../../contracts/production/RelicForgeFeePolicyV1.sol";
+
+contract MockRFFeePriceFeedV1 is IRFAggregatorV3V1 {
+    uint8 public immutable override decimals = 8;
+    int256 public answer = 2_000e8;
+    uint80 public roundId = 1;
+    uint80 public answeredInRound = 1;
+    uint256 public updatedAt;
+    bool public shouldRevert;
+
+    constructor() { updatedAt = block.timestamp; }
+
+    function setAnswer(int256 answer_) external {
+        answer = answer_;
+        ++roundId;
+        answeredInRound = roundId;
+        updatedAt = block.timestamp;
+    }
+
+    function setUpdatedAt(uint256 updatedAt_) external { updatedAt = updatedAt_; }
+
+    function setAnsweredInRound(uint80 value) external { answeredInRound = value; }
+
+    function setShouldRevert(bool value) external { shouldRevert = value; }
+
+    function latestRoundData()
+        external view override
+        returns (uint80, int256, uint256, uint256, uint80)
+    {
+        if (shouldRevert) revert("mock oracle revert");
+        return (roundId, answer, updatedAt, updatedAt, answeredInRound);
+    }
+}
 
 abstract contract RelicForgeV1Fixture is TestBase {
     uint32 internal constant SUPPLY = 16;
@@ -17,19 +50,42 @@ abstract contract RelicForgeV1Fixture is TestBase {
     RelicRandomnessMockV1 internal randomness;
     RelicForgeFactoryV1 internal factory;
     RelicRendererV1 internal renderer;
+    RelicForgeFeePolicyV1 internal feePolicy;
+    MockRFFeePriceFeedV1 internal feePriceFeed;
 
     address internal constant BOB = address(0xB0B);
     address internal constant ALICE = address(0xA11CE);
     address internal constant CAROL = address(0xCA501);
     address internal constant PAYOUT = address(0xCAFE);
     address internal constant ROYALTY = address(0xFEE);
+    address internal constant PLATFORM_ADMIN = address(0xFEEA);
+    address internal constant FEE_TREASURY = address(0xFEEBEEF);
 
     function setUp() public virtual {
         RelicCollectionV1 collectionImpl = new RelicCollectionV1();
         RelicProjectDataV1 dataImpl = new RelicProjectDataV1();
         renderer = new RelicRendererV1();
         randomness = new RelicRandomnessMockV1();
-        factory = new RelicForgeFactoryV1(address(collectionImpl), address(dataImpl), address(renderer), address(randomness));
+
+        feePriceFeed = new MockRFFeePriceFeedV1();
+        feePolicy = new RelicForgeFeePolicyV1(
+            PLATFORM_ADMIN,
+            FEE_TREASURY,
+            address(feePriceFeed),
+            1 days
+        );
+
+        // Existing security suites remain fee-neutral. PlatformFeeSecurityTest explicitly enables fees.
+        vm.prank(PLATFORM_ADMIN);
+        feePolicy.setFeesEnabled(false);
+
+        factory = new RelicForgeFactoryV1(
+            address(collectionImpl),
+            address(dataImpl),
+            address(renderer),
+            address(randomness)
+        );
+        factory.bindFeePolicy(address(feePolicy));
 
         (address collectionAddress, address dataAddress) = factory.createCollection(
             "Relic Test", "RLT", "V1 test", SUPPLY, 32, 32, 1, PAYOUT, ROYALTY, 500
@@ -38,9 +94,11 @@ abstract contract RelicForgeV1Fixture is TestBase {
         data = RelicProjectDataV1(dataAddress);
         _configureAndSealData(data, SUPPLY);
 
+        vm.deal(address(this), 100 ether);
         vm.deal(BOB, 100 ether);
         vm.deal(ALICE, 100 ether);
         vm.deal(CAROL, 100 ether);
+        vm.deal(PLATFORM_ADMIN, 100 ether);
     }
 
     function _configureAndSealData(RelicProjectDataV1 target, uint32 supply) internal {
