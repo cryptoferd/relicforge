@@ -388,9 +388,9 @@
     <div>
       <div class="eyebrow">STEP 5</div>
       <h2>Forge on Ethereum Sepolia</h2>
-      <p>Compile the finished Studio collection into onchain artwork + recipe DNA, estimate deployment cost, then deploy a real ERC-721 test collection through your connected wallet.</p>
+      <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">SEPOLIA TEST MODE</div>
+    <div class="forge-test-badge">CANONICAL V1 Â· SEPOLIA</div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
@@ -456,16 +456,16 @@
       </label>
       <label class="reveal-choice" data-reveal-card="1">
         <input name="revealMode" type="radio" value="1"/>
-        <span><strong>Creator Reveal</strong><small>All mints show your uploaded placeholder until you trigger the collection reveal.</small></span>
+        <span><strong>Deferred Reveal</strong><small>Minted tokens remain behind the forging placeholder until you request a Chainlink VRF reveal epoch.</small></span>
       </label>
       <label class="compact-upload forge-placeholder-upload hidden" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
-        <strong>Upload reveal placeholder</strong>
+        <strong>Custom forging placeholder (optional)</strong>
         <span id="creatorPlaceholderName">PNG, WEBP, JPG, GIF, or SVG</span>
         <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="creatorPlaceholderInput" type="file"/>
       </label>
       <div class="prototype-note">
         <strong>Fair assignment</strong>
-        <p>The Sepolia build uses a clearly labeled test randomness contract so we can verify the reveal state machine. Production will replace it with verifiable randomness.</p>
+        <p>The canonical V1 stack uses Relic Forge's predeployed Chainlink VRF v2.5 direct-funded adapter. Randomness infrastructure is shared and immutable; each collection has isolated randomness credit.</p>
       </div>
     </div>
 
@@ -476,24 +476,36 @@
       <div class="prototype-note"><strong>Offchain renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will cache a presentation render from the canonical onchain renderToken() output; animated artwork is preserved.</p></div>
     </div>
 
-    <div class="launch-card">
-      <h3>Network + wallet</h3>
-      <label class="field"><span>Chain</span>
-        <select id="chainSelect" disabled><option>Ethereum Sepolia</option></select>
-      </label>
-      <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Wallet</button>
-      <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
-      <div class="forge-advanced">
-        <strong>Shared test infrastructure</strong>
-        <small>Deploy this once, then reuse the saved Factory for future Sepolia collections.</small>
-        <label class="field"><span>Factory</span><input id="factoryAddress" placeholder="Deploy below or paste existing factory" type="text"/></label>
-        <label class="field"><span>Randomness mock</span><input id="randomnessAddress" placeholder="Filled when test infrastructure is deployed" type="text"/></label>
-        <div class="inline-actions">
-          <button class="ghost-btn" id="compileForgeContractsBtn" type="button">Compile Contracts</button>
-          <button class="ghost-btn" id="deployForgeInfraBtn" type="button">Deploy Test Infrastructure</button>
-        </div>
-        <pre class="forge-log" id="forgeInfraStatus">Not compiled.</pre>
+    <div class="launch-card canonical-v1-card">
+      <div class="canonical-v1-heading">
+        <div><h3>Relic Forge V1</h3><small>Canonical infrastructure Â· creator deployment disabled</small></div>
+        <span class="canonical-v1-live">SEPOLIA</span>
       </div>
+      <div class="canonical-v1-addresses">
+        <div><span>Factory</span><code id="canonicalFactoryAddress">Loadingâ€¦</code></div>
+        <div><span>Fee policy</span><code id="canonicalFeePolicyAddress">Loadingâ€¦</code></div>
+        <div><span>VRF adapter</span><code id="canonicalRandomnessAddress">Loadingâ€¦</code></div>
+        <div><span>Renderer</span><code id="canonicalRendererAddress">Loadingâ€¦</code></div>
+      </div>
+      <div class="forge-inline-status" id="canonicalV1Status">Loading canonical V1 deploymentâ€¦</div>
+      <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Creator Wallet</button>
+      <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
+    </div>
+
+    <div class="launch-card platform-fee-card">
+      <h3>Relic Forge platform fee</h3>
+      <p class="forge-footnote">Choose how this collection supports Relic Forge. The selected model is recorded onchain at collection creation.</p>
+      <div class="platform-fee-options">
+        <label class="reveal-choice" data-fee-mode-card="1"><input name="platformFeeMode" type="radio" value="1"/><span><strong>Sponsored</strong><small>Creator pays upfront. Minters never pay a Relic Forge platform mint fee.</small></span></label>
+        <label class="reveal-choice selected" data-fee-mode-card="2"><input checked name="platformFeeMode" type="radio" value="2"/><span><strong>Minter Supported</strong><small>No upfront platform fee. The collection's current fee is added per NFT minted.</small></span></label>
+      </div>
+      <div class="platform-fee-quote">
+        <div><span>Mode</span><strong id="platformFeePolicyLabel">Loadingâ€¦</strong></div>
+        <div><span>Base rate</span><strong id="platformFeeRate">â€”</strong></div>
+        <div><span>Creator upfront</span><strong id="platformFeeUpfront">â€”</strong></div>
+      </div>
+      <div class="forge-inline-status" id="platformFeeQuoteStatus">Waiting for canonical FeePolicy quote.</div>
+      <small class="forge-footnote">Minter Supported fees are controlled independently per collection by the Relic Forge platform admin. V1 enforces a $5.00/NFT maximum. Sponsored collections are settled at creation.</small>
     </div>
   </div>
 
@@ -664,6 +676,7 @@
 
 
   <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=11.1.6" defer></script>

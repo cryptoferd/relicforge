@@ -1902,3 +1902,15 @@ body.modal-open { overflow: hidden; }
 .rf-wallet-choice-arrow{color:#9a9a9a;font-size:18px}
 .rf-wallet-chooser-note{padding-top:12px;color:#777;font-size:11px;line-height:1.45;border-top:1px solid rgba(255,255,255,.08)}
 @media(max-width:560px){.rf-wallet-chooser{padding:12px;align-items:flex-end}.rf-wallet-chooser-panel{border-radius:20px 20px 14px 14px;padding:18px}.rf-wallet-chooser-head h2{font-size:24px}.rf-wallet-choice{grid-template-columns:40px 1fr auto;padding:11px 12px}.rf-wallet-choice-icon{width:40px;height:40px}}
+
+/* RC4.4 canonical V1 Studio */
+.canonical-v1-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}
+.canonical-v1-heading h3{margin:0 0 4px}.canonical-v1-heading small{color:var(--muted,#94949f)}
+.canonical-v1-live{font-size:.72rem;font-weight:800;letter-spacing:.12em;border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:7px 10px}
+.canonical-v1-addresses,.platform-fee-quote{display:grid;margin:8px 0 14px}
+.canonical-v1-addresses>div,.platform-fee-quote>div{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.canonical-v1-addresses span,.platform-fee-quote span{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94949f)}
+.canonical-v1-addresses code{font-size:.76rem;text-align:right;overflow-wrap:anywhere}
+.platform-fee-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.platform-fee-quote strong{text-align:right}
+@media(max-width:760px){.platform-fee-options{grid-template-columns:1fr}.canonical-v1-addresses>div,.platform-fee-quote>div{flex-direction:column;gap:5px}.canonical-v1-addresses code,.platform-fee-quote strong{text-align:left}}

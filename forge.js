@@ -10,6 +10,11 @@
   const INFRA_KEY = 'relicforge_sepolia_test_infra_v11_0_1';
   const FACTORY_REGISTRY_KEY = 'relicforge_sepolia_factory_registry_v1';
   const MANUAL_LAUNCH_KEY_PREFIX = 'relicforge_sepolia_manual_launches_v1';
+  const V1_FEE_MODE_SPONSORED = 1;
+  const V1_FEE_MODE_MINTER_SUPPORTED = 2;
+  const V1_FACTORY_ABI = [
+    'function quoteCollectionFeeTerms(uint32 maxSupply,uint8 feeMode) view returns (uint32 lockedFeeCents,uint256 upfrontFeeWei,bool oracleHealthy,bool feeActive)'
+  ];
   const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
   const COLLECTION_DASHBOARD_ABI = [
     'function name() view returns (string)','function symbol() view returns (string)','function description() view returns (string)','function owner() view returns (address)',
@@ -1016,7 +1021,6 @@ ${await file.text()}`;
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
-      if (revealMode === 1 && !forgeState.placeholderFile) throw new Error('Creator Reveal requires a creator-uploaded placeholder.');
       if (studio.layers.length + (studio.oneOfOnes?.length ? 1 : 0) > 255) throw new Error('The v1 DNA format supports at most 255 layers including the optional 1/1 layer.');
       if (studio.imageWidth > 65535 || studio.imageHeight > 65535) throw new Error('Canvas dimensions exceed the v1 uint16 renderer limit.');
 
@@ -1393,6 +1397,74 @@ ${await file.text()}`;
     return address;
   }
 
+  function canonicalV1Config() {
+    const config = window.RELICFORGE_V1_ADDRESSES?.[11155111];
+    if (!config || !window.ethers?.isAddress(config.factory) || !window.ethers?.isAddress(config.feePolicy)) {
+      throw new Error('Canonical Relic Forge V1 Sepolia configuration is unavailable.');
+    }
+    return config;
+  }
+
+  function currentPlatformFeeMode() {
+    return Number(document.querySelector('input[name="platformFeeMode"]:checked')?.value || V1_FEE_MODE_MINTER_SUPPORTED);
+  }
+
+  function canonicalSupply() {
+    const compiled = Number(forgeState.compiled?.recipeCount || 0);
+    if (compiled > 0) return compiled;
+    return Math.max(1, Number(document.getElementById('collectionSize')?.value || 1));
+  }
+
+  function shortV1(value) {
+    return value && value.length > 18 ? `${value.slice(0,10)}â€¦${value.slice(-8)}` : (value || 'â€”');
+  }
+
+  function renderCanonicalV1() {
+    try {
+      const cfg = canonicalV1Config();
+      const fields = {
+        canonicalFactoryAddress: cfg.factory,
+        canonicalFeePolicyAddress: cfg.feePolicy,
+        canonicalRandomnessAddress: cfg.randomnessAdapter,
+        canonicalRendererAddress: cfg.renderer
+      };
+      Object.entries(fields).forEach(([id,value]) => {
+        const node = $(id);
+        if (node) { node.textContent = shortV1(value); node.title = value; }
+      });
+      if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
+        `âœ“ Canonical V1 loaded Â· ${String(cfg.sourceCommit || '').slice(0,8)} Â· no creator infrastructure deployment.`;
+      return cfg;
+    } catch (error) {
+      if ($('canonicalV1Status')) $('canonicalV1Status').textContent = `V1 CONFIG ERROR: ${error.message}`;
+      return null;
+    }
+  }
+
+  async function refreshPlatformFeeQuote() {
+    const cfg = renderCanonicalV1();
+    if (!cfg || !window.ethers) return;
+    const mode = currentPlatformFeeMode();
+    document.querySelectorAll('[data-fee-mode-card]').forEach(card => card.classList.toggle('selected', Number(card.dataset.feeModeCard) === mode));
+    try {
+      const provider = readProvider(11155111);
+      if (!provider) throw new Error('Sepolia RPC unavailable.');
+      const factory = new window.ethers.Contract(cfg.factory, V1_FACTORY_ABI, provider);
+      const supply = canonicalSupply();
+      const [cents, upfront, healthy, active] = await factory.quoteCollectionFeeTerms(supply, mode);
+      const rate = Number(cents);
+      const name = mode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported';
+      if ($('platformFeePolicyLabel')) $('platformFeePolicyLabel').textContent = `${name}${active ? ' Â· active' : ' Â· $0 policy'}`;
+      if ($('platformFeeRate')) $('platformFeeRate').textContent =
+        mode === V1_FEE_MODE_SPONSORED ? `$${(rate/100).toFixed(2)} Ã— ${supply.toLocaleString()} max supply` : `$${(rate/100).toFixed(2)} / NFT`;
+      if ($('platformFeeUpfront')) $('platformFeeUpfront').textContent =
+        mode === V1_FEE_MODE_SPONSORED ? `${Number(window.ethers.formatEther(upfront)).toFixed(6)} ETH` : '0 ETH';
+      if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent =
+        healthy ? `Live canonical quote Â· ${name}.` : (mode === V1_FEE_MODE_SPONSORED ? 'Sponsored launch unavailable until the ETH/USD oracle is healthy.' : 'Oracle unavailable; existing Minter Supported mints fail open to $0 platform fee.');
+    } catch (error) {
+      if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent = `Fee quote unavailable: ${error.message}`;
+    }
+  }
   async function compileContracts() {
     if (forgeState.contractArtifacts) return forgeState.contractArtifacts;
     log('forgeInfraStatus', 'Loading contracts/RelicForgeTest.sol…', true);
@@ -1495,6 +1567,8 @@ ${await file.text()}`;
   async function forgeCollection() {
     try {
       if (!forgeState.compiled) throw new Error('Compile the collection for onchain first.');
+      canonicalV1Config();
+      throw new Error('Canonical V1 UI is active. The RC4.5 ProjectData + mint-phase transaction adapter must be installed before forging. No transaction was sent.');
       if (currentRevealMode() !== forgeState.compiled.core.revealMode) throw new Error('Reveal mode changed after compilation. Recompile first.');
       if (!forgeState.signer) await connectWallet();
       await compileContracts();
@@ -2313,6 +2387,7 @@ ${await file.text()}`;
       royalty: $('royalty')?.value || '0',
       royaltyWallet: $('royaltyWallet')?.value || '',
       revealMode: currentRevealMode(),
+      platformFeeMode: currentPlatformFeeMode(),
       holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
       defaultRenderMode: Number($('defaultRenderMode')?.value || 0),
       placeholderFile: forgeState.placeholderFile || null,
@@ -2363,6 +2438,10 @@ ${await file.text()}`;
       const node = $(id);
       if (node && value != null) node.value = value;
     }
+    const savedFeeMode = Number(saved.platformFeeMode || V1_FEE_MODE_MINTER_SUPPORTED);
+    const savedFeeRadio = document.querySelector('input[name="platformFeeMode"][value="' + savedFeeMode + '"]');
+    if (savedFeeRadio) savedFeeRadio.checked = true;
+    refreshPlatformFeeQuote().catch(() => {});
     const reveal = Number(saved.revealMode || 0);
     if ($('holderRenderModeEnabled')) $('holderRenderModeEnabled').checked = saved.holderRenderModeEnabled !== false;
     if ($('defaultRenderMode')) $('defaultRenderMode').value = String(saved.defaultRenderMode || 0);
@@ -2443,7 +2522,7 @@ ${await file.text()}`;
   }
 
   function bind() {
-    document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateRevealUi));
+    document.querySelectorAll('input[name="platformFeeMode"]').forEach(input => input.addEventListener('change', () => refreshPlatformFeeQuote().catch(() => {}))); // data-fee-mode-card change    document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateRevealUi));
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
       $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
@@ -2529,7 +2608,8 @@ ${await file.text()}`;
       if (forgeState.compiled && ['launchName', 'launchSymbol', 'launchDescription'].includes(id)) invalidateCompile('Collection metadata changed — recompile for onchain.');
     }));
     ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
-    restoreInfra();
+    renderCanonicalV1();
+    refreshPlatformFeeQuote().catch(() => {});
     const cloudReady = !!window.RelicForgeCloud?.enabled?.();
     if (cloudReady) loadCloudNetworkCatalog().catch(error => console.warn('RelicForge Alchemy network catalog unavailable:', error.message));
     const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
