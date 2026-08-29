@@ -1914,3 +1914,7 @@ body.modal-open { overflow: hidden; }
 .platform-fee-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
 .platform-fee-quote strong{text-align:right}
 @media(max-width:760px){.platform-fee-options{grid-template-columns:1fr}.canonical-v1-addresses>div,.platform-fee-quote>div{flex-direction:column;gap:5px}.canonical-v1-addresses code,.platform-fee-quote strong{text-align:left}}
+/* RC4.5 V1 transaction adapter */
+.vrf-credit-box{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
+.vrf-credit-box .field{margin-bottom:8px}
+#forgeArmMintBtn:disabled{opacity:.58}

@@ -13,22 +13,61 @@
   const V1_FEE_MODE_SPONSORED = 1;
   const V1_FEE_MODE_MINTER_SUPPORTED = 2;
   const V1_FACTORY_ABI = [
-    'function quoteCollectionFeeTerms(uint32 maxSupply,uint8 feeMode) view returns (uint32 lockedFeeCents,uint256 upfrontFeeWei,bool oracleHealthy,bool feeActive)'
-  ];
-  const FACTORY_DASHBOARD_ABI = ['function collectionsByCreator(address creator) view returns (address[])'];
-  const COLLECTION_DASHBOARD_ABI = [
-    'function name() view returns (string)','function symbol() view returns (string)','function description() view returns (string)','function owner() view returns (address)',
-    'function maxSupply() view returns (uint32)','function totalMinted() view returns (uint32)','function mintPrice() view returns (uint256)','function maxPerWallet() view returns (uint32)',
-    'function publicMintEnabled() view returns (bool)','function whitelistMintEnabled() view returns (bool)','function whitelistRoot() view returns (bytes32)','function whitelistMintPrice() view returns (uint256)',
-    'function whitelistSourceContract() view returns (address)','function whitelistSourceChainId() view returns (uint64)','function whitelistSnapshotBlock() view returns (uint64)','function whitelistSourceType() view returns (uint8)',
-    'function royaltyReceiver() view returns (address)','function royaltyBps() view returns (uint96)','function revealMode() view returns (uint8)','function creatorRevealSeed() view returns (uint256)',
-    'function dataFinalized() view returns (bool)','function isSealed() view returns (bool)','function provenanceHash() view returns (bytes32)',
-    'function holderRenderModeEnabled() view returns (bool)','function defaultRenderMode() view returns (uint8)','function flattenedRenderBaseURI() view returns (string)',
-    'function setMintPrice(uint256 price)','function setMaxPerWallet(uint32 limit)','function setRoyalty(address receiver,uint96 bps)','function setRenderConfig(string baseURI,bool holderEnabled,uint8 defaultMode)',
-    'function setMintAccess(bool publicEnabled,bool whitelistEnabled,bytes32 root,uint256 whitelistPrice,address sourceContract,uint64 sourceChainId,uint64 snapshotBlock,uint8 sourceType)',
-    'function creatorMint(uint32 quantity) returns (uint256)','function requestCreatorReveal() returns (uint256)','function sealCollection()'
+    'function quoteCollectionFeeTerms(uint32 maxSupply,uint8 feeMode) view returns (uint32 lockedFeeCents,uint256 upfrontFeeWei,bool oracleHealthy,bool feeActive)',
+    'function createCollectionWithFeeMode(string name,string symbol,string description,uint32 maxSupply,uint16 canvasWidth,uint16 canvasHeight,uint8 layerCount,address payoutReceiver,address royaltyReceiver,uint96 royaltyBps,uint8 feeMode) payable returns(address collection,address projectData)',
+    'function feePolicy() view returns (address)',
+    'function randomnessProvider() view returns (address)',
+    'function renderer() view returns (address)',
+    'event CollectionCreated(address indexed creator,address indexed collection,address indexed projectData,uint256 number)',
+    'event CollectionFeeTerms(address indexed collection,uint8 feeMode,uint32 lockedFeeCents,uint256 upfrontFeeWei,bool oracleHealthy,bool feeActive)'
   ];
 
+  const V1_PROJECT_DATA_ABI = [
+    'function addArtShard(bytes data) returns(address pointer)',
+    'function addDnaShard(bytes data) returns(address pointer)',
+    'function artShards(uint256 index) view returns(address)',
+    'function dnaShards(uint256 index) view returns(address)',
+    'function setPlaceholder(bytes svgFragment)',
+    'function setLayerNames(string[] names)',
+    'function setLayerMetadataVisibility(bool[] hidden)',
+    'function setOneOfOneLayer(uint8 layer)',
+    'function addTraits(tuple(uint8 layer,uint8 index,string name,address shard,uint32 offset,uint32 length,uint8 encoding,bool hiddenFromMetadata)[] inputs)',
+    'function setDNAConfig(uint32 recipeCount,uint16 recipesPerShard)',
+    'function setOneOfOneMetadata(uint8 index,string tokenName,string tokenDescription,string[] traitTypes,string[] values)',
+    'function validateNextRecipes(uint32 quantity)',
+    'function validatedRecipeCursor() view returns(uint64)',
+    'function sealContent(bytes32 provenanceHash)',
+    'function contentSealed() view returns(bool)'
+  ];
+
+  const V1_COLLECTION_ABI = [
+    'function dataContract() view returns(address)',
+    'function controller() view returns(address)',
+    'function maxSupply() view returns(uint32)',
+    'function totalMinted() view returns(uint32)',
+    'function masterMintEnabled() view returns(bool)',
+    'function phaseCount() view returns(uint32)',
+    'function createPhase(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled) returns(uint32 phaseId)',
+    'function setMasterMintEnabled(bool enabled)',
+    'function setFutureRevealMode(uint8 mode)',
+    'function setRenderConfig(string baseURI,bool holderEnabled,uint8 defaultMode)',
+    'function quoteMint(uint32 phaseId,uint32 quantity) view returns(uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
+    'function mint(uint32 phaseId,uint32 quantity,uint32 allowance,bytes32[] proof) payable returns(uint256 startTokenId)',
+    'function creatorMint(address to,uint32 quantity) returns(uint256 startTokenId)',
+    'function requestRevealEpoch() returns(uint64 sequence,uint256 requestId)',
+    'function processReveal(uint32 maxSteps)',
+    'function tokenURI(uint256 tokenId) view returns(string)',
+    'function isRevealed(uint256 tokenId) view returns(bool)',
+    'event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)',
+    'event PhaseCreated(uint32 indexed phaseId,uint8 accessType,uint96 price,uint16 priority)',
+    'event RevealRequested(uint64 indexed sequence,uint256 indexed requestId,uint8 kind,uint64 startTokenId,uint64 endTokenId)'
+  ];
+
+  const V1_RANDOMNESS_ABI = [
+    'function quoteRequestPrice() view returns(uint256)',
+    'function nativeCredit(address consumer) view returns(uint256)',
+    'function fundConsumer(address consumer) payable'
+  ];
   const PUBLIC_SEPOLIA_GAS_RPCS = [
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://sepolia.drpc.org',
@@ -49,6 +88,10 @@
     gasPrice: null,
     placeholderFile: null,
     collectionAddress: null,
+    dataAddress: null,
+    publicPhaseId: null,
+    whitelistPhaseId: null,
+    masterMintArmed: false,
     latestRequestId: null,
     latestTokenId: null,
     latestCreatorRevealRequestId: null,
@@ -400,6 +443,52 @@
     return { root: layers[layers.length - 1][0], entries, proofByAddress };
   }
 
+  function whitelistLeafV1(entry, collectionAddress, phaseId) {
+    const encoded = window.ethers.AbiCoder.defaultAbiCoder().encode(
+      ['uint256','address','uint32','address','uint32'],
+      [11155111n, collectionAddress, Number(phaseId), entry.address, entry.allowance]
+    );
+    return window.ethers.keccak256(encoded);
+  }
+
+  function buildMerkleWhitelistV1(entries, collectionAddress, phaseId) {
+    if (!window.ethers.isAddress(collectionAddress)) throw new Error('V1 whitelist collection address is invalid.');
+    if (!Number.isInteger(Number(phaseId)) || Number(phaseId) < 1) throw new Error('V1 whitelist phase id is invalid.');
+    if (!entries?.length) throw new Error('Whitelist contains no eligible wallets.');
+    const leaves = entries.map(entry => whitelistLeafV1(entry, collectionAddress, phaseId));
+    const layers = [leaves];
+    while (layers[layers.length - 1].length > 1) {
+      const current = layers[layers.length - 1];
+      const next = [];
+      for (let i = 0; i < current.length; i += 2) {
+        next.push(i + 1 < current.length ? hashPair(current[i], current[i + 1]) : current[i]);
+      }
+      layers.push(next);
+    }
+    const proofForIndex = index => {
+      const proof = [];
+      let cursor = index;
+      for (let level = 0; level < layers.length - 1; level++) {
+        const layer = layers[level];
+        const sibling = cursor % 2 === 0 ? cursor + 1 : cursor - 1;
+        if (sibling < layer.length) proof.push(layer[sibling]);
+        cursor = Math.floor(cursor / 2);
+      }
+      return proof;
+    };
+    const proofByAddress = {};
+    entries.forEach((entry, i) => {
+      proofByAddress[entry.address.toLowerCase()] = { allowance: entry.allowance, proof: proofForIndex(i) };
+    });
+    return {
+      root: layers[layers.length - 1][0],
+      entries,
+      proofByAddress,
+      domainCollection: window.ethers.getAddress(collectionAddress),
+      phaseId: Number(phaseId),
+      chainId: 11155111
+    };
+  }
   function renderWhitelistSummary() {
     const target = $('whitelistSummary');
     if (!target) return;
@@ -1021,7 +1110,7 @@ ${await file.text()}`;
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
-      if (studio.layers.length + (studio.oneOfOnes?.length ? 1 : 0) > 255) throw new Error('The v1 DNA format supports at most 255 layers including the optional 1/1 layer.');
+      if (studio.layers.length + (studio.oneOfOnes?.length ? 1 : 0) > 64) throw new Error('Relic Forge V1 supports at most 64 layers including the optional 1/1 layer.');
       if (studio.imageWidth > 65535 || studio.imageHeight > 65535) throw new Error('Canvas dimensions exceed the v1 uint16 renderer limit.');
 
       setCompileProgress(2, 'Reading final Studio collection…');
@@ -1080,7 +1169,13 @@ ${await file.text()}`;
         }
       }
 
-      setCompileProgress(64, 'Packing artwork into immutable bytecode shards…');
+      const unsupportedV1 = compiledTraits.filter(t => Number(t.encodingCode) > 3);
+      if (unsupportedV1.length) {
+        const first = unsupportedV1[0];
+        throw new Error(`Relic Forge V1 cannot store raw GIF trait encoding (${first.layerName} / ${first.name}). Convert animated trait art to animated WEBP or SVG before forging. Mint-page images and banners may still use GIF.`);
+      }
+
+      setCompileProgress(64, 'Packing artwork into immutable bytecode shards...');
       const artShards = packTraitBytes(compiledTraits);
       setCompileProgress(73, 'Packing exact recipe DNA…');
       const dna = buildDna(studio, layerDefs);
@@ -1185,7 +1280,7 @@ ${await file.text()}`;
       `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 1).length} PNG trait(s) stored as compressed raster because that was smaller than SVG</div>`,
       `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 4).length} animated GIF trait(s) preserved as raw animation</div>`,
       `<div class="forge-check good">✓ ${c.artShards.length + c.dnaShards.length + 1} data shard(s) including placeholder</div>`,
-      `<div class="forge-check good">✓ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Creator Reveal'} configured</div>`,
+      `<div class="forge-check good">✓ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Deferred Reveal'} configured</div>`,
       ...warnings.map(w => `<div class="forge-check warn">⚠ ${esc(w)}</div>`),
     ].join('');
     $('forgeProvenance').innerHTML = `Collection provenance <code>${esc(c.provenance)}</code>`;
@@ -1365,10 +1460,13 @@ ${await file.text()}`;
       }
       if ($('connectForgeWalletBtn')) $('connectForgeWalletBtn').textContent = 'Wallet Connected';
       if ($('royaltyWallet') && !$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
+      if ($('payoutWallet') && !$('payoutWallet').value.trim()) $('payoutWallet').value = forgeState.wallet;
       if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)}`;
       $('launchedChangeWalletBtn')?.classList.remove('hidden');
       $('launchedDisconnectBtn')?.classList.remove('hidden');
-      restoreInfra();
+      renderCanonicalV1();
+      await refreshPlatformFeeQuote();
+      await refreshVrfQuote();
       if ($('forgeCostEstimate')) await refreshCostEstimate();
       return forgeState.wallet;
     } catch (error) {
@@ -1416,7 +1514,7 @@ ${await file.text()}`;
   }
 
   function shortV1(value) {
-    return value && value.length > 18 ? `${value.slice(0,10)}â€¦${value.slice(-8)}` : (value || 'â€”');
+    return value && value.length > 18 ? `${value.slice(0,10)}…${value.slice(-8)}` : (value || '—');
   }
 
   function renderCanonicalV1() {
@@ -1433,7 +1531,7 @@ ${await file.text()}`;
         if (node) { node.textContent = shortV1(value); node.title = value; }
       });
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
-        `âœ“ Canonical V1 loaded Â· ${String(cfg.sourceCommit || '').slice(0,8)} Â· no creator infrastructure deployment.`;
+        `✓ Canonical V1 loaded · ${String(cfg.sourceCommit || '').slice(0,8)} · no creator infrastructure deployment.`;
       return cfg;
     } catch (error) {
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent = `V1 CONFIG ERROR: ${error.message}`;
@@ -1454,15 +1552,41 @@ ${await file.text()}`;
       const [cents, upfront, healthy, active] = await factory.quoteCollectionFeeTerms(supply, mode);
       const rate = Number(cents);
       const name = mode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported';
-      if ($('platformFeePolicyLabel')) $('platformFeePolicyLabel').textContent = `${name}${active ? ' Â· active' : ' Â· $0 policy'}`;
+      if ($('platformFeePolicyLabel')) $('platformFeePolicyLabel').textContent = `${name}${active ? ' · active' : ' · $0 policy'}`;
       if ($('platformFeeRate')) $('platformFeeRate').textContent =
-        mode === V1_FEE_MODE_SPONSORED ? `$${(rate/100).toFixed(2)} Ã— ${supply.toLocaleString()} max supply` : `$${(rate/100).toFixed(2)} / NFT`;
+        mode === V1_FEE_MODE_SPONSORED ? `$${(rate/100).toFixed(2)} × ${supply.toLocaleString()} max supply` : `$${(rate/100).toFixed(2)} / NFT`;
       if ($('platformFeeUpfront')) $('platformFeeUpfront').textContent =
         mode === V1_FEE_MODE_SPONSORED ? `${Number(window.ethers.formatEther(upfront)).toFixed(6)} ETH` : '0 ETH';
       if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent =
-        healthy ? `Live canonical quote Â· ${name}.` : (mode === V1_FEE_MODE_SPONSORED ? 'Sponsored launch unavailable until the ETH/USD oracle is healthy.' : 'Oracle unavailable; existing Minter Supported mints fail open to $0 platform fee.');
+        healthy ? `Live canonical quote · ${name}.` : (mode === V1_FEE_MODE_SPONSORED ? 'Sponsored launch unavailable until the ETH/USD oracle is healthy.' : 'Oracle unavailable; existing Minter Supported mints fail open to $0 platform fee.');
     } catch (error) {
       if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent = `Fee quote unavailable: ${error.message}`;
+    }
+  }
+  function v1RandomnessContract(runner = readProvider(11155111)) {
+    const cfg = canonicalV1Config();
+    return new window.ethers.Contract(cfg.randomnessAdapter, V1_RANDOMNESS_ABI, runner);
+  }
+
+  function requestedVrfFundingRequests() {
+    const n = Math.floor(Number($('vrfFundingRequests')?.value || 5));
+    if (!Number.isFinite(n) || n < 1 || n > 100) throw new Error('Initial VRF request budget must be between 1 and 100.');
+    return n;
+  }
+
+  async function refreshVrfQuote() {
+    if (!window.ethers || !$('vrfQuoteStatus')) return;
+    try {
+      const requests = requestedVrfFundingRequests();
+      const price = await v1RandomnessContract().quoteRequestPrice();
+      if (price <= 0n) throw new Error('Chainlink wrapper returned a zero request price.');
+      const funded = (price * BigInt(requests) * 120n + 99n) / 100n;
+      $('vrfQuoteStatus').textContent =
+        `Current VRF request ~ ${Number(window.ethers.formatEther(price)).toFixed(6)} ETH  -  initial isolated credit ~ ${Number(window.ethers.formatEther(funded)).toFixed(6)} ETH (${requests} requests + 20% buffer).`;
+      return { requests, price, funded };
+    } catch (error) {
+      $('vrfQuoteStatus').textContent = `VRF quote unavailable: ${error.message}`;
+      return null;
     }
   }
   async function compileContracts() {
@@ -1564,149 +1688,342 @@ ${await file.text()}`;
     steps[index].status = 'done'; steps[index].label = label; renderDeployProgress(steps);
   }
 
+  function v1ProjectDataContract(address = forgeState.dataAddress, runner = forgeState.signer) {
+    if (!address || !window.ethers.isAddress(address)) throw new Error('No V1 ProjectData clone is loaded.');
+    if (!runner) throw new Error('Connect the creator wallet first.');
+    return new window.ethers.Contract(address, V1_PROJECT_DATA_ABI, runner);
+  }
+
+  function collectionContract(runner = forgeState.signer) {
+    if (!forgeState.collectionAddress || !window.ethers.isAddress(forgeState.collectionAddress)) throw new Error('No forged V1 collection is loaded.');
+    if (!runner) throw new Error('Connect the creator wallet first.');
+    return new window.ethers.Contract(forgeState.collectionAddress, V1_COLLECTION_ABI, runner);
+  }
+
+  function parseOneOfOneAttributes(attributesJson) {
+    if (!attributesJson) return { traitTypes: [], values: [] };
+    let parsed;
+    try { parsed = JSON.parse(attributesJson); }
+    catch { throw new Error('Compiled 1/1 metadata JSON is invalid. Rebuild the collection in Step 4.'); }
+    if (!Array.isArray(parsed)) throw new Error('Compiled 1/1 metadata must be an attribute array.');
+    const traitTypes = [];
+    const values = [];
+    for (const row of parsed) {
+      if (!row || typeof row !== 'object') continue;
+      const tt = String(row.trait_type ?? '').trim();
+      const value = String(row.value ?? '').trim();
+      if (!tt || !value) continue;
+      traitTypes.push(tt);
+      values.push(value);
+    }
+    if (traitTypes.length > 64) throw new Error('A V1 standalone 1/1 can have at most 64 custom metadata attributes.');
+    return { traitTypes, values };
+  }
+
+  async function sendV1Step(label, call, steps, index) {
+    steps[index].status = 'active';
+    renderDeployProgress(steps);
+    const tx = await call();
+    steps[index].label = `${label}  -  ${tx.hash.slice(0,10)}...`;
+    renderDeployProgress(steps);
+    const receipt = await tx.wait();
+    if (receipt.status !== 1) throw new Error(`${label} transaction failed.`);
+    steps[index].status = 'done';
+    steps[index].label = label;
+    renderDeployProgress(steps);
+    return receipt;
+  }
+
   async function forgeCollection() {
     try {
       if (!forgeState.compiled) throw new Error('Compile the collection for onchain first.');
-      canonicalV1Config();
-      throw new Error('Canonical V1 UI is active. The RC4.5 ProjectData + mint-phase transaction adapter must be installed before forging. No transaction was sent.');
       if (currentRevealMode() !== forgeState.compiled.core.revealMode) throw new Error('Reveal mode changed after compilation. Recompile first.');
       if (!forgeState.signer) await connectWallet();
-      await compileContracts();
-      const factoryAddress = $('factoryAddress').value.trim();
-      if (!window.ethers.isAddress(factoryAddress)) throw new Error('Deploy or enter a valid Sepolia Factory address.');
-      rememberFactory(factoryAddress);
-      const royaltyWallet = $('royaltyWallet').value.trim() || forgeState.wallet;
+
+      const cfg = canonicalV1Config();
+      const network = await forgeState.provider.getNetwork();
+      if (Number(network.chainId) !== 11155111) throw new Error('Creator wallet must be connected to Ethereum Sepolia.');
+
+      const c = forgeState.compiled;
+      if (c.layerDefs.length < 1 || c.layerDefs.length > 64) throw new Error('V1 requires between 1 and 64 layers.');
+      if (c.traits.some(t => Number(t.encodingCode) > 3)) throw new Error('V1 raw GIF trait encoding is unsupported. Convert GIF traits to animated WEBP or SVG and recompile.');
+
+      const royaltyWallet = $('royaltyWallet')?.value.trim() || forgeState.wallet;
+      const payoutWallet = $('payoutWallet')?.value.trim() || forgeState.wallet;
       if (!window.ethers.isAddress(royaltyWallet)) throw new Error('Royalty wallet is invalid.');
-      const royaltyBps = Math.round(Number($('royalty').value || 0) * 100);
-      if (royaltyBps < 0 || royaltyBps > 1000) throw new Error('Royalty must be between 0% and 10% in Studio.');
-      const mintPrice = window.ethers.parseEther(String(Number($('mintPrice').value || 0)));
-      const maxPerWallet = Math.max(0, Math.floor(Number($('maxPerWallet')?.value || 0)));
-      if (maxPerWallet > 4294967295) throw new Error('Max per wallet is too large.');
-      const publicMintEnabled = !!$('publicMintEnabled')?.checked;
+      if (!window.ethers.isAddress(payoutWallet)) throw new Error('Mint proceeds wallet is invalid.');
+
+      const royaltyBps = Math.round(Number($('royalty')?.value || 0) * 100);
+      if (!Number.isInteger(royaltyBps) || royaltyBps < 0 || royaltyBps > 1000) throw new Error('Royalty must be between 0% and 10% in Studio.');
+
+      const publicEnabled = !!$('publicMintEnabled')?.checked;
       const whitelistEnabled = !!$('whitelistEnabled')?.checked;
+      if (whitelistEnabled && !forgeState.whitelist?.entries?.length) throw new Error('Build or snapshot the whitelist before forging.');
+
+      const publicPrice = window.ethers.parseEther(String(Math.max(0, Number($('mintPrice')?.value || 0))));
+      const whitelistPrice = window.ethers.parseEther(String(Math.max(0, Number($('whitelistMintPrice')?.value || 0))));
+      const maxPerWallet = Math.max(0, Math.floor(Number($('maxPerWallet')?.value || 0)));
+      if (maxPerWallet > 4294967295) throw new Error('Max mints per wallet is too large.');
+
       const holderRenderEnabled = !!$('holderRenderModeEnabled')?.checked;
       const defaultRenderMode = Number($('defaultRenderMode')?.value || 0);
-      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Offchain rendering cannot be the default until the Railway API URL is configured in relicforge-config.js.');
-      if (!publicMintEnabled && !whitelistEnabled) throw new Error('Enable public mint, whitelist mint, or both.');
-      if (whitelistEnabled && !forgeState.whitelist) throw new Error('Build or snapshot the whitelist before forging.');
-      const whitelistMintPrice = window.ethers.parseEther(String(Number($('whitelistMintPrice')?.value || 0)));
-      const c = forgeState.compiled;
-      const factory = new window.ethers.Contract(factoryAddress, forgeState.contractArtifacts.RelicForgeFactory.abi, forgeState.signer);
+      if (![0,1].includes(defaultRenderMode)) throw new Error('Default render mode is invalid.');
+      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Offchain rendering cannot be the default until RelicForge Cloud is configured.');
+
+      const feeMode = currentPlatformFeeMode();
+      const factory = new window.ethers.Contract(cfg.factory, V1_FACTORY_ABI, forgeState.signer);
+      const [lockedFeeCents, upfrontFeeWei, oracleHealthy, feeActive] =
+        await factory.quoteCollectionFeeTerms(c.recipeCount, feeMode);
+
+      if (feeMode === V1_FEE_MODE_SPONSORED && Number(lockedFeeCents) > 0 && !oracleHealthy) {
+        throw new Error('Sponsored collection creation requires a healthy live ETH/USD fee quote when the Sponsored rate is nonzero. Try again when the oracle is healthy.');
+      }
+
+      const vrfQuote = await refreshVrfQuote();
+      if (!vrfQuote) throw new Error('Could not establish the initial Chainlink VRF credit quote.');
+
+      const validationBatch = Math.max(1, Math.min(500, Math.floor(4096 / c.layerDefs.length)));
+      const validationBatches = Math.ceil(c.recipeCount / validationBatch);
       const traitBatches = Math.ceil(c.traits.length / 30);
-      const oneOfOneMetadataBatches = Math.ceil((c.oneOfOneMetadataInputs || []).length / 15);
+      const oneOfOneMetadataCount = (c.oneOfOneMetadataInputs || []).length;
+      const phaseCount = (publicEnabled ? 1 : 0) + (whitelistEnabled ? 1 : 0);
+
       const steps = [
-        { label: 'Create ERC-721 clone', status: 'pending' },
-        ...c.artShards.map((_, i) => ({ label: `Write artwork shard ${i + 1}/${c.artShards.length}`, status: 'pending' })),
-        { label: 'Register layer names', status: 'pending' },
-        { label: 'Configure metadata visibility', status: 'pending' },
-        ...(c.oneOfOneLayerIndex >= 0 ? [{ label: 'Configure standalone 1/1 layer', status: 'pending' }] : []),
-        ...Array.from({ length: oneOfOneMetadataBatches }, (_, i) => ({ label: `Store 1/1 metadata batch ${i + 1}/${oneOfOneMetadataBatches}`, status: 'pending' })),
-        ...Array.from({ length: traitBatches }, (_, i) => ({ label: `Register trait batch ${i + 1}/${traitBatches}`, status: 'pending' })),
-        ...c.dnaShards.map((_, i) => ({ label: `Write DNA shard ${i + 1}/${c.dnaShards.length}`, status: 'pending' })),
-        { label: 'Configure DNA', status: 'pending' },
-        { label: 'Store reveal placeholder', status: 'pending' },
-        { label: 'Configure render modes', status: 'pending' },
-        { label: 'Finalize provenance', status: 'pending' },
-        { label: 'Configure mint access', status: 'pending' },
+        { label: `Create V1 Collection + ProjectData  -  ${feeMode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported'}`, status: 'pending' },
+        ...c.artShards.map((_,i) => ({ label:`Write artwork shard ${i+1}/${c.artShards.length}`, status:'pending' })),
+        { label:'Register layer names', status:'pending' },
+        { label:'Configure metadata visibility', status:'pending' },
+        ...(c.oneOfOneLayerIndex >= 0 ? [{ label:'Configure standalone 1/1 layer', status:'pending' }] : []),
+        ...Array.from({length:oneOfOneMetadataCount},(_,i)=>({label:`Store 1/1 metadata ${i+1}/${oneOfOneMetadataCount}`,status:'pending'})),
+        ...Array.from({length:traitBatches},(_,i)=>({label:`Register trait batch ${i+1}/${traitBatches}`,status:'pending'})),
+        ...c.dnaShards.map((_,i)=>({label:`Write DNA shard ${i+1}/${c.dnaShards.length}`,status:'pending'})),
+        { label:'Configure DNA', status:'pending' },
+        { label:'Store forging placeholder', status:'pending' },
+        { label:'Configure renderer policy', status:'pending' },
+        ...Array.from({length:validationBatches},(_,i)=>({label:`Validate recipe batch ${i+1}/${validationBatches}`,status:'pending'})),
+        { label:'Seal immutable collection content', status:'pending' },
+        { label:'Set future reveal mode', status:'pending' },
+        { label:`Fund ${vrfQuote.requests} Chainlink VRF request credits`, status:'pending' },
+        ...Array.from({length:phaseCount},(_,i)=>({label:`Create mint phase ${i+1}/${phaseCount}`,status:'pending'})),
       ];
+
       renderDeployProgress(steps);
       let si = 0;
-      steps[0].status = 'active'; renderDeployProgress(steps);
-      const tx = await factory.createCollection(c.core.name, c.core.symbol, c.core.description, c.recipeCount, c.core.canvas[0], c.core.canvas[1], c.layerDefs.length, c.core.revealMode, mintPrice, maxPerWallet, royaltyWallet, royaltyBps);
-      const receipt = await tx.wait();
+
+      // Create the two creator-owned V1 clones through the canonical factory.
+      steps[si].status = 'active';
+      renderDeployProgress(steps);
+      const createTx = await factory.createCollectionWithFeeMode(
+        c.core.name,
+        c.core.symbol,
+        c.core.description,
+        c.recipeCount,
+        c.core.canvas[0],
+        c.core.canvas[1],
+        c.layerDefs.length,
+        payoutWallet,
+        royaltyWallet,
+        royaltyBps,
+        feeMode,
+        { value: feeMode === V1_FEE_MODE_SPONSORED ? upfrontFeeWei : 0n }
+      );
+      steps[si].label = `${steps[si].label}  -  ${createTx.hash.slice(0,10)}...`;
+      renderDeployProgress(steps);
+      const createReceipt = await createTx.wait();
+      if (createReceipt.status !== 1) throw new Error('V1 collection creation transaction failed.');
+
       let collectionAddress = null;
-      for (const entry of receipt.logs) {
+      let dataAddress = null;
+      for (const entry of createReceipt.logs) {
         try {
           const parsed = factory.interface.parseLog(entry);
-          if (parsed?.name === 'CollectionCreated') { collectionAddress = parsed.args.collection; break; }
+          if (parsed?.name === 'CollectionCreated') {
+            collectionAddress = parsed.args.collection;
+            dataAddress = parsed.args.projectData;
+            break;
+          }
         } catch (_) {}
       }
-      if (!collectionAddress) throw new Error('CollectionCreated event was not found.');
-      forgeState.collectionAddress = collectionAddress;
-      steps[0].status = 'done'; si = 1; renderDeployProgress(steps);
-      $('forgedCollectionAddress').textContent = collectionAddress;
-      $('forgedEtherscanLink').href = `https://sepolia.etherscan.io/address/${collectionAddress}`;
+      if (!collectionAddress || !dataAddress) throw new Error('CollectionCreated event did not include both V1 clone addresses.');
+
+      forgeState.collectionAddress = window.ethers.getAddress(collectionAddress);
+      forgeState.dataAddress = window.ethers.getAddress(dataAddress);
+      forgeState.publicPhaseId = null;
+      forgeState.whitelistPhaseId = null;
+      forgeState.masterMintArmed = false;
+
+      steps[si].status = 'done';
+      steps[si].label = 'Create V1 Collection + ProjectData';
+      si++;
+      renderDeployProgress(steps);
+
+      $('forgedCollectionAddress').textContent = forgeState.collectionAddress;
+      $('forgedEtherscanLink').href = `https://sepolia.etherscan.io/address/${forgeState.collectionAddress}`;
       $('forgeResult').classList.remove('hidden');
-      if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = collectionAddress;
+      if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = forgeState.collectionAddress;
 
-      const collection = new window.ethers.Contract(collectionAddress, forgeState.contractArtifacts.RelicCollectionV2.abi, forgeState.signer);
-      for (let i = 0; i < c.artShards.length; i++, si++) await sendStep(`Write artwork shard ${i + 1}/${c.artShards.length}`, () => collection.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si);
-      await sendStep('Register layer names', () => collection.setLayerNames(c.layerDefs.map(layer => layer.name)), steps, si++);
-      await sendStep('Configure metadata visibility', () => collection.setLayerMetadataVisibility(c.layerDefs.map(layer => !!layer.metadataHidden)), steps, si++);
-      if (c.oneOfOneLayerIndex >= 0) await sendStep('Configure standalone 1/1 layer', () => collection.setOneOfOneLayer(c.oneOfOneLayerIndex), steps, si++);
-      for (let start = 0, batch = 1; start < (c.oneOfOneMetadataInputs || []).length; start += 15, batch++, si++) {
-        const items = c.oneOfOneMetadataInputs.slice(start, start + 15);
-        await sendStep(`Store 1/1 metadata batch ${batch}/${oneOfOneMetadataBatches}`, () => collection.setOneOfOneMetadata(items), steps, si);
-      }
-      for (let start = 0, batch = 1; start < c.traits.length; start += 30, batch++, si++) {
-        const items = c.traits.slice(start, start + 30);
-        const traitInputs = items.map(t => [t.layerIndex, t.traitIndex, t.name, t.shard, t.offset, t.length, t.encodingCode, !!t.metadataHidden]);
-        await sendStep(`Register trait batch ${batch}/${traitBatches}`, () => collection.addTraits(traitInputs), steps, si);
-      }
-      for (let i = 0; i < c.dnaShards.length; i++, si++) await sendStep(`Write DNA shard ${i + 1}/${c.dnaShards.length}`, () => collection.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);
-      await sendStep('Configure DNA', () => collection.setDNAConfig(c.recipeCount, c.recipesPerShard), steps, si++);
-      await sendStep('Store reveal placeholder', () => collection.setPlaceholder(window.ethers.hexlify(c.placeholderBytes)), steps, si++);
-      const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');
-      const renderBase = renderHost ? `${renderHost}/api/public/render/11155111/${collectionAddress}/` : '';
-      await sendStep('Configure render modes', () => collection.setRenderConfig(renderBase, holderRenderEnabled && !!renderBase, defaultRenderMode), steps, si++);
-      await sendStep('Finalize provenance', () => collection.finalizeData(c.provenance), steps, si++);
-      const wl = forgeState.whitelist;
-      await sendStep('Configure mint access', () => collection.setMintAccess(
-        publicMintEnabled,
-        whitelistEnabled,
-        whitelistEnabled ? wl.root : window.ethers.ZeroHash,
-        whitelistMintPrice,
-        whitelistEnabled ? wl.sourceContract : window.ethers.ZeroAddress,
-        whitelistEnabled ? BigInt(wl.sourceChainId || 0) : 0n,
-        whitelistEnabled ? BigInt(wl.snapshotBlock || 0) : 0n,
-        whitelistEnabled ? wl.sourceType : 0
-      ), steps, si++);
+      const data = v1ProjectDataContract();
+      const collection = collectionContract();
 
-      $('forgeMintTestBtn').disabled = !publicMintEnabled;
-      $('forgeWhitelistMintBtn').disabled = !whitelistEnabled;
-      $('forgeCreatorMintBtn').disabled = false;
-      $('forgeInspectBtn').disabled = false;
-      $('forgeCreatorRevealBtn').disabled = c.core.revealMode !== 1;
-      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = false;
-      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = false;
-      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !window.RelicForgeCloud?.enabled?.();
-      persistMintPageConfig(collectionAddress).catch(() => {});
-      if (window.RelicForgeCloud?.enabled?.()) {
-        try {
-          log('forgeTestStatus', 'Publishing mint page configuration + whitelist proofs to RelicForge Cloud…');
-          await publishMintPageCloud(collectionAddress);
-          log('forgeTestStatus', '✓ Cloud mint page published.');
-        } catch (cloudError) {
-          log('forgeTestStatus', `Cloud publish warning: ${cloudError.message}`);
-        }
+      const artPointers = [];
+      for (let i=0;i<c.artShards.length;i++,si++) {
+        await sendV1Step(`Write artwork shard ${i+1}/${c.artShards.length}`, () => data.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si);
+        artPointers[i] = await data.artShards(i);
       }
-      log('forgeTestStatus', `Collection ready: ${collectionAddress}`, true);
-      bridge().showStatus?.('Collection forged on Sepolia.', 'success');
-      loadViewerCollection(true).catch(() => {});
+
+      await sendV1Step('Register layer names', () => data.setLayerNames(c.layerDefs.map(layer=>layer.name)), steps, si++);
+      await sendV1Step('Configure metadata visibility', () => data.setLayerMetadataVisibility(c.layerDefs.map(layer=>!!layer.metadataHidden)), steps, si++);
+
+      if (c.oneOfOneLayerIndex >= 0) {
+        await sendV1Step('Configure standalone 1/1 layer', () => data.setOneOfOneLayer(c.oneOfOneLayerIndex), steps, si++);
+      }
+
+      for (let i=0;i<(c.oneOfOneMetadataInputs||[]).length;i++,si++) {
+        const row = c.oneOfOneMetadataInputs[i];
+        const attrs = parseOneOfOneAttributes(row[3]);
+        await sendV1Step(
+          `Store 1/1 metadata ${i+1}/${c.oneOfOneMetadataInputs.length}`,
+          () => data.setOneOfOneMetadata(row[0], row[1], row[2], attrs.traitTypes, attrs.values),
+          steps,
+          si
+        );
+      }
+
+      for (let start=0,batch=1;start<c.traits.length;start+=30,batch++,si++) {
+        const items = c.traits.slice(start,start+30);
+        const inputs = items.map(t => {
+          const pointer = artPointers[Number(t.shard)];
+          if (!pointer) throw new Error(`Artwork pointer missing for ${t.layerName} / ${t.name}.`);
+          return [t.layerIndex, t.traitIndex, t.name, pointer, t.offset, t.length, t.encodingCode, !!t.metadataHidden];
+        });
+        await sendV1Step(`Register trait batch ${batch}/${traitBatches}`, () => data.addTraits(inputs), steps, si);
+      }
+
+      for (let i=0;i<c.dnaShards.length;i++,si++) {
+        await sendV1Step(`Write DNA shard ${i+1}/${c.dnaShards.length}`, () => data.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);
+      }
+
+      await sendV1Step('Configure DNA', () => data.setDNAConfig(c.recipeCount, c.recipesPerShard), steps, si++);
+      await sendV1Step('Store forging placeholder', () => data.setPlaceholder(window.ethers.hexlify(c.placeholderBytes)), steps, si++);
+
+      const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/,'');
+      const renderBase = renderHost ? `${renderHost}/api/public/render/11155111/${forgeState.collectionAddress}/` : '';
+      await sendV1Step('Configure renderer policy', () => collection.setRenderConfig(renderBase, holderRenderEnabled && !!renderBase, defaultRenderMode), steps, si++);
+
+      let remaining = c.recipeCount;
+      for (let batch=1;remaining>0;batch++,si++) {
+        const quantity = Math.min(validationBatch, remaining);
+        await sendV1Step(`Validate recipe batch ${batch}/${validationBatches}`, () => data.validateNextRecipes(quantity), steps, si);
+        remaining -= quantity;
+      }
+
+      await sendV1Step('Seal immutable collection content', () => data.sealContent(c.provenance), steps, si++);
+
+      // UI: 0 Forge Reveal, 1 Deferred. Contract: 1 Forge, 0 Deferred.
+      const contractRevealMode = currentRevealMode() === 0 ? 1 : 0;
+      await sendV1Step('Set future reveal mode', () => collection.setFutureRevealMode(contractRevealMode), steps, si++);
+
+      const randomness = v1RandomnessContract(forgeState.signer);
+      await sendV1Step(
+        `Fund ${vrfQuote.requests} Chainlink VRF request credits`,
+        () => randomness.fundConsumer(forgeState.collectionAddress, { value: vrfQuote.funded }),
+        steps,
+        si++
+      );
+
+      let nextPhaseId = 1;
+      if (publicEnabled) {
+        forgeState.publicPhaseId = nextPhaseId++;
+        await sendV1Step(
+          'Create public mint phase',
+          () => collection.createPhase(publicPrice, 0, 0, 0, maxPerWallet, window.ethers.ZeroHash, 0, 100, true),
+          steps,
+          si++
+        );
+      }
+
+      if (whitelistEnabled) {
+        forgeState.whitelistPhaseId = nextPhaseId++;
+        const sourceMeta = forgeState.whitelist;
+        const finalTree = buildMerkleWhitelistV1(sourceMeta.entries, forgeState.collectionAddress, forgeState.whitelistPhaseId);
+        forgeState.whitelist = { ...sourceMeta, ...finalTree, root:finalTree.root, proofByAddress:finalTree.proofByAddress };
+        renderWhitelistSummary();
+        if ($('whitelistStatus')) $('whitelistStatus').textContent =
+          `OK V1 whitelist bound to ${shortAddr(forgeState.collectionAddress)}  -  phase ${forgeState.whitelistPhaseId}  -  ${finalTree.entries.length.toLocaleString()} wallets`;
+
+        await sendV1Step(
+          'Create whitelist mint phase',
+          () => collection.createPhase(whitelistPrice, 0, 0, 0, 0, finalTree.root, 1, 200, true),
+          steps,
+          si++
+        );
+      }
+
+      const stillPaused = !(await collection.masterMintEnabled());
+      if (!stillPaused) throw new Error('V1 safety check failed: new collection master mint was unexpectedly enabled.');
+
+      if ($('forgeArmMintBtn')) $('forgeArmMintBtn').disabled = false;
+      if ($('forgeMintTestBtn')) $('forgeMintTestBtn').disabled = true;
+      if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = true;
+      if ($('forgeCreatorMintBtn')) $('forgeCreatorMintBtn').disabled = false;
+      if ($('forgeDeferredRevealBtn')) $('forgeDeferredRevealBtn').disabled = currentRevealMode() !== 1;
+      if ($('forgeProcessRevealBtn')) $('forgeProcessRevealBtn').disabled = false;
+      if ($('forgeInspectBtn')) $('forgeInspectBtn').disabled = false;
+
+      // V1 public mint-page ABI adaptation is a separate patch. Do not publish an old V11 ABI page.
+      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = true;
+      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = true;
+      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = true;
+      if ($('mintPageStatus')) $('mintPageStatus').textContent =
+        'V1 collection forged. Public mint-page ABI/phase integration will be enabled in the next UI patch; the old V11 mint page is intentionally disabled.';
+
+      log(
+        'forgeTestStatus',
+        `OK Canonical V1 collection forged.\nCollection: ${forgeState.collectionAddress}\nProjectData: ${forgeState.dataAddress}\nPlatform fee: ${feeMode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported'}  -  base ${Number(lockedFeeCents)/100} USD/NFT\nVRF credit funded: ${window.ethers.formatEther(vrfQuote.funded)} ETH\nMaster mint: OFF (manual enable required)`,
+        true
+      );
+
+      bridge().showStatus?.('Canonical V1 collection forged on Sepolia. Master mint remains OFF.', 'success');
     } catch (error) {
-      log('forgeTestStatus', `FORGE ERROR: ${error.message}`, true);
+      const partial = forgeState.collectionAddress ? `\nPartial V1 collection: ${forgeState.collectionAddress}` : '';
+      log('forgeTestStatus', `FORGE ERROR: ${error.shortMessage || error.message}${partial}`, true);
+      if (forgeState.collectionAddress) {
+        bridge().showStatus?.('Forge stopped after the V1 collection was created. Do not forge a duplicate; keep the displayed collection address for troubleshooting.', 'error');
+      }
     }
-  }
-
-  function collectionContract() {
-    if (!forgeState.collectionAddress) throw new Error('No forged collection loaded.');
-    if (!forgeState.signer) throw new Error('Connect the creator wallet first.');
-    return new window.ethers.Contract(forgeState.collectionAddress, forgeState.contractArtifacts.RelicCollectionV2.abi, forgeState.signer);
   }
 
   function requestedMintQuantity() {
     const quantity = Math.floor(Number($('forgeMintQuantity')?.value || 1));
-    if (!Number.isFinite(quantity) || quantity < 1) throw new Error('Mint quantity must be at least 1.');
+    if (!Number.isFinite(quantity) || quantity < 1 || quantity > 50) throw new Error('V1 mint quantity must be between 1 and 50.');
     return quantity;
+  }
+
+  async function armMasterMint() {
+    try {
+      const collection = collectionContract();
+      log('forgeTestStatus','Enabling master mint...',true);
+      const tx = await collection.setMasterMintEnabled(true);
+      await tx.wait();
+      forgeState.masterMintArmed = true;
+      if ($('forgeArmMintBtn')) { $('forgeArmMintBtn').disabled = true; $('forgeArmMintBtn').textContent = 'Master Mint Enabled'; }
+      if ($('forgeMintTestBtn')) $('forgeMintTestBtn').disabled = !forgeState.publicPhaseId;
+      if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = !forgeState.whitelistPhaseId;
+      log('forgeTestStatus','OK Master mint enabled. Enabled phases may now mint.');
+    } catch (error) {
+      log('forgeTestStatus',`MASTER MINT ERROR: ${error.shortMessage || error.message}`,true);
+    }
   }
 
   async function mintTest() {
     try {
+      if (!forgeState.publicPhaseId) throw new Error('This project did not create a public V1 mint phase.');
       const collection = collectionContract();
       const quantity = requestedMintQuantity();
-      const price = await collection.mintPrice();
-      log('forgeTestStatus', `Public minting ${quantity} NFT${quantity === 1 ? '' : 's'}…`, true);
-      const tx = await collection['mint(uint32)'](quantity, { value: price * BigInt(quantity) });
+      const quote = await collection.quoteMint(forgeState.publicPhaseId, quantity);
+      const minimumValue = quote.minimumValue ?? quote[2];
+      log('forgeTestStatus',`Public minting ${quantity} through phase ${forgeState.publicPhaseId}...`,true);
+      const tx = await collection.mint(forgeState.publicPhaseId, quantity, 0, [], { value: minimumValue });
       const receipt = await tx.wait();
       const tokenIds = [];
       for (const entry of receipt.logs) {
@@ -1715,28 +2032,25 @@ ${await file.text()}`;
           if (parsed?.name === 'Transfer' && parsed.args.from === window.ethers.ZeroAddress) tokenIds.push(BigInt(parsed.args.tokenId));
         } catch (_) {}
       }
-      forgeState.latestTokenId = tokenIds.length ? tokenIds[0] : null;
       if (tokenIds.length) $('forgeInspectTokenId').value = tokenIds[0].toString();
-      const revealNote = currentRevealMode() === 0 ? 'Forge Reveal test randomness auto-fulfilled during mint.' : 'Creator Reveal placeholder remains active until the creator triggers reveal.';
-      log('forgeTestStatus', `✓ Minted ${tokenIds.length || quantity} token${(tokenIds.length || quantity) === 1 ? '' : 's'} in one transaction.\n${revealNote}`);
-      await inspectToken();
-      loadViewerCollection(false).catch(() => {});
+      log('forgeTestStatus',`OK Minted ${tokenIds.length || quantity} token(s). ${currentRevealMode() === 0 ? 'Chainlink VRF request submitted; process after callback fulfillment.' : 'Tokens are deferred until you request an epoch.'}`);
     } catch (error) {
-      log('forgeTestStatus', `MINT ERROR: ${error.message}`, true);
+      log('forgeTestStatus',`MINT ERROR: ${error.shortMessage || error.message}`,true);
     }
   }
 
   async function whitelistMintTest() {
     try {
+      if (!forgeState.whitelistPhaseId) throw new Error('This project did not create a whitelist V1 mint phase.');
       const collection = collectionContract();
       const quantity = requestedMintQuantity();
       if (!forgeState.wallet) await connectWallet();
-      if (!forgeState.whitelist) throw new Error('No whitelist is loaded in this Studio project.');
-      const entry = forgeState.whitelist.proofByAddress?.[forgeState.wallet.toLowerCase()];
-      if (!entry) throw new Error('Connected wallet is not on this whitelist. Add it to a custom list or test with an eligible snapshot holder.');
-      const price = await collection.whitelistMintPrice();
-      log('forgeTestStatus', `Whitelist minting ${quantity} NFT${quantity === 1 ? '' : 's'} with allowance ${entry.allowance}…`, true);
-      const tx = await collection.whitelistMint(quantity, entry.allowance, entry.proof, { value: price * BigInt(quantity) });
+      const entry = forgeState.whitelist?.proofByAddress?.[forgeState.wallet.toLowerCase()];
+      if (!entry) throw new Error('Connected wallet is not eligible for the final V1 whitelist phase.');
+      const quote = await collection.quoteMint(forgeState.whitelistPhaseId, quantity);
+      const minimumValue = quote.minimumValue ?? quote[2];
+      log('forgeTestStatus',`Whitelist minting ${quantity} through phase ${forgeState.whitelistPhaseId} with allowance ${entry.allowance}...`,true);
+      const tx = await collection.mint(forgeState.whitelistPhaseId, quantity, entry.allowance, entry.proof, { value: minimumValue });
       const receipt = await tx.wait();
       const tokenIds = [];
       for (const logEntry of receipt.logs) {
@@ -1746,11 +2060,9 @@ ${await file.text()}`;
         } catch (_) {}
       }
       if (tokenIds.length) $('forgeInspectTokenId').value = tokenIds[0].toString();
-      log('forgeTestStatus', `✓ Whitelist minted ${tokenIds.length || quantity} token${(tokenIds.length || quantity) === 1 ? '' : 's'} in one transaction.`);
-      await inspectToken();
-      loadViewerCollection(false).catch(() => {});
+      log('forgeTestStatus',`OK Whitelist minted ${tokenIds.length || quantity} token(s).`);
     } catch (error) {
-      log('forgeTestStatus', `WHITELIST MINT ERROR: ${error.message}`, true);
+      log('forgeTestStatus',`WHITELIST MINT ERROR: ${error.shortMessage || error.message}`,true);
     }
   }
 
@@ -1758,8 +2070,9 @@ ${await file.text()}`;
     try {
       const collection = collectionContract();
       const quantity = requestedMintQuantity();
-      log('forgeTestStatus', `Creator minting ${quantity} NFT${quantity === 1 ? '' : 's'}…`, true);
-      const tx = await collection.creatorMint(quantity);
+      if (!forgeState.wallet) await connectWallet();
+      log('forgeTestStatus',`Creator minting ${quantity} token(s) to ${shortAddr(forgeState.wallet)}...`,true);
+      const tx = await collection.creatorMint(forgeState.wallet, quantity);
       const receipt = await tx.wait();
       const tokenIds = [];
       for (const entry of receipt.logs) {
@@ -1769,37 +2082,43 @@ ${await file.text()}`;
         } catch (_) {}
       }
       if (tokenIds.length) $('forgeInspectTokenId').value = tokenIds[0].toString();
-      const revealNote = currentRevealMode() === 0 ? ' Forge Reveal test randomness auto-fulfilled.' : ' Creator Reveal placeholder remains active.';
-      log('forgeTestStatus', `✓ Creator minted ${tokenIds.length || quantity} token${(tokenIds.length || quantity) === 1 ? '' : 's'} in one transaction. Wallet limit and mint price were bypassed.${revealNote}`);
-      await inspectToken();
-      loadViewerCollection(false).catch(() => {});
+      log('forgeTestStatus',`OK Creator minted ${tokenIds.length || quantity} token(s). Creator mint bypasses public phase price/allowance and platform minter fee.`);
     } catch (error) {
-      log('forgeTestStatus', `CREATOR MINT ERROR: ${error.message}`, true);
+      log('forgeTestStatus',`CREATOR MINT ERROR: ${error.shortMessage || error.message}`,true);
     }
   }
 
-  async function requestCreatorReveal() {
+  async function requestDeferredReveal() {
     try {
+      if (currentRevealMode() !== 1) throw new Error('This Studio project uses Forge Reveal, not Deferred Reveal.');
       const collection = collectionContract();
-      log('forgeTestStatus', 'Requesting Creator Reveal randomness…', true);
-      const tx = await collection.requestCreatorReveal();
+      log('forgeTestStatus','Requesting deferred reveal epoch from Chainlink VRF...',true);
+      const tx = await collection.requestRevealEpoch();
       const receipt = await tx.wait();
       let requestId = null;
       for (const entry of receipt.logs) {
         try {
           const parsed = collection.interface.parseLog(entry);
-          if (parsed?.name === 'CreatorRevealRequested') requestId = parsed.args.requestId;
+          if (parsed?.name === 'RevealRequested') requestId = parsed.args.requestId;
         } catch (_) {}
       }
-      forgeState.latestCreatorRevealRequestId = requestId != null ? BigInt(requestId) : null;
-      log('forgeTestStatus', `✓ Creator reveal completed in the Sepolia auto-fulfill test flow${requestId != null ? ` · request #${requestId}` : ''}`);
-      loadViewerCollection(false).catch(() => {});
+      log('forgeTestStatus',`OK Deferred epoch requested${requestId != null ? `  -  request ${requestId}` : ''}. Wait for the Chainlink callback, then click Process Ready Reveal.`);
     } catch (error) {
-      log('forgeTestStatus', `REVEAL ERROR: ${error.message}`, true);
+      log('forgeTestStatus',`DEFERRED REVEAL ERROR: ${error.shortMessage || error.message}`,true);
     }
   }
 
-
+  async function processReadyReveal() {
+    try {
+      const collection = collectionContract();
+      log('forgeTestStatus','Processing up to 50 ready reveal steps...',true);
+      const tx = await collection.processReveal(50);
+      await tx.wait();
+      log('forgeTestStatus','OK Reveal processing transaction confirmed. Inspect a token; if it is still forging, the VRF callback may not be fulfilled yet or additional processing may be needed.');
+    } catch (error) {
+      log('forgeTestStatus',`PROCESS REVEAL ERROR: ${error.shortMessage || error.message}`,true);
+    }
+  }
   function decodeDataUri(uri) {
     const comma = uri.indexOf(',');
     if (comma < 0) return uri;
@@ -2378,7 +2697,7 @@ ${await file.text()}`;
   function getForgeProjectState() {
     const wl = forgeState.whitelist;
     return {
-      schema: 'relic-forge/forge-settings@4',
+      schema: 'relic-forge/forge-settings@5',
       launchName: $('launchName')?.value || '',
       launchSymbol: $('launchSymbol')?.value || '',
       launchDescription: $('launchDescription')?.value || '',
@@ -2386,6 +2705,8 @@ ${await file.text()}`;
       maxPerWallet: $('maxPerWallet')?.value || '0',
       royalty: $('royalty')?.value || '0',
       royaltyWallet: $('royaltyWallet')?.value || '',
+      payoutWallet: $('payoutWallet')?.value || '',
+      vrfFundingRequests: $('vrfFundingRequests')?.value || '5',
       revealMode: currentRevealMode(),
       platformFeeMode: currentPlatformFeeMode(),
       holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
@@ -2403,7 +2724,9 @@ ${await file.text()}`;
       mintPageImageFile: forgeState.mintPageImageFile || null,
       mintPageBannerFile: forgeState.mintPageBannerFile || null,
       collectionAddress: forgeState.collectionAddress || null,
-      factoryAddress: $('factoryAddress')?.value.trim() || forgeState.infra?.factory || null,
+      dataAddress: forgeState.dataAddress || null,
+      publicPhaseId: forgeState.publicPhaseId,
+      whitelistPhaseId: forgeState.whitelistPhaseId,
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
@@ -2418,7 +2741,7 @@ ${await file.text()}`;
   }
 
   function restoreForgeProjectState(saved) {
-    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4'].includes(saved.schema)) return;
+    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4', 'relic-forge/forge-settings@5'].includes(saved.schema)) return;
     const values = {
       launchName: saved.launchName,
       launchSymbol: saved.launchSymbol,
@@ -2427,6 +2750,8 @@ ${await file.text()}`;
       maxPerWallet: saved.maxPerWallet,
       royalty: saved.royalty,
       royaltyWallet: saved.royaltyWallet,
+      payoutWallet: saved.payoutWallet,
+      vrfFundingRequests: saved.vrfFundingRequests || '5',
       whitelistMintPrice: saved.whitelistMintPrice,
       whitelistDefaultAllowance: saved.whitelistDefaultAllowance,
       whitelistSourceChain: saved.whitelistSourceChain || String(saved.whitelist?.sourceChainId || 1),
@@ -2458,9 +2783,11 @@ ${await file.text()}`;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
     if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max · any image format · animated GIF supported';
     if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : '2 MB max · any image format · animated GIF supported';
-    if (saved.factoryAddress && window.ethers?.isAddress(saved.factoryAddress)) { rememberFactory(saved.factoryAddress); if ($('factoryAddress') && !$('factoryAddress').value.trim()) $('factoryAddress').value = saved.factoryAddress; }
     if (saved.collectionAddress && window.ethers?.isAddress(saved.collectionAddress)) {
       forgeState.collectionAddress = saved.collectionAddress;
+      forgeState.dataAddress = saved.dataAddress && window.ethers?.isAddress(saved.dataAddress) ? saved.dataAddress : null;
+      forgeState.publicPhaseId = saved.publicPhaseId ? Number(saved.publicPhaseId) : null;
+      forgeState.whitelistPhaseId = saved.whitelistPhaseId ? Number(saved.whitelistPhaseId) : null;
       if ($('forgedCollectionAddress')) $('forgedCollectionAddress').textContent = saved.collectionAddress;
       if ($('forgedEtherscanLink')) $('forgedEtherscanLink').href = `https://sepolia.etherscan.io/address/${saved.collectionAddress}`;
       $('forgeResult')?.classList.remove('hidden');
@@ -2474,8 +2801,10 @@ ${await file.text()}`;
     if (saved.whitelist?.entries?.length) {
       try {
         const entries = normalizeWhitelistEntries(saved.whitelist.entries, 1);
-        const tree = buildMerkleWhitelist(entries);
-        forgeState.whitelist = { ...tree, ...saved.whitelist, entries };
+        const tree = forgeState.collectionAddress && forgeState.whitelistPhaseId
+          ? buildMerkleWhitelistV1(entries, forgeState.collectionAddress, forgeState.whitelistPhaseId)
+          : buildMerkleWhitelist(entries);
+        forgeState.whitelist = { ...saved.whitelist, ...tree, entries };
         if ($('whitelistStatus')) $('whitelistStatus').textContent = `✓ Restored ${entries.length.toLocaleString()} eligible wallets · root ${tree.root.slice(0, 10)}…`;
         renderWhitelistSummary();
         $('downloadWhitelistBtn')?.classList.remove('hidden');
@@ -2522,7 +2851,8 @@ ${await file.text()}`;
   }
 
   function bind() {
-    document.querySelectorAll('input[name="platformFeeMode"]').forEach(input => input.addEventListener('change', () => refreshPlatformFeeQuote().catch(() => {}))); // data-fee-mode-card change    document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateRevealUi));
+    document.querySelectorAll('input[name="platformFeeMode"]').forEach(input => input.addEventListener('change', () => refreshPlatformFeeQuote().catch(() => {})));
+    document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', () => { updateRevealUi(); refreshVrfQuote().catch(() => {}); }));
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
       $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
@@ -2530,15 +2860,16 @@ ${await file.text()}`;
     });
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
     $('refreshForgeCostBtn')?.addEventListener('click', refreshCostEstimate);
+    $('vrfFundingRequests')?.addEventListener('input', () => refreshVrfQuote().catch(() => {}));
     $('connectForgeWalletBtn')?.addEventListener('click', () => connectWallet().catch(() => {}));
     window.addEventListener('relicforge:wallet-disconnected', () => resetWalletSessionUi('No wallet connected.'));
-    $('compileForgeContractsBtn')?.addEventListener('click', () => compileContracts().catch(error => log('forgeInfraStatus', `ERROR: ${error.message}`)));
-    $('deployForgeInfraBtn')?.addEventListener('click', deployInfrastructure);
     $('forgeCollectionBtn')?.addEventListener('click', forgeCollection);
+    $('forgeArmMintBtn')?.addEventListener('click', armMasterMint);
     $('forgeMintTestBtn')?.addEventListener('click', mintTest);
     $('forgeWhitelistMintBtn')?.addEventListener('click', whitelistMintTest);
     $('forgeCreatorMintBtn')?.addEventListener('click', creatorMintTest);
-    $('forgeCreatorRevealBtn')?.addEventListener('click', requestCreatorReveal);
+    $('forgeDeferredRevealBtn')?.addEventListener('click', requestDeferredReveal);
+    $('forgeProcessRevealBtn')?.addEventListener('click', processReadyReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
     $('previewMintPageBtn')?.addEventListener('click', () => updateMintPagePreview().catch(() => {}));
     $('publishMintPageBtn')?.addEventListener('click', async () => { try { if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing mint page + whitelist proofs to RelicForge Cloud…'; await publishMintPageCloud(); if ($('mintPageStatus')) $('mintPageStatus').textContent = '✓ Published. Mint aesthetics and whitelist proofs are now available cross-device.'; } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Publish: ${error.message}`; } });
@@ -2610,6 +2941,7 @@ ${await file.text()}`;
     ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
     renderCanonicalV1();
     refreshPlatformFeeQuote().catch(() => {});
+    refreshVrfQuote().catch(() => {});
     const cloudReady = !!window.RelicForgeCloud?.enabled?.();
     if (cloudReady) loadCloudNetworkCatalog().catch(error => console.warn('RelicForge Alchemy network catalog unavailable:', error.message));
     const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/, '');

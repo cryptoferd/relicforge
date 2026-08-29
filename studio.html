@@ -390,7 +390,7 @@
       <h2>Forge on Ethereum Sepolia</h2>
       <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">CANONICAL V1 Â· SEPOLIA</div>
+    <div class="forge-test-badge">CANONICAL V1 · SEPOLIA</div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
@@ -403,6 +403,7 @@
       <label class="field"><span>Max mints per wallet</span><input id="maxPerWallet" min="0" step="1" type="number" value="5"/><small>0 = unlimited. The collection creator bypasses this limit.</small></label>
       <label class="field"><span>Royalty</span><div class="input-suffix"><input id="royalty" max="10" min="0" step="0.5" type="number" value="5"/><span>%</span></div></label>
       <label class="field"><span>Royalty wallet</span><input id="royaltyWallet" placeholder="Connected wallet by default" type="text"/></label>
+      <label class="field"><span>Mint proceeds wallet</span><input id="payoutWallet" placeholder="Connected wallet by default" type="text"/><small>Creator mint proceeds are withdrawable only to this address. You can change it later while you still control the collection.</small></label>
     </div>
 
     <div class="launch-card whitelist-launch-card">
@@ -467,27 +468,31 @@
         <strong>Fair assignment</strong>
         <p>The canonical V1 stack uses Relic Forge's predeployed Chainlink VRF v2.5 direct-funded adapter. Randomness infrastructure is shared and immutable; each collection has isolated randomness credit.</p>
       </div>
+      <div class="vrf-credit-box">
+        <label class="field"><span>Initial VRF request budget</span><input id="vrfFundingRequests" min="1" max="100" step="1" type="number" value="5"/><small>Relic Forge funds enough collection-isolated Sepolia credit for this many VRF requests, plus a 20% buffer. You can add more later.</small></label>
+        <div class="forge-inline-status" id="vrfQuoteStatus">Loading Chainlink request price...</div>
+      </div>
     </div>
 
     <div class="launch-card">
       <h3>Rendering</h3>
       <label class="project-toggle-row"><span><strong>Holder render switching</strong><small>Let NFT owners switch their token between the canonical fully-onchain SVG and an offchain presentation render served by RelicForge Cloud.</small></span><input id="holderRenderModeEnabled" type="checkbox" checked/></label>
       <label class="field"><span>Default display</span><select id="defaultRenderMode"><option value="0" selected>Fully Onchain SVG</option><option value="1">Offchain Render</option></select><small>The onchain SVG always remains the canonical renderer. A holder can always switch back to it.</small></label>
-      <div class="prototype-note"><strong>Offchain renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will cache a presentation render from the canonical onchain renderToken() output; animated artwork is preserved.</p></div>
+      <div class="prototype-note"><strong>Offchain renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will cache a presentation render from the canonical onchain renderToken() output. V1 trait storage supports SVG, PNG, JPEG, and WEBP; raw GIF trait encoding is not part of the immutable V1 renderer.</p></div>
     </div>
 
     <div class="launch-card canonical-v1-card">
       <div class="canonical-v1-heading">
-        <div><h3>Relic Forge V1</h3><small>Canonical infrastructure Â· creator deployment disabled</small></div>
+        <div><h3>Relic Forge V1</h3><small>Canonical infrastructure · creator deployment disabled</small></div>
         <span class="canonical-v1-live">SEPOLIA</span>
       </div>
       <div class="canonical-v1-addresses">
-        <div><span>Factory</span><code id="canonicalFactoryAddress">Loadingâ€¦</code></div>
-        <div><span>Fee policy</span><code id="canonicalFeePolicyAddress">Loadingâ€¦</code></div>
-        <div><span>VRF adapter</span><code id="canonicalRandomnessAddress">Loadingâ€¦</code></div>
-        <div><span>Renderer</span><code id="canonicalRendererAddress">Loadingâ€¦</code></div>
+        <div><span>Factory</span><code id="canonicalFactoryAddress">Loading…</code></div>
+        <div><span>Fee policy</span><code id="canonicalFeePolicyAddress">Loading…</code></div>
+        <div><span>VRF adapter</span><code id="canonicalRandomnessAddress">Loading…</code></div>
+        <div><span>Renderer</span><code id="canonicalRendererAddress">Loading…</code></div>
       </div>
-      <div class="forge-inline-status" id="canonicalV1Status">Loading canonical V1 deploymentâ€¦</div>
+      <div class="forge-inline-status" id="canonicalV1Status">Loading canonical V1 deployment…</div>
       <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Creator Wallet</button>
       <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
     </div>
@@ -500,9 +505,9 @@
         <label class="reveal-choice selected" data-fee-mode-card="2"><input checked name="platformFeeMode" type="radio" value="2"/><span><strong>Minter Supported</strong><small>No upfront platform fee. The collection's current fee is added per NFT minted.</small></span></label>
       </div>
       <div class="platform-fee-quote">
-        <div><span>Mode</span><strong id="platformFeePolicyLabel">Loadingâ€¦</strong></div>
-        <div><span>Base rate</span><strong id="platformFeeRate">â€”</strong></div>
-        <div><span>Creator upfront</span><strong id="platformFeeUpfront">â€”</strong></div>
+        <div><span>Mode</span><strong id="platformFeePolicyLabel">Loading…</strong></div>
+        <div><span>Base rate</span><strong id="platformFeeRate">—</strong></div>
+        <div><span>Creator upfront</span><strong id="platformFeeUpfront">—</strong></div>
       </div>
       <div class="forge-inline-status" id="platformFeeQuoteStatus">Waiting for canonical FeePolicy quote.</div>
       <small class="forge-footnote">Minter Supported fees are controlled independently per collection by the Relic Forge platform admin. V1 enforces a $5.00/NFT maximum. Sponsored collections are settled at creation.</small>
@@ -588,18 +593,20 @@
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>TEST THE RESULT</span><h3>Mint + reveal + inspect</h3></div></div>
+      <div class="forge-card-heading"><div><span>TEST THE V1 RESULT</span><h3>Arm + mint + reveal + inspect</h3></div></div>
       <div class="forge-mint-controls">
-        <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" step="1" type="number" value="1"/></label>
+        <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" max="50" step="1" type="number" value="1"/></label>
+        <button class="primary-btn" disabled id="forgeArmMintBtn" type="button">Enable Master Mint</button>
         <button class="ghost-btn" disabled id="forgeMintTestBtn" type="button">Public Mint</button>
         <button class="ghost-btn" disabled id="forgeWhitelistMintBtn" type="button">Whitelist Mint</button>
         <button class="ghost-btn" disabled id="forgeCreatorMintBtn" type="button">Creator Mint</button>
-        <button class="ghost-btn" disabled id="forgeCreatorRevealBtn" type="button">Trigger Creator Reveal</button>
+        <button class="ghost-btn" disabled id="forgeDeferredRevealBtn" type="button">Request Deferred Epoch</button>
+        <button class="ghost-btn" disabled id="forgeProcessRevealBtn" type="button">Process Ready Reveal</button>
       </div>
-      <div class="forge-inline-status">Forge Reveal test infrastructure auto-fulfills randomness inside the mint transaction. Production VRF will reveal by an automatic callback with no second wallet signature.</div>
+      <div class="forge-inline-status">Every forged V1 collection starts with master mint OFF. Enabling it is a separate creator transaction. Chainlink VRF callbacks are asynchronous; after fulfillment, anyone can process the ready reveal in bounded steps.</div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
-      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable test controls.</pre>
+      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable V1 test controls.</pre>
       <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
     </article>
 
