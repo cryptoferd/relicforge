@@ -31,6 +31,7 @@
   <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
   <link rel="stylesheet" href="./rc47c.css?v=rc4.7c" />
   <link rel="stylesheet" href="./rc47d.css?v=rc4.7d" />
+  <link rel="stylesheet" href="./production-finalization.css?v=prod1" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -425,10 +426,15 @@
   <div class="panel-heading">
     <div>
       <div class="eyebrow">STEP 5</div>
-      <h2>Forge on Ethereum Sepolia</h2>
-      <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
+      <h2>Forge your collection</h2>
+      <p>Choose a launch network, review the collection settings, and forge through Relic Forge's canonical V1 infrastructure. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">CANONICAL V1 · SEPOLIA</div>
+    <div class="forge-test-badge">CANONICAL V1</div>
+  </div>
+
+  <div class="production-network-card">
+    <label class="field"><span>Launch network</span><select id="launchNetworkSelect"></select><small>Ethereum, Base, and Robinhood Chain are the production launch targets. Internal QA networks are hidden unless QA mode is enabled.</small></label>
+    <div class="production-network-copy"><strong>Network-aware launch architecture</strong><span>Factory, fee policy, renderer, randomness adapter, RPC, explorer, mint pages, and discovery are resolved by chain ID. A network cannot forge until its canonical V1 addresses are configured.</span><div class="forge-inline-status production-network-status" id="launchNetworkStatus">Loading launch networks…</div></div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
@@ -521,7 +527,7 @@
         <p>The canonical V1 stack uses Relic Forge's predeployed Chainlink VRF v2.5 direct-funded adapter. Randomness infrastructure is shared and immutable; each collection has isolated randomness credit.</p>
       </div>
       <div class="vrf-credit-box">
-        <label class="field"><span>Initial VRF request budget</span><input id="vrfFundingRequests" min="1" max="100" step="1" type="number" value="5"/><small>Relic Forge funds enough collection-isolated Sepolia credit for this many VRF requests, plus a 20% buffer. You can add more later.</small></label>
+        <label class="field"><span>Initial VRF request budget</span><input id="vrfFundingRequests" min="1" max="100" step="1" type="number" value="5"/><small>Relic Forge funds enough collection-isolated randomness credit for this many requests, plus a 20% buffer. You can add more later.</small></label>
         <div class="forge-inline-status" id="vrfQuoteStatus">Loading Chainlink request price...</div>
       </div>
     </div>
@@ -536,7 +542,7 @@
     <div class="launch-card canonical-v1-card">
       <div class="canonical-v1-heading">
         <div><h3>Relic Forge V1</h3><small>Canonical infrastructure · creator deployment disabled</small></div>
-        <span class="canonical-v1-live">SEPOLIA</span>
+        <span class="canonical-v1-live" id="canonicalV1NetworkBadge">NETWORK</span>
       </div>
       <div class="canonical-v1-addresses">
         <div><span>Factory</span><code id="canonicalFactoryAddress">Loading…</code></div>
@@ -613,18 +619,18 @@
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated Sepolia deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
+      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
       <div class="forge-cost-total"><strong id="forgeEstimatedCost">—</strong><span id="forgeEstimatedGas">Compile first</span></div>
       <div class="forge-gwei-control">
         <div class="forge-gwei-head"><span>Gas price</span><strong id="forgeCurrentGwei">Current: —</strong></div>
         <div class="forge-gwei-row">
-          <label class="reveal-choice selected" data-gwei-card="auto"><input checked name="gweiMode" type="radio" value="auto"/><span><strong>Current</strong><small>Use live Sepolia gwei</small></span></label>
+          <label class="reveal-choice selected" data-gwei-card="auto"><input checked name="gweiMode" type="radio" value="auto"/><span><strong>Current</strong><small>Use live network gwei</small></span></label>
           <label class="reveal-choice" data-gwei-card="custom"><input name="gweiMode" type="radio" value="custom"/><span><strong>Custom</strong><small>Estimate at your own gwei</small></span></label>
           <label class="field forge-gwei-input hidden" id="forgeCustomGweiWrap"><span>Custom gwei</span><input id="forgeCustomGwei" min="0" step="0.01" type="number" placeholder="e.g. 15"/></label>
         </div>
       </div>
       <div class="forge-rows" id="forgeCostBreakdown"></div>
-      <small class="forge-footnote">Live gwei is read from public Sepolia RPCs and does not use the RelicForge Alchemy key. The connected wallet remains authoritative for the final transaction gas estimate.</small>
+      <small class="forge-footnote">Live gwei uses the selected network RPC configuration and does not expose the RelicForge Alchemy key. The connected wallet remains authoritative for the final transaction gas estimate.</small>
     </article>
 
     <article class="forge-workbench-card forge-deploy-card">
@@ -635,17 +641,17 @@
         <div id="launchSummaryDetails"></div>
       </div>
       <div class="forge-summary" id="forgeCompiledSummary">Compile for onchain before deployment.</div>
-      <button class="primary-btn forge-main-action" disabled id="forgeCollectionBtn" type="button">Forge Collection on Sepolia</button>
+      <button class="primary-btn forge-main-action" disabled id="forgeCollectionBtn" type="button">Forge Collection</button>
       <div class="forge-deploy-list" id="forgeProgressList"></div>
       <div class="forge-result hidden" id="forgeResult">
         <span>Collection deployed</span>
         <strong id="forgedCollectionAddress"></strong>
-        <a id="forgedEtherscanLink" rel="noreferrer" target="_blank">View on Sepolia Etherscan</a>
+        <a id="forgedEtherscanLink" rel="noreferrer" target="_blank">View on Explorer</a>
       </div>
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>TEST THE V1 RESULT</span><h3>Arm + mint + reveal + inspect</h3></div></div>
+      <div class="forge-card-heading"><div><span>COLLECTION CONTROLS</span><h3>Mint, reveal, and inspect</h3></div></div>
       <div class="forge-mint-controls">
         <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" max="50" step="1" type="number" value="1"/></label>
         <button class="primary-btn" disabled id="forgeArmMintBtn" type="button">Enable Master Mint</button>
@@ -658,18 +664,18 @@
       <div class="forge-inline-status">Every forged V1 collection starts with master mint OFF. Enabling it is a separate creator transaction. Chainlink VRF callbacks are asynchronous; after fulfillment, anyone can process the ready reveal in bounded steps.</div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
-      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable V1 test controls.</pre>
+      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable creator controls.</pre>
       <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
     </article>
 
     <article class="forge-workbench-card forge-marketplace-card">
-      <div class="forge-card-heading"><div><span>TESTNET MARKETPLACE VIEWER</span><h3>Browse the deployed Sepolia collection</h3></div></div>
+      <div class="forge-card-heading"><div><span>COLLECTION EXPLORER</span><h3>Browse a deployed collection</h3></div></div>
       <div class="inline-actions forge-viewer-actions">
-        <label class="field forge-viewer-address"><span>Collection address</span><input id="viewerCollectionAddress" placeholder="Forged collection or paste a Sepolia collection address" type="text"/></label>
+        <label class="field forge-viewer-address"><span>Collection address</span><input id="viewerCollectionAddress" placeholder="Forged collection or paste a collection address" type="text"/></label>
         <button class="ghost-btn" id="viewerUseForgedBtn" type="button">Use Forged Collection</button>
         <button class="primary-btn" id="viewerLoadBtn" type="button">Load Collection</button>
       </div>
-      <div class="forge-inline-status" id="viewerStatus">Deploy or paste a Sepolia collection to load the viewer.</div>
+      <div class="forge-inline-status" id="viewerStatus">Deploy or paste a collection to load the viewer.</div>
       <div class="forge-metrics forge-viewer-metrics" id="viewerMetrics">
         <div><span>Name</span><strong id="viewerMetricName">—</strong></div>
         <div><span>Symbol</span><strong id="viewerMetricSymbol">—</strong></div>
@@ -679,7 +685,7 @@
         <div><span>Owner</span><strong id="viewerMetricOwner">—</strong></div>
       </div>
       <div class="inline-actions forge-viewer-links hidden" id="viewerLinks">
-        <a class="ghost-btn link-btn" id="viewerEtherscanLink" rel="noreferrer" target="_blank">View contract on Etherscan</a>
+        <a class="ghost-btn link-btn" id="viewerEtherscanLink" rel="noreferrer" target="_blank">View contract on explorer</a>
         <button class="ghost-btn" id="viewerContractUriBtn" type="button">Read contractURI</button>
       </div>
       <div class="forge-summary hidden" id="viewerCollectionMeta"></div>
@@ -699,7 +705,7 @@
 </section>
 </main>
 <footer>
-<span>Relic Forge Studio · wallet-synced collection compiler + Sepolia Forge test</span>
+<span>Relic Forge Studio · wallet-synced onchain collection builder</span>
 <span>Saved projects sync privately to RelicForge Cloud; deployed collection artwork remains onchain.</span>
 </footer>
 </div>
@@ -836,8 +842,9 @@
 </div>
 
   <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="./relicforge-networks.js?v=prod1"></script>
 
-  <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
+  <script src="./relicforge-v1-addresses.js?v=prod1"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=rc4.7a" defer></script>
@@ -848,5 +855,6 @@
   <script src="./rc47b-bootstrap.js?v=rc4.7c" defer></script>
   <script src="./rc47b-studio.js?v=rc4.7b" defer></script>
   <script src="./studio-shell.js?v=rc4.7d" defer></script>
+  <script src="./production-finalization.js?v=prod1" defer></script>
 </body>
 </html>

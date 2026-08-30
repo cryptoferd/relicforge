@@ -56,7 +56,7 @@
         <a class="rc47b-mint-card" href="${esc(row.mintPage)}">
           <div class="rc47b-mint-image">${row.imagePath ? `<img src="${esc(assetUrl(row.imagePath))}" alt="${esc(row.title)}" loading="lazy"/>` : '<span>RF</span>'}</div>
           <div class="rc47b-mint-body">
-            <div class="rc47b-kicker">CHAIN ${Number(row.chainId)}</div>
+            <div class="rc47b-kicker">${esc(window.RelicForgeNetworks?.label?.(row.chainId) || `Chain ${Number(row.chainId)}`)}</div>
             <h3>${esc(row.title)}</h3>
             <div class="rc47d-upcoming-meta">
               <div><span>MINT DATE</span><b>${esc(when.date)}</b></div>
@@ -84,7 +84,7 @@
       const response = await fetch(`${base()}/api/rc47b/upcoming`, { headers:{accept:'application/json'}, cache:'no-store' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `Upcoming Mints request failed (${response.status}).`);
-      rows = payload.mints || [];
+      rows = (payload.mints || []).filter(row => { const network = window.RelicForgeNetworks?.get?.(row.chainId); return !!network && (network.production || window.RelicForgeNetworks?.qaMode); });
       $('upcomingStatus').textContent = rows.length ? `${rows.length} creator-published mint${rows.length === 1 ? '' : 's'} shown.` : 'No creators are showcasing an upcoming mint yet.';
       $('upcomingStatus').className = `rc47b-status${rows.length ? ' good' : ''}`;
       render();

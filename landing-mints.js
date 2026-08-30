@@ -38,7 +38,7 @@
       const response = await fetch(`${apiBase}/api/rc47b/upcoming`, { headers:{accept:'application/json'}, cache:'no-store' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Upcoming Mints unavailable.');
-      const rows = (payload.mints || []).slice(0, 10);
+      const rows = (payload.mints || []).filter(row => { const network = window.RelicForgeNetworks?.get?.(row.chainId); return !!network && (network.production || window.RelicForgeNetworks?.qaMode); }).slice(0, 10);
       if (!rows.length) { host.innerHTML = '<div class="site-upcoming-empty">Nothing is scheduled for the forge yet.</div>'; return; }
       host.innerHTML = `<div class="site-upcoming-track">${rows.map(row => {
         const image = row.imagePath ? `${apiBase}${row.imagePath}` : './relic-forge-logo.svg';
@@ -47,6 +47,7 @@
           <img src="${esc(image)}" alt="${esc(row.title)}" loading="lazy"/>
           <div class="site-upcoming-copy">
             <strong>${esc(row.title)}</strong>
+            <span class="production-chain-pill">${esc(window.RelicForgeNetworks?.label?.(row.chainId) || `Chain ${Number(row.chainId)}`)}</span>
             <div class="site-upcoming-meta">
               <div><span>MINT DATE</span><b>${esc(when.date)}</b></div>
               <div><span>MINT TIME</span><b>${esc(when.time)}</b></div>

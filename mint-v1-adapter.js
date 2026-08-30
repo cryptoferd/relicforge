@@ -26,7 +26,7 @@
 
   const apiBase = () => String(window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
   const short = value => { const s=String(value||''); return s.length>14 ? `${s.slice(0,6)}…${s.slice(-4)}` : s; };
-  const networkLabel = chainId => ({1:'Ethereum',11155111:'Sepolia',8453:'Base',84532:'Base Sepolia',42161:'Arbitrum One',421614:'Arbitrum Sepolia',10:'Optimism',11155420:'Optimism Sepolia',137:'Polygon',80002:'Polygon Amoy'})[Number(chainId)] || `Chain ${chainId}`;
+  const networkLabel = chainId => window.RelicForgeNetworks?.label?.(chainId) || `Chain ${chainId}`;
 
   function setText(id, value) { const el=$(id); if (el) el.textContent = value; }
   function setStatus(value, bad=false) { const el=$('mintStatus'); if (!el) return; el.textContent=value; el.style.color = bad ? '#c9aaaa' : ''; }
@@ -99,6 +99,13 @@
       await provider.request({ method:'wallet_switchEthereumChain', params:[{chainId:`0x${chainId.toString(16)}`}] });
       return provider;
     } catch (error) {
+      if (Number(error?.code) === 4902) {
+        const params = window.RelicForgeNetworks?.walletAddParams?.(chainId);
+        if (params) {
+          await provider.request({ method:'wallet_addEthereumChain', params:[params] });
+          return provider;
+        }
+      }
       throw new Error(`Switch your wallet to ${networkLabel(chainId)} and try again.`);
     }
   }
@@ -184,6 +191,13 @@
   async function start(config) {
     app.config = { ...config, chainId:Number(config.chainId), contract:String(config.contract) };
     if (!app.config.contract || !app.config.chainId) throw new Error('Published V1 mint page is missing chain or contract configuration.');
+    const configuredNetwork = window.RelicForgeNetworks?.get?.(app.config.chainId);
+    if (configuredNetwork?.qa && !window.RelicForgeNetworks?.qaMode) {
+      setText('networkStat', 'Internal QA');
+      setStatus('This collection is not part of the production mint experience.', true);
+      ['connectBtn','publicMintBtn','whitelistMintBtn'].forEach(id => { const node=$(id); if (node) node.disabled=true; });
+      return;
+    }
     media();
     setText('networkStat', networkLabel(app.config.chainId));
     const explorer = document.querySelector('.explorer');
@@ -191,7 +205,7 @@
     if (explorer) explorer.classList.add('hidden');
     if (myNfts) myNfts.classList.add('hidden');
     const note = document.querySelector('.forge-note');
-    if (note) note.innerHTML = 'Canonical Relic Forge V1 mint page <span class="rf-v1-phase-badge">RC4.7B</span><br/>Mint transactions use configured phase IDs and <code>quoteMint()</code> minimumValue.';
+    if (note) note.innerHTML = 'Relic Forge canonical mint page<br/>Mint transactions use configured phase IDs and <code>quoteMint()</code> minimumValue.';
 
     $('connectBtn')?.addEventListener('click', () => connect({forceChooser:true}).catch(error => setStatus(error.message,true)));
     $('publicMintBtn')?.addEventListener('click', () => mint('public').catch(error => setStatus(error.shortMessage || error.message,true)));

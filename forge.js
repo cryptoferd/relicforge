@@ -176,7 +176,9 @@
       };
     });
     const mainnets = networks.filter(v => !v.testnet).sort((a,b) => String(a.label).localeCompare(String(b.label)));
-    const testnets = networks.filter(v => v.testnet).sort((a,b) => String(a.label).localeCompare(String(b.label)));
+    const testnets = window.RelicForgeNetworks?.qaMode
+      ? networks.filter(v => v.testnet).sort((a,b) => String(a.label).localeCompare(String(b.label)))
+      : [];
     select.innerHTML = '';
     const appendGroup = (label, list) => {
       if (!list.length) return;
@@ -806,7 +808,7 @@ ${await file.text()}`;
   function cleanMetadataString(value, field, allowEmpty = false) {
     const text = String(value ?? '').trim();
     if (!text && !allowEmpty) throw new Error(`${field} is required.`);
-    if (/["\\\n\r]/.test(text)) throw new Error(`${field} cannot contain quotes, backslashes, or line breaks in this Sepolia test build.`);
+    if (/["\\\n\r]/.test(text)) throw new Error(`${field} cannot contain quotes, backslashes, or line breaks.`);
     return text;
   }
 
@@ -1117,7 +1119,7 @@ ${await file.text()}`;
   }
 
   async function hashCompiled(core, artShards, dnaShards, placeholderBytes) {
-    if (!window.ethers) throw new Error('ethers.js did not load; an internet connection is required for the Sepolia Forge module.');
+    if (!window.ethers) throw new Error('ethers.js did not load; an internet connection is required for the Forge module.');
     const chunks = [window.ethers.toUtf8Bytes(JSON.stringify(core)), ...artShards, ...dnaShards, placeholderBytes];
     return window.ethers.keccak256(window.ethers.concat(chunks));
   }
@@ -1373,9 +1375,16 @@ ${await file.text()}`;
       $('forgeCostBreakdown').innerHTML = '';
       return;
     }
+    const selectedLaunchChain = Number($('launchNetworkSelect')?.value || 11155111);
+    if (window.RelicForgeNetworks && !window.RelicForgeNetworks.canonicalReady(selectedLaunchChain)) {
+      $('forgeEstimatedCost').textContent = '—';
+      $('forgeEstimatedGas').textContent = 'Available when canonical infrastructure is activated';
+      $('forgeCostBreakdown').innerHTML = '';
+      return;
+    }
     const b = roughGasBreakdown(forgeState.compiled);
     let totalText = `~${b.total.toLocaleString()} gas`;
-    let feeText = 'Live public Sepolia gas unavailable · enter custom gwei if needed';
+    let feeText = 'Live public network gas unavailable · enter custom gwei if needed';
     let liveGwei = null;
     let gasSource = '';
     try {
@@ -1398,7 +1407,7 @@ ${await file.text()}`;
     if (selectedGwei != null && window.ethers) {
       const gasWei = window.ethers.parseUnits(String(selectedGwei), 'gwei');
       const wei = BigInt(b.total) * gasWei;
-      totalText = `~${Number(window.ethers.formatEther(wei)).toFixed(5)} Sepolia ETH`;
+      totalText = `~${Number(window.ethers.formatEther(wei)).toFixed(5)} ETH`;
       feeText = `~${b.total.toLocaleString()} gas at ${selectedGwei.toFixed(2)} gwei${currentGweiMode() === 'custom' ? ' (custom)' : ''}`;
     }
     $('forgeEstimatedCost').textContent = totalText;

@@ -61,7 +61,7 @@
 
       <section class="dashboard-workspace">
         <div class="launched-discovery-bar">
-          <label class="field"><span>Older / additional Factory (optional)</span><input id="launchedFactoryInput" placeholder="0x..." type="text"/><small>Current and previously used Sepolia factories saved in this browser are searched automatically. Cloud-registered launches are also discovered.</small></label>
+          <label class="field"><span>Older / additional Factory (optional)</span><input id="launchedFactoryInput" placeholder="0x..." type="text"/><small>Current and previously used canonical factories saved in this browser are searched automatically. Cloud-registered launches are also discovered.</small></label>
           <div class="inline-actions">
             <button class="primary-btn" id="launchedRefreshBtn" type="button">Refresh Launched Projects</button>
           </div>
@@ -81,7 +81,9 @@
     <footer class="dashboard-footer"><span>Relic Forge Creator Dashboard</span><span>Creator actions are signed directly by your connected wallet.</span></footer>
   </div>
   <script src="./relicforge-config.js?v=11.1.6"></script>
-  <script src="./relicforge-v1-addresses.js?v=rc4.7b-v1dash1"></script>
+  <script src="./relicforge-networks.js?v=prod1"></script>
+  <script src="./relicforge-v1-addresses.js?v=prod1"></script>
+  <script src="./production-finalization.js?v=prod1" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=11.1.6" defer></script>
