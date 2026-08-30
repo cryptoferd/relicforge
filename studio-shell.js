@@ -16,6 +16,10 @@
     ['how-to.html', 'How-To', 'Relic Forge guide'],
   ];
 
+  header.classList.add('rf-shell-header');
+  const brand = header.querySelector('.brand,.rc47b-brand');
+  if (brand) brand.classList.add('rf-shell-brand');
+
   function iconMarkup() {
     return '<span></span><span></span><span></span>';
   }
@@ -27,8 +31,6 @@
     toggle.id = 'studioMenuBtn';
     toggle.innerHTML = iconMarkup();
   } else {
-    // Studio used this ID for an older responsive dropdown. Clone/replace it so
-    // any legacy click listener attached before RC4.7C cannot fight the drawer.
     const fresh = toggle.cloneNode(true);
     toggle.replaceWith(fresh);
     toggle = fresh;
@@ -69,8 +71,6 @@
   body.append(backdrop, drawer);
   const context = drawer.querySelector('#rfStudioContext');
 
-  // Studio project/wallet controls: move the working DOM nodes instead of cloning
-  // them so all existing listeners, disabled states and wallet menus continue to work.
   const projectActions = document.getElementById('studioProjectActions');
   if (projectActions) {
     projectActions.classList.add('rf-shell-action-stack');
@@ -84,8 +84,6 @@
     if (emptyShell && !emptyShell.children.length) emptyShell.remove();
   }
 
-  // Creator Dashboard wallet controls live in the drawer while the dashboard body
-  // keeps the collection-specific controls in place.
   const dashboardActions = document.querySelector('.dashboard-nav-actions');
   if (dashboardActions) {
     const buttons = ['launchedConnectBtn','launchedChangeWalletBtn','launchedDisconnectBtn']
@@ -103,7 +101,6 @@
     dashboardActions.remove();
   }
 
-  // The RC4.7B secondary-page link bars are replaced by the same application drawer.
   document.querySelector('.rc47b-nav-links')?.remove();
 
   function open() {

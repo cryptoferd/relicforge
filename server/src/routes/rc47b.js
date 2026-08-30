@@ -608,19 +608,74 @@ export default async function rc47bRoutes(app) {
                 (mint_page->>'showcaseStart')::timestamptz ASC
        LIMIT 60`
     );
-    return {
-      generatedAt: new Date().toISOString(),
-      mints: rows.map(row => ({
-        chainId: Number(row.chain_id),
-        contract: row.contract_address,
-        title: row.mint_page.title || 'Untitled Collection',
-        description: row.mint_page.description || '',
-        start: row.mint_page.showcaseStart,
-        collectionImageAssetId: row.mint_page.collectionImageAssetId || null,
-        imagePath: publicAssetPath(row.mint_page.collectionImageAssetId),
-        bannerImageAssetId: row.mint_page.bannerImageAssetId || null,
-        mintPage: `./mint.html?contract=${encodeURIComponent(row.contract_address)}&chain=${Number(row.chain_id)}`,
-      })),
-    };
+    const mints = await Promise.all(rows.map(async row => {
+      const chainId = Number(row.chain_id);
+      const contractAddress = String(row.contract_address);
+      const page = row.mint_page || {};
+      let maxSupply = null;
+      let totalMinted = null;
+      let mintCostWei = null;
+      let creatorPriceWei = null;
+      let platformFeeWei = null;
+      let phaseId = null;
+      let phaseType = null;
+      let effectiveStart = page.showcaseStart || null;
+
+      try {
+        const contract = collectionFor(chainId, contractAddress);
+        const [maxSupplyRaw, totalMintedRaw, publicPhase, whitelistPhase] = await Promise.all([
+          contract.maxSupply(),
+          contract.totalMinted(),
+          readConfiguredPhase(contract, page.publicPhaseId),
+          readConfiguredPhase(contract, page.whitelistPhaseId),
+        ]);
+        maxSupply = Number(maxSupplyRaw);
+        totalMinted = Number(totalMintedRaw);
+
+        const phases = [
+          publicPhase ? { ...publicPhase, label: 'Public' } : null,
+          whitelistPhase ? { ...whitelistPhase, label: 'Whitelist' } : null,
+        ].filter(Boolean);
+        const scheduled = phases
+          .filter(phase => Number(phase.startTime) > 0)
+          .sort((a, b) => Number(a.startTime) - Number(b.startTime) || Number(b.priority) - Number(a.priority) || Number(a.id) - Number(b.id));
+        const selected = scheduled[0] || phases[0] || null;
+        if (selected) {
+          phaseId = Number(selected.id);
+          phaseType = selected.label;
+          creatorPriceWei = String(selected.price ?? 0n);
+          mintCostWei = creatorPriceWei;
+          if (Number(selected.startTime) > 0) effectiveStart = new Date(Number(selected.startTime) * 1000).toISOString();
+          try {
+            const quote = await contract.quoteMint(phaseId, 1);
+            creatorPriceWei = String(quote.creatorPrice ?? quote[0] ?? selected.price ?? 0n);
+            platformFeeWei = String(quote.platformFeeWei ?? quote[1] ?? 0n);
+            mintCostWei = String(quote.minimumValue ?? quote[2] ?? creatorPriceWei);
+          } catch (_) {}
+        }
+      } catch (error) {
+        request.log?.warn?.({ err: error, chainId, contract: contractAddress }, 'Upcoming Mints canonical metadata enrichment failed.');
+      }
+
+      return {
+        chainId,
+        contract: contractAddress,
+        title: page.title || 'Untitled Collection',
+        description: page.description || '',
+        start: effectiveStart,
+        phaseId,
+        phaseType,
+        mintCostWei,
+        creatorPriceWei,
+        platformFeeWei,
+        maxSupply,
+        totalMinted,
+        collectionImageAssetId: page.collectionImageAssetId || null,
+        imagePath: publicAssetPath(page.collectionImageAssetId),
+        bannerImageAssetId: page.bannerImageAssetId || null,
+        mintPage: `./mint.html?contract=${encodeURIComponent(contractAddress)}&chain=${chainId}`,
+      };
+    }));
+    return { generatedAt: new Date().toISOString(), mints };
   });
 }

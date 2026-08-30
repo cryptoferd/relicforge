@@ -8,10 +8,11 @@
 
   function dateParts(value) {
     const date = new Date(value);
-    if (!Number.isFinite(date.getTime())) return { date:'Unavailable', time:'Unavailable', full:'Start time unavailable' };
-    const dateText = date.toLocaleDateString([], { year:'numeric', month:'long', day:'numeric' });
-    const timeText = new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit', timeZoneName:'short' }).format(date);
-    return { date:dateText, time:timeText, full:`${dateText} · ${timeText}` };
+    if (!Number.isFinite(date.getTime())) return { date:'Unavailable', time:'Unavailable' };
+    return {
+      date: date.toLocaleDateString([], { year:'numeric', month:'long', day:'numeric' }),
+      time: new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit', timeZoneName:'short' }).format(date),
+    };
   }
 
   function countdown(value) {
@@ -27,6 +28,23 @@
     return `Starts in ${minutes}m`;
   }
 
+  function formatWei(value) {
+    try {
+      if (value == null || value === '') return 'Unavailable';
+      const wei = BigInt(value);
+      if (wei === 0n) return 'FREE';
+      const unit = 1000000000000000000n;
+      const whole = wei / unit;
+      const fraction = String(wei % unit).padStart(18, '0').slice(0, 6).replace(/0+$/, '');
+      return `${whole}${fraction ? `.${fraction}` : ''} ETH`;
+    } catch (_) { return 'Unavailable'; }
+  }
+
+  function sizeLabel(value) {
+    const size = Number(value);
+    return Number.isSafeInteger(size) && size >= 0 ? `${size.toLocaleString()} items` : 'Unavailable';
+  }
+
   function assetUrl(path) { return path ? `${base()}${path}` : ''; }
 
   function render() {
@@ -40,9 +58,11 @@
           <div class="rc47b-mint-body">
             <div class="rc47b-kicker">CHAIN ${Number(row.chainId)}</div>
             <h3>${esc(row.title)}</h3>
-            <div class="rc47c-upcoming-time">
-              <div><span>MINT DATE</span><strong>${esc(when.date)}</strong></div>
-              <div><span>MINT TIME</span><strong>${esc(when.time)}</strong></div>
+            <div class="rc47d-upcoming-meta">
+              <div><span>MINT DATE</span><b>${esc(when.date)}</b></div>
+              <div><span>MINT TIME</span><b>${esc(when.time)}</b></div>
+              <div><span>MINT COST</span><b>${esc(formatWei(row.mintCostWei))}</b></div>
+              <div><span>COLLECTION SIZE</span><b>${esc(sizeLabel(row.maxSupply))}</b></div>
             </div>
             <div class="rc47c-upcoming-countdown" data-upcoming-start="${esc(row.start)}">${esc(countdown(row.start))}</div>
             ${row.description ? `<p>${esc(row.description)}</p>` : ''}
