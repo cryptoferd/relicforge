@@ -39,8 +39,14 @@ export async function getBuffer(key) {
   for await (const chunk of result.Body) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
-export async function putBuffer(key, body, contentType) {
-  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable' }));
+export async function putBuffer(key, body, contentType, cacheControl = 'public, max-age=31536000, immutable') {
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+    CacheControl: cacheControl
+  }));
 }
 
 

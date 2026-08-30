@@ -47,7 +47,7 @@ export default async function projectRoutes(app) {
   app.get('/api/projects', { preHandler: authenticate }, async request => {
     const [{ rows }, countRow] = await Promise.all([
       db.query(
-        `SELECT p.id,p.name,p.current_version,p.created_at,p.updated_at,
+        `SELECT p.id,p.name,p.current_version,p.founder_support_enabled,p.founder_support_updated_at,p.created_at,p.updated_at,
                 COALESCE((SELECT SUM(a.size_bytes) FROM assets a WHERE a.owner_wallet=p.owner_wallet AND a.project_id=p.id AND a.purpose='project' AND a.status='ready'),0)::bigint AS storage_bytes
          FROM projects p WHERE p.owner_wallet=$1 ORDER BY p.updated_at DESC LIMIT 200`,
         [request.user.wallet]
@@ -59,7 +59,7 @@ export default async function projectRoutes(app) {
 
   app.get('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
     const project = await one(
-      `SELECT id,name,current_version,snapshot,created_at,updated_at FROM projects WHERE id=$1 AND owner_wallet=$2`,
+      `SELECT id,name,current_version,founder_support_enabled,founder_support_updated_at,snapshot,created_at,updated_at FROM projects WHERE id=$1 AND owner_wallet=$2`,
       [request.params.id, request.user.wallet]
     );
     if (!project) return reply.code(404).send({ error: 'Project not found.' });
@@ -123,6 +123,21 @@ export default async function projectRoutes(app) {
     }
   });
 
+  app.put('/api/projects/:id/founder-support', { preHandler: authenticate }, async (request, reply) => {
+    const enabled = request.body?.enabled;
+    if (typeof enabled !== 'boolean') {
+      return reply.code(400).send({ error: 'enabled must be true or false.' });
+    }
+    const { rows } = await db.query(
+      `UPDATE projects
+       SET founder_support_enabled=$3,founder_support_updated_at=now(),updated_at=now()
+       WHERE id=$1 AND owner_wallet=$2
+       RETURNING id,name,founder_support_enabled,founder_support_updated_at`,
+      [request.params.id, request.user.wallet, enabled]
+    );
+    if (!rows.length) return reply.code(404).send({ error: 'Project not found.' });
+    return { project: rows[0] };
+  });
   app.delete('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
     const project = await one('SELECT id,name,snapshot FROM projects WHERE id=$1 AND owner_wallet=$2', [request.params.id, request.user.wallet]);
     if (!project) return reply.code(404).send({ error: 'Project not found.' });

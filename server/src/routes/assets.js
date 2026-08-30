@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
-import { getBuffer, headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
+import { getBuffer, headObject, objectKey, presignGet, presignPut, putBuffer } from '../lib/storage.js';
 
 const PROJECT_ALLOWED_TYPES = new Set(['application/json','application/zip','text/plain','application/octet-stream']);
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
@@ -54,6 +54,49 @@ export default async function assetRoutes(app) {
     return { reused: false, asset: { id, filename, contentType, size: bytes }, uploadUrl };
   });
 
+  app.put('/api/assets/:id/upload', { preHandler: authenticate }, async (request, reply) => {
+    const asset = await one(
+      `SELECT id,object_key,size_bytes,content_type,purpose,status
+       FROM assets WHERE id=$1 AND owner_wallet=$2`,
+      [request.params.id, request.user.wallet]
+    );
+    if (!asset) return reply.code(404).send({ error: 'Asset not found.' });
+    if (asset.status === 'ready') return { ok: true, reused: true };
+
+    const body = request.body;
+    if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Binary artwork payload is required.' });
+
+    const expected = Number(asset.size_bytes || 0);
+    if (body.length !== expected) {
+      return reply.code(400).send({ error: `Uploaded asset size mismatch. Expected ${expected} bytes, received ${body.length}.` });
+    }
+    const maxBytes = asset.purpose === 'mint-page' ? MINT_PAGE_MAX_BYTES : PROJECT_MAX_BYTES;
+    if (body.length > maxBytes) {
+      return reply.code(413).send({
+        error: asset.purpose === 'mint-page'
+          ? 'Mint-page images are limited to 2 MB each.'
+          : 'Asset exceeds the 25 MB cloud upload limit.'
+      });
+    }
+
+    try {
+      await putBuffer(
+        asset.object_key,
+        body,
+        asset.content_type || 'application/octet-stream',
+        'private, no-store'
+      );
+      await db.query(
+        `UPDATE assets SET status='ready',completed_at=now()
+         WHERE id=$1 AND owner_wallet=$2`,
+        [request.params.id, request.user.wallet]
+      );
+      return { ok: true };
+    } catch (error) {
+      request.log.error({ err: error, assetId: asset.id }, 'Private API asset upload failed');
+      return reply.code(502).send({ error: 'Artwork could not be written to private storage.' });
+    }
+  });
   app.post('/api/assets/:id/complete', { preHandler: authenticate }, async (request, reply) => {
     const asset = await one('SELECT id,object_key,size_bytes,content_type,purpose FROM assets WHERE id=$1 AND owner_wallet=$2', [request.params.id, request.user.wallet]);
     if (!asset) return reply.code(404).send({ error: 'Asset not found.' });

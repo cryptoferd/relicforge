@@ -27,7 +27,7 @@
   <meta name="twitter:description" content="Create layered onchain NFT collections, control rarity and trait rules, preview every token, and prepare your collection for launch." />
   <meta name="twitter:image" content="https://cryptoferd.github.io/relicforge/relic-forge-preview.png" />
   <meta name="twitter:image:alt" content="Relic Forge — Your artwork. Your collection. No code." />
-  <link rel="stylesheet" href="./styles.css?v=rc4.6" />
+  <link rel="stylesheet" href="./styles.css?v=rc4.7a" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -359,14 +359,17 @@
 <div>
 <div class="eyebrow">STEP 4</div>
 <h2>Preview the collection</h2>
-<p>Compile a deterministic collection recipe, then browse every rendered NFT in the collection with paginated previews.</p>
+<p>Compile a deterministic collection recipe, then inspect the rendered collection or audit exact rarity totals.</p>
 </div>
-<div class="inline-actions">
+<div class="seed-control-stack">
 <label class="field seed-field">
 <span>Generation seed</span>
 <input id="seedInput" type="text" value="RELIC-001"/>
 </label>
+<div class="inline-actions seed-actions">
+<button class="ghost-btn" id="randomSeedBtn" type="button">Random 16-Character Seed</button>
 <button class="secondary-btn" id="regenerateBtn" type="button">Regenerate</button>
+</div>
 </div>
 </div>
 <div class="compiler-status" id="compilerStatus">
@@ -377,23 +380,36 @@
 </div>
 </div>
 <div class="preview-controls hidden" id="previewControls">
-<div class="stats-grid" id="collectionStats"></div>
-<div class="rarity-audit hidden" id="rarityAudit"></div>
-<div class="inline-actions">
-<button class="ghost-btn" id="exportManifestBtn" type="button">Export Final Manifest</button>
-<button class="ghost-btn" id="exportCsvBtn" type="button">Export CSV</button>
-</div>
-</div>
-<div class="collection-preview-toolbar hidden" id="collectionPreviewToolbar">
-  <div class="collection-preview-range"><span>FULL COLLECTION PREVIEW</span><strong id="previewRange">Tokens 0–0 of 0</strong><small>Every compiled token is available here; pages are rendered on demand to keep Studio responsive.</small></div>
-  <div class="collection-preview-pagination">
-    <label><span>Per page</span><select id="previewPageSize"><option value="24">24</option><option selected value="48">48</option><option value="96">96</option></select></label>
-    <button class="ghost-btn" id="previewPrevBtn" type="button">← Previous</button>
-    <strong id="previewPageLabel">Page 1 of 1</strong>
-    <button class="ghost-btn" id="previewNextBtn" type="button">Next →</button>
+  <div class="preview-summary-top">
+    <div class="stats-grid" id="collectionStats"></div>
+    <div class="inline-actions preview-export-actions">
+      <button class="ghost-btn" id="exportCsvBtn" type="button">Export CSV</button>
+      <button class="ghost-btn" id="exportManifestBtn" type="button">Export Final Manifest</button>
+    </div>
   </div>
+
+  <div class="preview-section-tabs" role="tablist" aria-label="Collection preview sections">
+    <button class="active" data-preview-tab="collection" role="tab" aria-selected="true" type="button">Collection Preview</button>
+    <button data-preview-tab="rarity" role="tab" aria-selected="false" type="button">Rarity Audit</button>
+  </div>
+
+  <section class="preview-tab-panel" id="previewCollectionPanel">
+    <div class="collection-preview-toolbar hidden" id="collectionPreviewToolbar">
+      <div class="collection-preview-range"><span>FULL COLLECTION PREVIEW</span><strong id="previewRange">Tokens 0–0 of 0</strong><small>Every compiled token is available here; pages are rendered on demand to keep Studio responsive.</small></div>
+      <div class="collection-preview-pagination">
+        <label><span>Per page</span><select id="previewPageSize"><option value="24">24</option><option selected value="48">48</option><option value="96">96</option></select></label>
+        <button class="ghost-btn" id="previewPrevBtn" type="button">← Previous</button>
+        <strong id="previewPageLabel">Page 1 of 1</strong>
+        <button class="ghost-btn" id="previewNextBtn" type="button">Next →</button>
+      </div>
+    </div>
+    <div class="preview-grid" id="previewGrid"></div>
+  </section>
+
+  <section class="preview-tab-panel hidden" id="previewRarityPanel">
+    <div class="rarity-audit hidden" id="rarityAudit"></div>
+  </section>
 </div>
-<div class="preview-grid" id="previewGrid"></div>
 <div class="panel-footer">
 <button class="secondary-btn back-btn" data-back="3" type="button">Back</button>
 <button class="secondary-btn" id="compileBtn" type="button">Build Collection</button>
@@ -687,7 +703,7 @@
     </div>
     <div class="project-local-note">
       <strong>Global wallet projects · 10 active max</strong>
-      <span>Artwork, layers, rarity settings, rules, compiled recipes, reveal/launch settings, whitelist settings, and mint-page media sync to RelicForge Cloud. Download a self-contained backup before deleting a project; deleting frees its unused project artwork from the Railway Bucket.</span>
+      <span>Artwork, layers, rarity settings, rules, compiled recipes, reveal/launch settings, whitelist settings, and mint-page media sync to RelicForge Cloud. Founder Support is PRIVATE by default and can be enabled per project below. Download a self-contained backup before deleting a project.</span>
     </div>
     <div class="saved-project-list" id="projectList"></div>
     <div class="project-storage-estimate" id="projectStorageEstimate"></div>
@@ -728,7 +744,7 @@
       </div>
       <div class="founder-security-note">
         <strong>Support access only</strong>
-        <span>Opening a project is logged. Saving creates a new creator-owned cloud version and requires a troubleshooting note. You cannot sign creator transactions or obtain their private key.</span>
+        <span>Only projects whose creators explicitly enable Founder Support appear here. Opening is logged; saving creates a new creator-owned cloud version and requires a troubleshooting note. You cannot sign creator transactions or obtain their private key.</span>
       </div>
       <div class="founder-project-list" id="founderProjectList"></div>
 
@@ -806,10 +822,10 @@
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
-  <script src="./cloud.js?v=rc4.6.1" defer></script>
-  <script src="./app.js?v=11.1.6" defer></script>
+  <script src="./cloud.js?v=rc4.7a" defer></script>
+  <script src="./app.js?v=rc4.7a" defer></script>
   <script src="./forge.js?v=11.1.6" defer></script>
-  <script src="./project-storage.js?v=rc4.6" defer></script>
-  <script src="./founder-console.js?v=rc4.6.1" defer></script>
+  <script src="./project-storage.js?v=rc4.7a" defer></script>
+  <script src="./founder-console.js?v=rc4.7a" defer></script>
 </body>
 </html>

@@ -255,15 +255,9 @@
     );
 
     if (!prepared.reused) {
-      const put = await fetch(prepared.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: file
-      });
-      if (!put.ok) throw new Error(`Troubleshooting asset upload failed (${put.status}).`);
-      await cloud().json(
-        `/api/founder/projects/${encodeURIComponent(owner)}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(prepared.asset.id)}/complete`,
-        { method: 'POST', body: '{}' },
+      await cloud().uploadBinary(
+        `/api/founder/projects/${encodeURIComponent(owner)}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(prepared.asset.id)}/upload`,
+        file,
         true
       );
     }

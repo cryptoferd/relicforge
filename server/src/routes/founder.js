@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, one } from '../lib/db.js';
 import { authenticateFounder, normalizeWallet } from '../lib/auth.js';
-import { getBuffer, headObject, objectKey, presignGet, presignPut } from '../lib/storage.js';
+import { getBuffer, headObject, objectKey, presignGet, presignPut, putBuffer } from '../lib/storage.js';
 
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
 const PROJECT_ALLOWED_TYPES = new Set([
@@ -13,6 +13,20 @@ function allowedProjectType(contentType) {
   return type.startsWith('image/') || PROJECT_ALLOWED_TYPES.has(type);
 }
 
+async function creatorAllowsSupport(ownerWallet, projectId) {
+  return one(
+    `SELECT id FROM projects
+     WHERE id=$1 AND owner_wallet=$2 AND founder_support_enabled=TRUE`,
+    [projectId, ownerWallet]
+  );
+}
+
+async function requireCreatorSupport(ownerWallet, projectId, reply) {
+  const allowed = await creatorAllowsSupport(ownerWallet, projectId);
+  if (allowed) return true;
+  reply.code(403).send({ error: 'Creator has not enabled Founder Support for this project.' });
+  return false;
+}
 async function audit(founderWallet, ownerWallet, projectId, action, note = null, metadata = {}) {
   await db.query(
     `INSERT INTO founder_support_audit(founder_wallet,owner_wallet,project_id,action,note,metadata)
@@ -26,7 +40,7 @@ export default async function founderRoutes(app) {
     const owner = request.query?.owner ? normalizeWallet(request.query.owner) : null;
     const q = String(request.query?.q || '').trim().slice(0, 120);
     const values = [];
-    const where = [];
+    const where = ['p.founder_support_enabled=TRUE'];
 
     if (owner) {
       values.push(owner);
@@ -53,6 +67,7 @@ export default async function founderRoutes(app) {
 
   app.get('/api/founder/projects/:owner/:id', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.id, reply))) return;
     const project = await one(
       `SELECT id,owner_wallet,name,current_version,snapshot,created_at,updated_at
        FROM projects WHERE id=$1 AND owner_wallet=$2`,
@@ -74,6 +89,7 @@ export default async function founderRoutes(app) {
 
   app.put('/api/founder/projects/:owner/:id', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.id, reply))) return;
     const { name, snapshot, note } = request.body || {};
     if (!snapshot || typeof snapshot !== 'object') {
       return reply.code(400).send({ error: 'Project snapshot is required.' });
@@ -88,7 +104,7 @@ export default async function founderRoutes(app) {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [ownerWallet]);
       const existing = await client.query(
         `SELECT id,name,current_version FROM projects
-         WHERE id=$1 AND owner_wallet=$2 FOR UPDATE`,
+         WHERE id=$1 AND owner_wallet=$2 AND founder_support_enabled=TRUE FOR UPDATE`,
         [request.params.id, ownerWallet]
       );
       if (!existing.rows.length) {
@@ -146,6 +162,7 @@ export default async function founderRoutes(app) {
 
   app.post('/api/founder/projects/:owner/:projectId/assets/presign', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.projectId, reply))) return;
     const { filename, contentType = 'application/octet-stream', size = 0, sha256 = '' } = request.body || {};
     const bytes = Number(size || 0);
 
@@ -184,8 +201,43 @@ export default async function founderRoutes(app) {
     };
   });
 
+  app.put('/api/founder/projects/:owner/:projectId/assets/:assetId/upload', { preHandler: authenticateFounder }, async (request, reply) => {
+    const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.projectId, reply))) return;
+
+    const asset = await one(
+      `SELECT id,object_key,size_bytes,content_type,status FROM assets
+       WHERE id=$1 AND owner_wallet=$2 AND project_id=$3 AND purpose='project'`,
+      [request.params.assetId, ownerWallet, request.params.projectId]
+    );
+    if (!asset) return reply.code(404).send({ error: 'Asset not found.' });
+    if (asset.status === 'ready') return { ok: true, reused: true };
+
+    const body = request.body;
+    if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Binary artwork payload is required.' });
+    if (body.length !== Number(asset.size_bytes || 0)) {
+      return reply.code(400).send({ error: 'Uploaded asset size does not match the prepared upload.' });
+    }
+    if (body.length > PROJECT_MAX_BYTES) {
+      return reply.code(413).send({ error: 'Asset exceeds the 25 MB cloud upload limit.' });
+    }
+
+    try {
+      await putBuffer(asset.object_key, body, asset.content_type || 'application/octet-stream', 'private, no-store');
+      await db.query(
+        `UPDATE assets SET status='ready',completed_at=now()
+         WHERE id=$1 AND owner_wallet=$2 AND project_id=$3`,
+        [request.params.assetId, ownerWallet, request.params.projectId]
+      );
+      return { ok: true };
+    } catch (error) {
+      request.log.error({ err: error, assetId: asset.id }, 'Founder API asset upload failed');
+      return reply.code(502).send({ error: 'Troubleshooting artwork could not be written to private storage.' });
+    }
+  });
   app.post('/api/founder/projects/:owner/:projectId/assets/:assetId/complete', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.projectId, reply))) return;
     const asset = await one(
       `SELECT id,object_key,size_bytes FROM assets
        WHERE id=$1 AND owner_wallet=$2 AND project_id=$3 AND purpose='project'`,
@@ -212,6 +264,7 @@ export default async function founderRoutes(app) {
 
   app.get('/api/founder/projects/:owner/:projectId/assets/:assetId/download', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.projectId, reply))) return;
     const asset = await one(
       `SELECT id,object_key,filename,content_type,size_bytes FROM assets
        WHERE id=$1 AND owner_wallet=$2 AND project_id=$3
@@ -238,6 +291,7 @@ export default async function founderRoutes(app) {
   });
   app.get('/api/founder/projects/:owner/:projectId/assets/:assetId/url', { preHandler: authenticateFounder }, async (request, reply) => {
     const ownerWallet = normalizeWallet(request.params.owner);
+    if (!(await requireCreatorSupport(ownerWallet, request.params.projectId, reply))) return;
     const asset = await one(
       `SELECT id,object_key,filename,content_type,size_bytes FROM assets
        WHERE id=$1 AND owner_wallet=$2 AND project_id=$3
@@ -248,9 +302,11 @@ export default async function founderRoutes(app) {
     return { asset, url: await presignGet(asset.object_key, 3600) };
   });
 
-  app.get('/api/founder/support-audit', { preHandler: authenticateFounder }, async request => {
+  app.get('/api/founder/support-audit', { preHandler: authenticateFounder }, async (request, reply) => {
     const owner = request.query?.owner ? normalizeWallet(request.query.owner) : null;
     const projectId = request.query?.projectId ? String(request.query.projectId) : null;
+    if (!owner || !projectId) return reply.code(400).send({ error: 'Creator wallet and project ID are required.' });
+    if (!(await requireCreatorSupport(owner, projectId, reply))) return;
     const values = [];
     const where = [];
     if (owner) { values.push(owner); where.push(`owner_wallet=$${values.length}`); }

@@ -609,6 +609,30 @@
     node.textContent = [cloudText, browserText].filter(Boolean).join(' · ');
   }
 
+  async function setFounderSupport(projectId, enable) {
+    if (!window.RelicForgeCloud?.enabled?.()) throw new Error('RelicForge Cloud is required for Founder Support.');
+    await ensureCloudSession();
+
+    if (enable) {
+      const ok = window.confirm(
+        'Allow Relic Forge Founder Support to open and troubleshoot this cloud project?\n\n' +
+        'This grants access only to this saved project and its artwork. It does NOT grant wallet access, private keys, transaction signing, NFT ownership, or control of deployed contracts.\n\n' +
+        'You can revoke access at any time.'
+      );
+      if (!ok) return;
+    }
+
+    await window.RelicForgeCloud.json(
+      `/api/projects/${encodeURIComponent(projectId)}/founder-support`,
+      { method: 'PUT', body: JSON.stringify({ enabled: !!enable }) },
+      true
+    );
+    setStatus(
+      enable ? 'Founder Support enabled for this project.' : 'Founder Support revoked for this project.',
+      'success'
+    );
+    await renderProjects();
+  }
   async function renderProjects() {
     const list = $('projectList');
     if (!list) return;
@@ -628,7 +652,16 @@
       }
     }
     const merged = new Map();
-    for (const project of cloudProjects) merged.set(project.id, { id: project.id, name: project.name, updatedAt: project.updated_at, createdAt: project.created_at, bytes: Number(project.storage_bytes || 0), cloud: true, local: false });
+    for (const project of cloudProjects) merged.set(project.id, {
+      id: project.id,
+      name: project.name,
+      updatedAt: project.updated_at,
+      createdAt: project.created_at,
+      bytes: Number(project.storage_bytes || 0),
+      founderSupport: !!project.founder_support_enabled,
+      cloud: true,
+      local: false
+    });
     for (const project of localProjects) {
       const prior = merged.get(project.id) || {};
       const cloudNewer = prior.cloud && String(prior.updatedAt || '') > String(project.updatedAt || '');
@@ -652,6 +685,7 @@
         <div class="saved-project-actions">
           <button class="ghost-btn" data-load-project="${esc(project.id)}" type="button">Open</button>
           <button class="ghost-btn" data-backup-project="${esc(project.id)}" type="button">Download Backup</button>
+          ${project.cloud ? `<button class="ghost-btn project-support-btn ${project.founderSupport ? 'support-on' : ''}" data-support-project="${esc(project.id)}" data-support-enabled="${project.founderSupport ? '1' : '0'}" type="button">${project.founderSupport ? 'Founder Support: Allowed' : 'Founder Support: Private'}</button>` : ''}
           <button class="ghost-btn danger-btn" data-delete-project="${esc(project.id)}" type="button">${project.cloud ? 'Delete Project' : 'Delete Local'}</button>
         </div>
       </article>`;
@@ -752,6 +786,12 @@
       if (load) { loadProject(load.dataset.loadProject).catch(error => setStatus(error.message, 'error')); return; }
       const backup = event.target.closest('[data-backup-project]');
       if (backup) { downloadProjectBackup(backup.dataset.backupProject).catch(error => setStatus(error.message, 'error')); return; }
+      const support = event.target.closest('[data-support-project]');
+      if (support) {
+        const enable = support.dataset.supportEnabled !== '1';
+        setFounderSupport(support.dataset.supportProject, enable).catch(error => setStatus(error.message, 'error'));
+        return;
+      }
       const del = event.target.closest('[data-delete-project]');
       if (del) deleteProject(del.dataset.deleteProject).catch(error => setStatus(error.message, 'error'));
     });

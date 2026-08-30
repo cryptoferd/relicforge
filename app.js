@@ -2134,6 +2134,24 @@
     };
   }
 
+  function selectPreviewTab(tab = 'collection') {
+    const selected = tab === 'rarity' ? 'rarity' : 'collection';
+    document.querySelectorAll('[data-preview-tab]').forEach(button => {
+      const active = button.dataset.previewTab === selected;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.getElementById('previewCollectionPanel')?.classList.toggle('hidden', selected !== 'collection');
+    document.getElementById('previewRarityPanel')?.classList.toggle('hidden', selected !== 'rarity');
+  }
+
+  function randomSeed16() {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return [...bytes].map(byte => alphabet[byte % alphabet.length]).join('');
+  }
+
   async function buildCollection() {
     el.compilerStatus.innerHTML = `<div class="compiler-box"><strong>Forging collection…</strong><ul><li>Allocating exact trait amounts</li><li>Applying manual token recipes</li><li>Resolving shared trait rules</li><li>Checking duplicates</li></ul></div>`;
     el.previewGrid.innerHTML = '';
@@ -2154,6 +2172,7 @@
       await renderPreviewGrid();
       el.previewControls.classList.remove('hidden');
       el.collectionPreviewToolbar?.classList.remove('hidden');
+      selectPreviewTab('collection');
       el.toLaunchBtn.disabled = result.report.ruleViolations > 0 || result.report.exactIssues.length > 0 || result.report.distributionIssues.length > 0;
       if (!el.toLaunchBtn.disabled) showStatus('Collection compiled successfully.', 'success');
     } catch (error) {
@@ -2243,13 +2262,19 @@
     }
     el.rarityAudit.classList.remove('hidden');
     el.rarityAudit.innerHTML = `<div class="rarity-audit-heading"><div><span>RARITY AUDIT</span><strong>Compiled totals vs. configured targets</strong></div><small>Curated layered tokens count toward these totals; full standalone 1/1 artwork is excluded and the rarity targets apply to the remaining generative slots.</small></div>${[...byLayer.values()].map(layerRows => `
-      <div class="rarity-audit-layer">
-        <h4>${escapeHtml(layerRows[0].layerName)}</h4>
+      <details class="rarity-audit-layer">
+        <summary><strong>${escapeHtml(layerRows[0].layerName)}</strong><span>${layerRows.length} trait${layerRows.length === 1 ? '' : 's'}</span></summary>
         <div class="rarity-audit-table">
           <div class="rarity-audit-row header"><span>Trait</span><span>Curated</span><span>Target</span><span>Actual</span><span>Target %</span><span>Actual %</span><span></span></div>
           ${layerRows.map(row => `<div class="rarity-audit-row ${row.ok ? 'good' : 'bad'}"><span>${escapeHtml(row.traitName)}</span><span>${row.curated}</span><span>${row.expected}</span><span>${row.actual}</span><span>${formatPercent(row.targetPercent)}%</span><span>${formatPercent(row.actualPercent)}%</span><strong>${row.ok ? '✓' : '!'}</strong></div>`).join('')}
         </div>
-      </div>`).join('')}`;
+      </details>`).join('')}`;
+
+    const auditLayers = [...el.rarityAudit.querySelectorAll('details.rarity-audit-layer')];
+    auditLayers.forEach(details => details.addEventListener('toggle', () => {
+      if (!details.open) return;
+      auditLayers.forEach(other => { if (other !== details) other.open = false; });
+    }));
   }
 
   function relevantRuleLayers(rule) {
@@ -2317,9 +2342,83 @@
     return ` fill-opacity="${String(value).replace(/^0\./, '.') }"`;
   }
 
+  function isSvgArtworkFile(file) {
+    return !!file && (/image\/svg\+xml/i.test(file.type || '') || /\.svg$/i.test(file.name || ''));
+  }
+
+  async function nativeSvgTraitFragment(trait) {
+    const text = await trait.file.text();
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    if (doc.querySelector('parsererror')) throw new Error(`${trait.name || trait.file.name} is not valid SVG.`);
+
+    const root = doc.documentElement;
+    if (String(root.localName || '').toLowerCase() !== 'svg') {
+      throw new Error(`${trait.name || trait.file.name} does not contain an SVG root.`);
+    }
+
+    root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(node => node.remove());
+    root.querySelectorAll('style').forEach(node => {
+      if (/@import|url\s*\(/i.test(node.textContent || '')) node.remove();
+    });
+    root.querySelectorAll('*').forEach(node => {
+      [...node.attributes].forEach(attr => {
+        const name = attr.name.toLowerCase();
+        const value = String(attr.value || '').trim();
+        const lower = value.toLowerCase();
+        if (name.startsWith('on') || lower.startsWith('javascript:')) node.removeAttribute(attr.name);
+        if ((name === 'href' || name === 'xlink:href') && /^(https?:|\/\/)/i.test(value)) node.removeAttribute(attr.name);
+        if (name === 'style' && /@import|url\s*\(\s*['"]?(?:https?:|\/\/)/i.test(value)) node.removeAttribute(attr.name);
+      });
+    });
+
+    const expectedWidth = Number(state.imageWidth || trait.width || 0);
+    const expectedHeight = Number(state.imageHeight || trait.height || 0);
+    const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0) {
+      if (expectedWidth && expectedHeight &&
+          (Math.round(vb[2]) !== Math.round(expectedWidth) || Math.round(vb[3]) !== Math.round(expectedHeight))) {
+        throw new Error(`${trait.name || trait.file.name} SVG viewBox is ${vb[2]}×${vb[3]}; expected ${expectedWidth}×${expectedHeight}.`);
+      }
+      offsetX = vb[0];
+      offsetY = vb[1];
+    } else {
+      const width = Number.parseFloat(root.getAttribute('width') || '0');
+      const height = Number.parseFloat(root.getAttribute('height') || '0');
+      if (width > 0 && height > 0 && expectedWidth && expectedHeight &&
+          (Math.round(width) !== Math.round(expectedWidth) || Math.round(height) !== Math.round(expectedHeight))) {
+        throw new Error(`${trait.name || trait.file.name} SVG is ${width}×${height}; expected ${expectedWidth}×${expectedHeight}.`);
+      }
+    }
+
+    let fragment = root.innerHTML
+      .replace(/<!--([\s\S]*?)-->/g, '')
+      .replace(/>\s+</g, '><')
+      .trim() || '<g/>';
+
+    if (offsetX || offsetY) {
+      fragment = `<g transform="translate(${-offsetX} ${-offsetY})">${fragment}</g>`;
+    }
+
+    trait.svgFragment = fragment;
+    trait.svgStats = {
+      rectangles: 0,
+      colors: 0,
+      bytes: new Blob([fragment]).size,
+      nativeSvg: true
+    };
+    return fragment;
+  }
+
   async function traitToSvgFragment(trait) {
     if (!trait || trait.isNone) return '';
     if (trait.svgFragment != null) return trait.svgFragment;
+
+    // Preserve uploaded SVG as native vector markup instead of routing it through
+    // createImageBitmap(), which is not a reliable SVG decoder in every browser.
+    if (isSvgArtworkFile(trait.file)) return nativeSvgTraitFragment(trait);
 
     // GIF must remain raster. Drawing it to canvas would capture only one frame.
     // Embed the original bytes in the SVG so animation survives layered previews and onchain rendering.
@@ -3356,6 +3455,13 @@
     if (action === 'relax') {
       relaxRuleConflicts(btn.dataset.ruleId);
     }
+  });
+  document.querySelectorAll('[data-preview-tab]').forEach(button => {
+    button.addEventListener('click', () => selectPreviewTab(button.dataset.previewTab));
+  });
+  $('#randomSeedBtn')?.addEventListener('click', () => {
+    el.seedInput.value = randomSeed16();
+    showStatus('Generated a new 16-character seed. Click Regenerate to rebuild the collection with it.', 'success');
   });
   $('#compileBtn').addEventListener('click', buildCollection);
   $('#regenerateBtn').addEventListener('click', buildCollection);

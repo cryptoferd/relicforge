@@ -11,6 +11,16 @@ import { db } from './lib/db.js';
 import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 25 * 1024 * 1024 });
+
+// Project/mint-page artwork is uploaded through this authenticated API instead
+// of directly from the browser to the Railway Bucket. This removes Bucket CORS
+// from the Studio save path.
+app.addContentTypeParser(
+  'application/vnd.relicforge.asset',
+  { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 },
+  (_request, body, done) => done(null, body)
+);
+
 const origins = String(process.env.CORS_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 
 function originAllowed(origin) {

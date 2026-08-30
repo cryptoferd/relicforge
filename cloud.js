@@ -98,6 +98,26 @@
     return res.blob();
   }
 
+  async function uploadBinary(path, blob, authenticated = false) {
+    if (!enabled()) throw new Error('RelicForge Cloud API is not configured yet.');
+    const headers = { 'content-type': 'application/vnd.relicforge.asset' };
+    if (authenticated) {
+      const active = loadSession();
+      if (!active?.token) throw new Error('Cloud sign-in required.');
+      headers.authorization = `Bearer ${active.token}`;
+    }
+    const res = await fetch(`${apiBase()}${path}`, { method: 'PUT', headers, body: blob });
+    const text = await res.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; }
+    catch { data = { error: text || `HTTP ${res.status}` }; }
+    if (!res.ok) {
+      if (res.status === 401) clearSession();
+      throw new Error(data?.error || `Cloud upload failed (${res.status}).`);
+    }
+    return data;
+  }
+
   async function performSignIn(normalized, epochAtStart) {
     const challenge = await json('/api/auth/challenge', { method: 'POST', body: JSON.stringify({ wallet: normalized }) });
     const injected = activeWalletProvider();
@@ -163,9 +183,7 @@
       method: 'POST', body: JSON.stringify({ filename, contentType, size: file.size, sha256: hash, purpose, projectId })
     }, true);
     if (!prepared.reused) {
-      const put = await fetch(prepared.uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
-      if (!put.ok) throw new Error(`Artwork upload failed (${put.status}). Check the Railway Bucket CORS settings.`);
-      await json(`/api/assets/${prepared.asset.id}/complete`, { method: 'POST', body: '{}' }, true);
+      await uploadBinary(`/api/assets/${encodeURIComponent(prepared.asset.id)}/upload`, file, true);
     }
     return {
       __relicforgeAsset: 1,
@@ -263,6 +281,6 @@
 
   window.RelicForgeCloud = {
     version: '11.1.6', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
-    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob
+    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob, uploadBinary
   };
 })();
