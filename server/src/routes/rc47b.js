@@ -414,8 +414,15 @@ export default async function rc47bRoutes(app) {
     if (publicPhase && publicPhase.accessType !== 0) return reply.code(400).send({ error: 'Configured publicPhaseId is not a public V1 phase.' });
     if (whitelistPhase && whitelistPhase.accessType !== 1) return reply.code(400).send({ error: 'Configured whitelistPhaseId is not a Merkle V1 phase.' });
 
-    let showcaseStart = null;
-    if (config.showcaseStart) {
+    // Prefer canonical onchain phase timing whenever a published phase has an
+    // explicit start. This keeps discovery synchronized with the actual mint gate
+    // even if an older client supplied a stale/manual showcase timestamp.
+    const scheduledStarts = [publicPhase?.startTime, whitelistPhase?.startTime]
+      .map(Number).filter(value => Number.isFinite(value) && value > 0);
+    let showcaseStart = scheduledStarts.length
+      ? new Date(Math.min(...scheduledStarts) * 1000).toISOString()
+      : null;
+    if (!showcaseStart && config.showcaseStart) {
       const parsedStart = new Date(config.showcaseStart);
       if (!Number.isFinite(parsedStart.getTime())) return reply.code(400).send({ error: 'Upcoming Mints requires a valid mint start date/time.' });
       showcaseStart = parsedStart.toISOString();

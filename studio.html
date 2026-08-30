@@ -29,6 +29,7 @@
   <meta name="twitter:image:alt" content="Relic Forge — Your artwork. Your collection. No code." />
   <link rel="stylesheet" href="./styles.css?v=rc4.7a.1" />
   <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
+  <link rel="stylesheet" href="./rc47c.css?v=rc4.7c" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -445,11 +446,25 @@
     <div class="launch-card whitelist-launch-card">
       <h3>Mint Access / Whitelist</h3>
       <label class="project-toggle-row"><span><strong>Public mint</strong><small>Allow normal public minting in addition to any whitelist mint.</small></span><input id="publicMintEnabled" type="checkbox" checked/></label>
+      <div class="rc47c-phase-schedule" id="publicMintSchedule">
+        <div class="rc47c-phase-schedule-head"><strong>Public phase schedule</strong><small>Times are entered in your local timezone and stored onchain. Leave Start blank for immediate eligibility after Master Mint is enabled. Leave End blank for no automatic end.</small></div>
+        <div class="whitelist-config-grid">
+          <label class="field"><span>Public start</span><input id="publicMintStart" type="datetime-local"/></label>
+          <label class="field"><span>Public end</span><input id="publicMintEnd" type="datetime-local"/></label>
+        </div>
+      </div>
       <label class="project-toggle-row"><span><strong>Whitelist mint</strong><small>Commit an allowlist Merkle root to the collection.</small></span><input id="whitelistEnabled" type="checkbox"/></label>
       <div class="whitelist-settings hidden" id="whitelistSettings">
         <div class="whitelist-config-grid">
           <label class="field"><span>Whitelist mint price</span><div class="input-suffix"><input id="whitelistMintPrice" min="0" step="0.001" type="number" value="0.001"/><span>ETH</span></div></label>
           <label class="field"><span>Default allowance</span><input id="whitelistDefaultAllowance" min="1" step="1" type="number" value="2"/><small>Mints allowed per eligible address unless a custom file specifies otherwise.</small></label>
+        </div>
+        <div class="rc47c-phase-schedule">
+          <div class="rc47c-phase-schedule-head"><strong>Whitelist phase schedule</strong><small>Use a separate start/end window for allowlist access. This can hand off directly into the Public phase without a manual transaction.</small></div>
+          <div class="whitelist-config-grid">
+            <label class="field"><span>Whitelist start</span><input id="whitelistMintStart" type="datetime-local"/></label>
+            <label class="field"><span>Whitelist end</span><input id="whitelistMintEnd" type="datetime-local"/></label>
+          </div>
         </div>
         <div class="whitelist-source-tabs">
           <label class="reveal-choice selected" data-whitelist-source-card="snapshot"><input checked name="whitelistSourceMode" type="radio" value="snapshot"/><span><strong>Collection snapshot</strong><small>Capture the current holders of an ERC-721 or ERC-1155 collection.</small></span></label>
@@ -826,10 +841,11 @@
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=rc4.7a" defer></script>
   <script src="./app.js?v=rc4.7a" defer></script>
-  <script src="./forge.js?v=rc4.7b-v1dash1" defer></script>
+  <script src="./forge.js?v=rc4.7c" defer></script>
   <script src="./project-storage.js?v=rc4.7a.1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>
-  <script src="./rc47b-bootstrap.js?v=rc4.7b" defer></script>
+  <script src="./rc47b-bootstrap.js?v=rc4.7c" defer></script>
   <script src="./rc47b-studio.js?v=rc4.7b" defer></script>
+  <script src="./studio-shell.js?v=rc4.7c" defer></script>
 </body>
 </html>

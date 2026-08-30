@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
   <link rel="stylesheet" href="./styles.css?v=rc4.7a.1" />
   <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
+  <link rel="stylesheet" href="./rc47c.css?v=rc4.7c" />
 </head>
 <body class="rc47b-page">
   <header class="rc47b-nav">
@@ -32,7 +33,7 @@
       <article class="rc47b-card half"><div class="rc47b-kicker">05 · PREVIEW & AUDIT</div><h2>Generate, inspect, curate.</h2><p>The Preview step summarizes supply, layers, rules, manual recipes, duplicates, and exports. Collection Preview is paginated; Rarity Audit groups expandable trait categories.</p><p>Generation is deterministic from the chosen seed. Enter a seed manually, regenerate, or generate a new random 16-character alphanumeric seed. Export the final manifest before permanent steps if you want an independent record.</p></article>
       <article class="rc47b-card half"><div class="rc47b-kicker">06 · FORGE</div><h2>Create through canonical V1 infrastructure.</h2><p>The canonical V1 Factory creates creator-owned Collection and ProjectData clones. Artwork/DNA are prepared for onchain storage, and Chainlink VRF is used for reveal randomness.</p><p>Choose Sponsored or Minter Supported Relic Forge platform fees. Content finalization does <strong>not</strong> turn minting on. Every new V1 collection begins with Master Mint OFF; the creator must explicitly arm it after checking the deployed collection.</p><p><strong>Permanent actions:</strong> content sealing freezes canonical artwork/DNA/provenance. Controller renounce is irreversible and removes creator sale/content control defined by the contract. Verify addresses, phases, payout, royalties, reveal settings, and content before signing.</p></article>
 
-      <article class="rc47b-card half"><div class="rc47b-kicker">07 · MINT PAGE / UPCOMING</div><h2>Publish the collection once.</h2><p>The public V1 mint page uses the configured public and whitelist phase IDs. It reads phase state from the canonical collection and uses <code>quoteMint()</code> so the submitted value includes the creator price and any live Minter Supported platform fee.</p><p>Add collection and banner media, publish the mint page, and optionally enable <strong>Show on Upcoming Mints</strong> with a start date/time. The public Upcoming page and landing carousel reuse the same title, description, image, chain, contract, and mint-page link—no duplicate promo record is required.</p></article>
+      <article class="rc47b-card half"><div class="rc47b-kicker">07 · MINT PAGE / UPCOMING</div><h2>Schedule the phases, then publish once.</h2><p>The public V1 mint page uses the configured public and whitelist phase IDs. Each phase can have its own onchain start/end time, and the mint page counts down to those canonical timestamps while still using <code>quoteMint()</code> for the live required value.</p><p>Add collection and banner media and optionally enable <strong>Show on Upcoming Mints</strong>. Relic Forge uses the earliest scheduled published phase as the discovery start when one exists. Creators can remove a collection from the spotlight at any time without changing the NFT contract, then republish later if plans change.</p></article>
       <article class="rc47b-card half"><div class="rc47b-kicker">08 · COLLABORATION</div><h2>Share editing, never signing authority.</h2><p>Add collaborator EVM wallets from the Collaboration dashboard and grant only the sections they need: Artwork & Layers, Rarity & Metadata, Trait Rules, Curation & Preview, Launch Setup, or Mint Page & Showcase.</p><p>Collaborators sign in with their own wallet. They never receive the creator private key, creator wallet impersonation, deployed NFT ownership, contract controller authority, or creator-only transaction signing.</p><p>Every collaboration save appends a version with actor wallet, changed sections, and a note. Creator rollback creates another new version and keeps all later history and historical artwork available.</p></article>
 
       <article class="rc47b-card">
@@ -42,5 +43,6 @@
       </article>
     </section>
   </main>
+  <script src="./studio-shell.js?v=rc4.7c"></script>
 </body>
 </html>

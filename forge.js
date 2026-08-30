@@ -1756,6 +1756,22 @@ ${await file.text()}`;
     return receipt;
   }
 
+  function phaseScheduleFromInputs(startId, endId, label) {
+    const parse = (id, field) => {
+      const raw = String($(id)?.value || '').trim();
+      if (!raw) return 0;
+      const date = new Date(raw);
+      if (!Number.isFinite(date.getTime())) throw new Error(`${label} ${field} date/time is invalid.`);
+      const seconds = Math.floor(date.getTime() / 1000);
+      if (!Number.isSafeInteger(seconds) || seconds < 0) throw new Error(`${label} ${field} date/time is outside the supported range.`);
+      return seconds;
+    };
+    const startTime = parse(startId, 'start');
+    const endTime = parse(endId, 'end');
+    if (endTime && endTime <= startTime) throw new Error(`${label} end must be later than its start.`);
+    return { startTime, endTime };
+  }
+
   async function forgeCollection() {
     try {
       if (!forgeState.compiled) throw new Error('Compile the collection for onchain first.');
@@ -1786,6 +1802,16 @@ ${await file.text()}`;
       const whitelistPrice = window.ethers.parseEther(String(Math.max(0, Number($('whitelistMintPrice')?.value || 0))));
       const maxPerWallet = Math.max(0, Math.floor(Number($('maxPerWallet')?.value || 0)));
       if (maxPerWallet > 4294967295) throw new Error('Max mints per wallet is too large.');
+      const publicSchedule = phaseScheduleFromInputs('publicMintStart', 'publicMintEnd', 'Public phase');
+      const whitelistSchedule = phaseScheduleFromInputs('whitelistMintStart', 'whitelistMintEnd', 'Whitelist phase');
+      const enabledSchedules = [
+        ...(publicEnabled ? [publicSchedule] : []),
+        ...(whitelistEnabled ? [whitelistSchedule] : []),
+      ];
+      // Auto-arming is safe only when every enabled phase has an explicit start.
+      // Otherwise a startTime=0 phase would become live immediately when Master Mint
+      // is armed for a different scheduled phase.
+      const autoArmScheduledMint = enabledSchedules.length > 0 && enabledSchedules.every(schedule => schedule.startTime > 0);
 
       const holderRenderEnabled = !!$('holderRenderModeEnabled')?.checked;
       const defaultRenderMode = Number($('defaultRenderMode')?.value || 0);
@@ -1827,6 +1853,7 @@ ${await file.text()}`;
         { label:'Set future reveal mode', status:'pending' },
         { label:`Fund ${vrfQuote.requests} Chainlink VRF request credits`, status:'pending' },
         ...Array.from({length:phaseCount},(_,i)=>({label:`Create mint phase ${i+1}/${phaseCount}`,status:'pending'})),
+        ...(autoArmScheduledMint ? [{ label:'Arm scheduled Master Mint', status:'pending' }] : []),
       ];
 
       renderDeployProgress(steps);
@@ -1958,7 +1985,7 @@ ${await file.text()}`;
         forgeState.publicPhaseId = nextPhaseId++;
         await sendV1Step(
           'Create public mint phase',
-          () => collection.createPhase(publicPrice, 0, 0, 0, maxPerWallet, window.ethers.ZeroHash, 0, 100, true),
+          () => collection.createPhase(publicPrice, publicSchedule.startTime, publicSchedule.endTime, 0, maxPerWallet, window.ethers.ZeroHash, 0, 100, true),
           steps,
           si++
         );
@@ -1975,18 +2002,29 @@ ${await file.text()}`;
 
         await sendV1Step(
           'Create whitelist mint phase',
-          () => collection.createPhase(whitelistPrice, 0, 0, 0, 0, finalTree.root, 1, 200, true),
+          () => collection.createPhase(whitelistPrice, whitelistSchedule.startTime, whitelistSchedule.endTime, 0, 0, finalTree.root, 1, 200, true),
           steps,
           si++
         );
       }
 
-      const stillPaused = !(await collection.masterMintEnabled());
-      if (!stillPaused) throw new Error('V1 safety check failed: new collection master mint was unexpectedly enabled.');
+      if (autoArmScheduledMint) {
+        await sendV1Step('Arm scheduled Master Mint', () => collection.setMasterMintEnabled(true), steps, si++);
+        forgeState.masterMintArmed = true;
+      }
 
-      if ($('forgeArmMintBtn')) $('forgeArmMintBtn').disabled = false;
-      if ($('forgeMintTestBtn')) $('forgeMintTestBtn').disabled = true;
-      if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = true;
+      const masterMintEnabled = Boolean(await collection.masterMintEnabled());
+      if (autoArmScheduledMint && !masterMintEnabled) throw new Error('V1 schedule safety check failed: scheduled Master Mint was not enabled.');
+      if (!autoArmScheduledMint && masterMintEnabled) throw new Error('V1 safety check failed: unscheduled collection master mint was unexpectedly enabled.');
+      const publicPhaseOpen = forgeState.publicPhaseId ? Boolean(await collection.phaseIsOpen(forgeState.publicPhaseId)) : false;
+      const whitelistPhaseOpen = forgeState.whitelistPhaseId ? Boolean(await collection.phaseIsOpen(forgeState.whitelistPhaseId)) : false;
+
+      if ($('forgeArmMintBtn')) {
+        $('forgeArmMintBtn').disabled = masterMintEnabled;
+        $('forgeArmMintBtn').textContent = masterMintEnabled ? 'Master Mint Enabled (Scheduled)' : 'Enable Master Mint';
+      }
+      if ($('forgeMintTestBtn')) $('forgeMintTestBtn').disabled = !publicPhaseOpen;
+      if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = !whitelistPhaseOpen;
       if ($('forgeCreatorMintBtn')) $('forgeCreatorMintBtn').disabled = false;
       if ($('forgeDeferredRevealBtn')) $('forgeDeferredRevealBtn').disabled = currentRevealMode() !== 1;
       if ($('forgeProcessRevealBtn')) $('forgeProcessRevealBtn').disabled = false;
@@ -2013,11 +2051,16 @@ ${await file.text()}`;
 
       log(
         'forgeTestStatus',
-        `OK Canonical V1 collection forged.\nCollection: ${forgeState.collectionAddress}\nProjectData: ${forgeState.dataAddress}\nPlatform fee: ${feeMode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported'}  -  base ${Number(lockedFeeCents)/100} USD/NFT\nVRF credit funded: ${window.ethers.formatEther(vrfQuote.funded)} ETH\nMaster mint: OFF (manual enable required)`,
+        `OK Canonical V1 collection forged.\nCollection: ${forgeState.collectionAddress}\nProjectData: ${forgeState.dataAddress}\nPlatform fee: ${feeMode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported'}  -  base ${Number(lockedFeeCents)/100} USD/NFT\nVRF credit funded: ${window.ethers.formatEther(vrfQuote.funded)} ETH\nMaster mint: ${masterMintEnabled ? 'ON (scheduled phase timestamps still enforced)' : 'OFF (manual enable required)'}`,
         true
       );
 
-      bridge().showStatus?.('Canonical V1 collection forged on Sepolia. Master mint remains OFF.', 'success');
+      bridge().showStatus?.(
+        masterMintEnabled
+          ? 'Canonical V1 collection forged on Sepolia. Scheduled phases are armed and will open only at their onchain start times.'
+          : 'Canonical V1 collection forged on Sepolia. Master mint remains OFF.',
+        'success'
+      );
     } catch (error) {
       const partial = forgeState.collectionAddress ? `\nPartial V1 collection: ${forgeState.collectionAddress}` : '';
       log('forgeTestStatus', `FORGE ERROR: ${error.shortMessage || error.message}${partial}`, true);
@@ -2605,15 +2648,74 @@ ${await file.text()}`;
     return rows.join('');
   }
 
-  function dashboardV1PhaseRows(snap) {
+  function dashboardPhaseLocal(seconds) {
+    return Number(seconds) > 0 ? dashboardDatetimeLocal(new Date(Number(seconds) * 1000).toISOString()) : '';
+  }
+
+  function dashboardPhaseTimeLabel(seconds, fallback) {
+    if (!Number(seconds)) return fallback;
+    return new Intl.DateTimeFormat(undefined, { year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' }).format(new Date(Number(seconds) * 1000));
+  }
+
+  function dashboardEarliestPhaseStart(snap, publicPhaseId, whitelistPhaseId) {
+    const ids = [Number(publicPhaseId || 0), Number(whitelistPhaseId || 0)].filter(Boolean);
+    const starts = ids.map(id => snap.phases?.find(phase => phase.id === id)?.startTime || 0).filter(value => Number(value) > 0);
+    return starts.length ? Math.min(...starts.map(Number)) : 0;
+  }
+
+  function dashboardV1PhaseRows(snap, canControl = false) {
     if (!snap.phases?.length) return '<div class="forge-market-empty">No V1 mint phases have been created.</div>';
-    return `<div class="forge-rows">${snap.phases.map(phase => {
-      const access = phase.accessType === 1 ? 'Merkle' : 'Public';
+    return `<div class="rc47c-phase-list">${snap.phases.map(phase => {
+      const access = phase.accessType === 1 ? 'Whitelist / Merkle' : 'Public';
       const state = phase.open ? 'OPEN' : (phase.enabled ? 'Enabled / not open' : 'Disabled');
       const limit = phase.maxPerWallet ? `${phase.maxPerWallet} / wallet` : 'Unlimited / wallet';
       const supply = phase.phaseSupply ? `${phase.minted}/${phase.phaseSupply}` : `${phase.minted} minted`;
-      return `<div class="forge-row"><span>Phase ${phase.id} · ${access}</span><strong>${esc(window.ethers.formatEther(phase.price))} ETH · ${esc(state)} · ${esc(limit)} · ${esc(supply)}</strong></div>`;
+      return `<article class="rc47c-phase-card">
+        <div class="rc47c-phase-card-head"><div><strong>Phase ${phase.id} · ${access}</strong><small>${window.ethers.formatEther(phase.price)} ETH · ${limit} · ${supply}</small></div><span class="rc47c-phase-state">${state}</span></div>
+        <div class="rc47c-phase-time-grid">
+          <label class="field"><span>Start</span><input id="dashboardV1PhaseStart${phase.id}" type="datetime-local" value="${esc(dashboardPhaseLocal(phase.startTime))}" ${canControl ? '' : 'disabled'}/><small>${esc(dashboardPhaseTimeLabel(phase.startTime, 'Immediate after Master Mint'))}</small></label>
+          <label class="field"><span>End</span><input id="dashboardV1PhaseEnd${phase.id}" type="datetime-local" value="${esc(dashboardPhaseLocal(phase.endTime))}" ${canControl ? '' : 'disabled'}/><small>${esc(dashboardPhaseTimeLabel(phase.endTime, 'No automatic end'))}</small></label>
+        </div>
+        <div class="launched-actions"><button class="ghost-btn" data-v1-phase-schedule="${phase.id}" ${canControl ? '' : 'disabled'} type="button">Save Phase Schedule</button></div>
+      </article>`;
     }).join('')}</div>${snap.phasesTruncated ? '<small class="forge-footnote">Only the first 500 phases are shown in the browser recovery view.</small>' : ''}`;
+  }
+
+  async function saveV1PhaseSchedule(snap, phaseId) {
+    if (!forgeState.signer) await connectWallet();
+    if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the collection creator.');
+    if (!snap.controllerActive) throw new Error('V1 controller has been renounced; phase schedules can no longer be changed.');
+    const phase = snap.phases.find(row => row.id === Number(phaseId));
+    if (!phase) throw new Error('V1 phase was not found.');
+    const parse = (id, label) => {
+      const raw = String($(id)?.value || '').trim();
+      if (!raw) return 0;
+      const date = new Date(raw);
+      if (!Number.isFinite(date.getTime())) throw new Error(`${label} date/time is invalid.`);
+      return Math.floor(date.getTime() / 1000);
+    };
+    const startTime = parse(`dashboardV1PhaseStart${phase.id}`, 'Phase start');
+    const endTime = parse(`dashboardV1PhaseEnd${phase.id}`, 'Phase end');
+    if (endTime && endTime <= startTime) throw new Error('Phase end must be later than its start.');
+    const contract = new window.ethers.Contract(snap.address, V1_COLLECTION_ABI, forgeState.signer);
+    launchedStatus(`Updating Phase ${phase.id} schedule onchain…`);
+    const tx = await contract.updatePhase(phase.id, phase.price, startTime, endTime, phase.phaseSupply, phase.maxPerWallet, phase.merkleRoot, phase.accessType, phase.priority);
+    launchedStatus(`Phase ${phase.id} update submitted · ${tx.hash.slice(0,12)}…`);
+    await tx.wait();
+
+    const refreshed = await collectionDashboardSnapshot(snap.address, forgeState.signer);
+    const published = await publishedMintPageConfig(snap.address);
+    if (published.schema === 'relic-forge/mint-page@2' && published.showcaseEnabled) {
+      const earliest = dashboardEarliestPhaseStart(refreshed, published.publicPhaseId, published.whitelistPhaseId);
+      if (earliest) {
+        await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
+        const config = { ...published, showcaseStart:new Date(earliest * 1000).toISOString(), updatedAt:new Date().toISOString() };
+        delete config.collectionImage; delete config.bannerImage;
+        await window.RelicForgeCloud.json(`/api/rc47b/collections/11155111/${encodeURIComponent(snap.address)}/mint-page`, { method:'PUT', body:JSON.stringify({ projectId:null, config }) }, true);
+      }
+    }
+    launchedStatus(`Phase ${phase.id} schedule updated.${refreshed.masterMintEnabled ? '' : ' Master Mint is still OFF.'}`);
+    await loadLaunchedProjects();
   }
 
   async function publishRecoveredV1MintPage(snap) {
@@ -2635,14 +2737,15 @@ ${await file.text()}`;
     if (whitelistPhaseId && !snap.whitelistPhases.some(phase => phase.id === whitelistPhaseId)) throw new Error('Selected Whitelist phase is not a canonical V1 Merkle phase.');
 
     const showcaseEnabled = !!$('dashboardV1ShowcaseEnabled')?.checked;
+    const scheduledStart = dashboardEarliestPhaseStart(snap, publicPhaseId, whitelistPhaseId);
     const rawStart = $('dashboardV1ShowcaseStart')?.value || '';
-    let showcaseStart = null;
-    if (rawStart) {
+    let showcaseStart = scheduledStart ? new Date(scheduledStart * 1000).toISOString() : null;
+    if (!showcaseStart && rawStart) {
       const parsed = new Date(rawStart);
       if (!Number.isFinite(parsed.getTime())) throw new Error('Upcoming Mints start date/time is invalid.');
       showcaseStart = parsed.toISOString();
     }
-    if (showcaseEnabled && !showcaseStart) throw new Error('Choose a mint start date/time before enabling Upcoming Mints.');
+    if (showcaseEnabled && !showcaseStart) throw new Error('Schedule a published mint phase or choose an Upcoming Mints fallback start before enabling discovery.');
 
     const config = {
       schema: 'relic-forge/mint-page@2',
@@ -2696,6 +2799,17 @@ ${await file.text()}`;
         await loadLaunchedProjects();
         return;
       }
+      if (action === 'spotlightoff') {
+        const current = await publishedMintPageConfig(snap.address);
+        if (current.schema !== 'relic-forge/mint-page@2') throw new Error('This V1 collection is not currently published.');
+        await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
+        const config = { ...current, showcaseEnabled:false, updatedAt:new Date().toISOString() };
+        delete config.collectionImage; delete config.bannerImage;
+        await window.RelicForgeCloud.json(`/api/rc47b/collections/11155111/${encodeURIComponent(snap.address)}/mint-page`, { method:'PUT', body:JSON.stringify({ projectId:null, config }) }, true);
+        launchedStatus('Removed from Upcoming Mints. The public mint page and onchain collection were not changed.');
+        await loadLaunchedProjects();
+        return;
+      }
 
       if (!snap.controllerActive) throw new Error('V1 controller has been renounced; creator onchain controls are permanently disabled.');
 
@@ -2739,6 +2853,8 @@ ${await file.text()}`;
     const selectedWhitelist = snap.whitelistPhases.some(phase => phase.id === Number(dashboardMintConfig.whitelistPhaseId))
       ? Number(dashboardMintConfig.whitelistPhaseId)
       : snap.whitelistPhaseId;
+    const scheduledShowcaseStart = dashboardEarliestPhaseStart(snap, selectedPublic, selectedWhitelist);
+    const dashboardShowcaseStart = dashboardMintConfig.showcaseStart || (scheduledShowcaseStart ? new Date(scheduledShowcaseStart * 1000).toISOString() : null);
 
     forgeState.dashboardMintPageImageFile = null;
     forgeState.dashboardMintPageBannerFile = null;
@@ -2770,7 +2886,7 @@ ${await file.text()}`;
           <label class="field"><span>Display title</span><input id="dashboardV1Title" type="text" maxlength="180" value="${esc(dashboardMintConfig.title || snap.name || '')}" ${!isOwner ? 'disabled' : ''}/></label>
           <label class="field"><span>Public phase</span><select id="dashboardV1PublicPhase" ${!isOwner ? 'disabled' : ''}>${dashboardV1PhaseOptions(snap.publicPhases, selectedPublic)}</select></label>
           <label class="field"><span>Whitelist phase</span><select id="dashboardV1WhitelistPhase" ${!isOwner ? 'disabled' : ''}>${dashboardV1PhaseOptions(snap.whitelistPhases, selectedWhitelist)}</select></label>
-          <label class="field"><span>Mint start</span><input id="dashboardV1ShowcaseStart" type="datetime-local" value="${esc(dashboardDatetimeLocal(dashboardMintConfig.showcaseStart))}" ${!isOwner ? 'disabled' : ''}/><small>Used for Upcoming Mints and the homepage carousel.</small></label>
+          <label class="field"><span>Upcoming start fallback</span><input id="dashboardV1ShowcaseStart" type="datetime-local" value="${esc(dashboardDatetimeLocal(dashboardShowcaseStart))}" ${!isOwner ? 'disabled' : ''}/><small>${scheduledShowcaseStart ? 'The earliest selected onchain phase start is used automatically.' : 'Used only when the selected phases do not have a scheduled start.'}</small></label>
         </div>
         <label class="field"><span>Description</span><textarea id="dashboardV1Description" maxlength="3000" rows="3" ${!isOwner ? 'disabled' : ''}>${esc(dashboardMintConfig.description || snap.description || '')}</textarea></label>
         <label class="project-toggle-row"><span><strong>Show on Upcoming Mints</strong><small>Opt this published V1 mint page into Relic Forge discovery.</small></span><input id="dashboardV1ShowcaseEnabled" type="checkbox" ${dashboardMintConfig.showcaseEnabled ? 'checked' : ''} ${!isOwner ? 'disabled' : ''}/></label>
@@ -2782,6 +2898,7 @@ ${await file.text()}`;
             <div class="launched-actions">
               <button class="primary-btn" data-v1-dashboard-action="publish" ${!isOwner ? 'disabled' : ''} type="button">${publishedV1 ? 'Update / Publish Mint Page' : 'Register & Publish Mint Page'}</button>
               <button class="ghost-btn" data-v1-dashboard-action="mintpage" ${publishedV1 ? '' : 'disabled'} type="button">Open Mint Page</button>
+              ${dashboardMintConfig.showcaseEnabled && isOwner ? '<button class="ghost-btn danger-btn" data-v1-dashboard-action="spotlightoff" type="button">Remove from Spotlight</button>' : ''}
             </div>
             <small class="forge-footnote">${publishedV1 ? 'This collection is registered with RelicForge Cloud.' : 'This collection exists onchain but has not yet been registered with RelicForge Cloud.'} Whitelist wallet proofs are not recreated from chain state; if this collection uses a whitelist, reopen the saved Studio project to republish its proof table.</small>
           </div>
@@ -2808,7 +2925,7 @@ ${await file.text()}`;
 
       <div class="launched-section">
         <h4>Mint Phases</h4>
-        ${dashboardV1PhaseRows(snap)}
+        ${dashboardV1PhaseRows(snap, canControl)}
       </div>
 
       <div class="launched-section">
@@ -2825,6 +2942,9 @@ ${await file.text()}`;
 
     detail.querySelectorAll('[data-v1-dashboard-action]').forEach(button => {
       button.addEventListener('click', () => handleV1LaunchedAction(button.dataset.v1DashboardAction, snap));
+    });
+    detail.querySelectorAll('[data-v1-phase-schedule]').forEach(button => {
+      button.addEventListener('click', () => saveV1PhaseSchedule(snap, Number(button.dataset.v1PhaseSchedule)).catch(error => launchedStatus(`Dashboard error: ${error.shortMessage || error.message}`)));
     });
 
     $('dashboardMintPageImageInput')?.addEventListener('change', async event => {
@@ -3155,8 +3275,12 @@ ${await file.text()}`;
       defaultRenderMode: Number($('defaultRenderMode')?.value || 0),
       placeholderFile: forgeState.placeholderFile || null,
       publicMintEnabled: !!$('publicMintEnabled')?.checked,
+      publicMintStart: $('publicMintStart')?.value || '',
+      publicMintEnd: $('publicMintEnd')?.value || '',
       whitelistEnabled: !!$('whitelistEnabled')?.checked,
       whitelistMintPrice: $('whitelistMintPrice')?.value || '0',
+      whitelistMintStart: $('whitelistMintStart')?.value || '',
+      whitelistMintEnd: $('whitelistMintEnd')?.value || '',
       whitelistDefaultAllowance: $('whitelistDefaultAllowance')?.value || '1',
       whitelistSourceMode: currentWhitelistSourceMode(),
       whitelistSourceChain: $('whitelistSourceChain')?.value || '1',
@@ -3190,11 +3314,15 @@ ${await file.text()}`;
       launchDescription: saved.launchDescription,
       mintPrice: saved.mintPrice,
       maxPerWallet: saved.maxPerWallet,
+      publicMintStart: saved.publicMintStart || '',
+      publicMintEnd: saved.publicMintEnd || '',
       royalty: saved.royalty,
       royaltyWallet: saved.royaltyWallet,
       payoutWallet: saved.payoutWallet,
       vrfFundingRequests: saved.vrfFundingRequests || '5',
       whitelistMintPrice: saved.whitelistMintPrice,
+      whitelistMintStart: saved.whitelistMintStart || '',
+      whitelistMintEnd: saved.whitelistMintEnd || '',
       whitelistDefaultAllowance: saved.whitelistDefaultAllowance,
       whitelistSourceChain: saved.whitelistSourceChain || String(saved.whitelist?.sourceChainId || 1),
       whitelistCollectionAddress: saved.whitelistCollectionAddress,

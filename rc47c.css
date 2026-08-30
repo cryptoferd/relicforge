@@ -1,0 +1,197 @@
+/* Relic Forge RC4.7C — Studio shell, phase schedules, countdowns */
+
+/* ---------- Shared Studio application drawer ---------- */
+.rf-shell-menu-btn,
+#studioMenuBtn.rf-shell-menu-btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #2d2d2d;
+  border-radius: 10px;
+  background: #0d0d0d;
+  cursor: pointer;
+  padding: 0;
+  z-index: 1202;
+}
+.rf-shell-menu-btn span,
+#studioMenuBtn.rf-shell-menu-btn span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: #d8d8d8;
+  transition: transform .18s ease, opacity .18s ease;
+}
+.rf-shell-menu-btn:hover { border-color: #555; }
+.rf-shell-open .rf-shell-menu-btn span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.rf-shell-open .rf-shell-menu-btn span:nth-child(2) { opacity: 0; }
+.rf-shell-open .rf-shell-menu-btn span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.rf-shell-ready .topbar,
+.rf-shell-ready .rc47b-nav {
+  justify-content: flex-start;
+}
+.rf-shell-ready .topbar .brand,
+.rf-shell-ready .rc47b-nav .rc47b-brand { margin-right: auto; }
+.rf-shell-ready .studio-action-shell { display: none !important; }
+
+.rf-shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1198;
+  background: rgba(0,0,0,.68);
+  opacity: 0;
+  transition: opacity .2s ease;
+  backdrop-filter: blur(2px);
+}
+.rf-shell-open .rf-shell-backdrop { opacity: 1; }
+.rf-shell-drawer {
+  position: fixed;
+  z-index: 1199;
+  inset: 0 auto 0 0;
+  width: min(390px, 90vw);
+  padding: 18px;
+  background: linear-gradient(180deg,#111,#090909 55%,#070707);
+  border-right: 1px solid #333;
+  box-shadow: 24px 0 70px rgba(0,0,0,.55);
+  transform: translateX(-105%);
+  transition: transform .22s ease;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rf-shell-open .rf-shell-drawer { transform: translateX(0); }
+.rf-shell-open { overflow: hidden; }
+.rf-shell-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 2px 18px;
+  border-bottom: 1px solid #292929;
+}
+.rf-shell-drawer-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: inherit;
+  text-decoration: none;
+}
+.rf-shell-drawer-brand img { width: 40px; height: 40px; }
+.rf-shell-drawer-brand strong { display:block; font: 600 14px/1 Georgia,serif; letter-spacing:.13em; }
+.rf-shell-drawer-brand span { display:block; margin-top:5px; color:#888; font-size:10px; }
+.rf-shell-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #333;
+  border-radius: 9px;
+  background: #101010;
+  color: #aaa;
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rf-shell-nav { display:grid; gap:7px; padding:16px 0; }
+.rf-shell-nav a {
+  display:grid;
+  gap:3px;
+  padding:12px 13px;
+  border:1px solid #292929;
+  border-radius:10px;
+  background:#0c0c0c;
+  color:#eee;
+  text-decoration:none;
+}
+.rf-shell-nav a:hover { border-color:#555; background:#121212; }
+.rf-shell-nav a.active { border-color:#666; background:linear-gradient(135deg,#191919,#101010); }
+.rf-shell-nav strong { font-size:12px; }
+.rf-shell-nav span { color:#777; font-size:9px; line-height:1.35; }
+.rf-shell-context { display:grid; gap:13px; }
+.rf-shell-section { border-top:1px solid #292929; padding-top:14px; }
+.rf-shell-section-title { margin-bottom:9px; color:#777; font-size:9px; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+.rf-shell-action-stack,
+.rf-shell-drawer .studio-project-actions {
+  display:grid !important;
+  gap:8px !important;
+  width:100%;
+}
+.rf-shell-action-stack > *,
+.rf-shell-drawer .studio-project-actions > * { width:100%; }
+.rf-shell-drawer .ghost-btn,
+.rf-shell-drawer .primary-btn,
+.rf-shell-drawer .link-btn {
+  min-height:42px;
+  justify-content:flex-start;
+  text-align:left;
+}
+.rf-shell-drawer .wallet-session-control { position:relative; width:100%; }
+.rf-shell-drawer .project-wallet-btn { width:100%; }
+.rf-shell-drawer .wallet-session-menu {
+  position:static !important;
+  width:100%;
+  margin-top:8px;
+  box-shadow:none;
+}
+.rf-shell-drawer-foot { border-top:1px solid #292929; margin-top:17px; padding:15px 2px 5px; }
+.rf-shell-drawer-foot a { color:#8f8f8f; font-size:10px; text-decoration:none; }
+.rf-shell-drawer-foot a:hover { color:#eee; }
+
+/* ---------- Phase scheduling controls ---------- */
+.rc47c-phase-schedule {
+  margin: 12px 0 2px;
+  padding: 13px;
+  border: 1px solid #2b2b2b;
+  border-radius: 11px;
+  background: #0b0b0b;
+}
+.rc47c-phase-schedule-head { margin-bottom:10px; }
+.rc47c-phase-schedule-head strong { display:block; font-size:11px; }
+.rc47c-phase-schedule-head small { display:block; margin-top:4px; color:#777; line-height:1.4; }
+.rc47c-phase-schedule .whitelist-config-grid { padding:0; }
+.rc47c-phase-list { display:grid; gap:10px; }
+.rc47c-phase-card { border:1px solid #2c2c2c; border-radius:12px; background:#0b0b0b; padding:13px; }
+.rc47c-phase-card-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
+.rc47c-phase-card-head strong { display:block; font-size:12px; }
+.rc47c-phase-card-head small { display:block; margin-top:4px; color:#777; font-size:9px; }
+.rc47c-phase-state { color:#aaa; font-size:9px; font-weight:800; letter-spacing:.08em; }
+.rc47c-phase-time-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.rc47c-phase-card .launched-actions { margin-top:10px; }
+
+/* ---------- Public mint countdown ---------- */
+.rf-mint-countdown {
+  margin: 0 0 14px;
+  border: 1px solid #353535;
+  border-radius: 12px;
+  padding: 13px;
+  background: radial-gradient(circle at 50% 0,rgba(255,255,255,.045),transparent 55%),#090909;
+  text-align:center;
+}
+.rf-mint-countdown-kicker { color:#8a8a8a; font-size:8px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+.rf-mint-countdown-value { margin-top:7px; font-family:Georgia,serif; font-size:clamp(21px,3vw,31px); letter-spacing:.055em; }
+.rf-mint-countdown-date { margin-top:6px; color:#888; font-size:9px; }
+.rf-mint-countdown.live { border-color:#5b665e; }
+.rf-mint-countdown.live .rf-mint-countdown-value { color:#dbe1dc; }
+.rf-phase-timing { display:block; margin:7px 0 0; color:#7d7d7d; font-size:9px; line-height:1.4; }
+.rf-phase-timing.live { color:#b8c4bb; }
+
+/* ---------- Upcoming Mint date/time ---------- */
+.rc47c-upcoming-time {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  margin:10px 0 2px;
+}
+.rc47c-upcoming-time > div { border:1px solid #292929; border-radius:8px; padding:8px; background:#0b0b0b; }
+.rc47c-upcoming-time span { display:block; color:#666; font-size:7px; font-weight:900; letter-spacing:.13em; }
+.rc47c-upcoming-time strong { display:block; margin-top:4px; font-size:10px; color:#d0d0d0; }
+.rc47c-upcoming-countdown { margin-top:8px; color:#888; font-size:9px; }
+
+@media(max-width:700px){
+  .rf-shell-drawer { width:min(350px,92vw); }
+  .rc47c-phase-time-grid { grid-template-columns:1fr; }
+  .rc47c-upcoming-time { grid-template-columns:1fr 1fr; }
+}

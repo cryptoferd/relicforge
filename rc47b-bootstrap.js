@@ -10,16 +10,25 @@
     wrap.className = 'rc47b-showcase-controls';
     wrap.innerHTML = `
       <label class="rc47b-showcase-toggle"><input id="rc47bShowcaseEnabled" type="checkbox"/><span><strong>Show on Upcoming Mints</strong><br/><small>Opt this published mint page into Relic Forge discovery.</small></span></label>
-      <label class="field"><span>Mint start</span><input id="rc47bShowcaseStart" type="datetime-local"/><small>Used for Upcoming Mints sorting and the landing-page carousel.</small></label>`;
+      <label class="field"><span>Upcoming start fallback</span><input id="rc47bShowcaseStart" type="datetime-local"/><small>The earliest enabled phase start is used automatically when scheduled. This fallback is only for phases without a start time.</small></label>`;
     const status = $('mintPageStatus');
     if (status) host.insertBefore(wrap, status);
     else host.appendChild(wrap);
   }
 
+  function scheduledShowcaseStartFromControls() {
+    const candidates = [
+      [$('publicMintEnabled')?.checked, $('publicMintStart')?.value],
+      [$('whitelistEnabled')?.checked, $('whitelistMintStart')?.value],
+    ].filter(([enabled, value]) => enabled && value).map(([, value]) => new Date(value)).filter(date => Number.isFinite(date.getTime()));
+    if (!candidates.length) return null;
+    return new Date(Math.min(...candidates.map(date => date.getTime()))).toISOString();
+  }
+
   function showcaseState() {
     return {
       showcaseEnabled: !!$('rc47bShowcaseEnabled')?.checked,
-      showcaseStart: $('rc47bShowcaseStart')?.value || null,
+      showcaseStart: scheduledShowcaseStartFromControls() || $('rc47bShowcaseStart')?.value || null,
     };
   }
 
@@ -165,8 +174,8 @@
     config.collectionImageAssetId = image?.id || null;
     config.bannerImageAssetId = banner?.id || null;
 
-    const [template, walletJs, adapterJs, mintJs] = await Promise.all([
-      fetch('./mint.html').then(r=>r.text()), fetch('./wallet.js').then(r=>r.text()), fetch('./mint-v1-adapter.js').then(r=>r.text()), fetch('./mint.js').then(r=>r.text())
+    const [template, walletJs, adapterJs, timingJs, mintJs] = await Promise.all([
+      fetch('./mint.html').then(r=>r.text()), fetch('./wallet.js').then(r=>r.text()), fetch('./mint-v1-adapter.js').then(r=>r.text()), fetch('./rc47c-mint-timing.js').then(r=>r.text()), fetch('./mint.js').then(r=>r.text())
     ]);
     const runtime = `window.RELICFORGE_CONFIG=${JSON.stringify({
       apiBase: window.RELICFORGE_CONFIG?.apiBase || '', cloudEnabled:true, mintRpcMode:window.RELICFORGE_CONFIG?.mintRpcMode || 'public-first'
@@ -175,13 +184,15 @@
     // preserve order. A standalone export inlines the local scripts, so execute the
     // combined runtime at DOMContentLoaded; deferred ethers.js is guaranteed to have
     // executed before that event fires.
-    const combinedRuntime = `${walletJs}\n${adapterJs}\n${mintJs}`;
+    const combinedRuntime = `${walletJs}\n${adapterJs}\n${timingJs}\n${mintJs}`;
     let html = template
       .replace(/<script src="\.\/relicforge-config\.js[^>]*><\/script>/, `<script>${runtime}<\/script>`)
       .replace(/<script src="\.\/wallet\.js[^>]*><\/script>/, '')
       .replace(/<script src="\.\/mint-v1-adapter\.js[^>]*><\/script>/, '')
+      .replace(/<script src="\.\/rc47c-mint-timing\.js[^>]*><\/script>/, '')
       .replace(/<script src="\.\/mint\.js[^>]*><\/script>/, `<script>window.addEventListener('DOMContentLoaded',()=>{${combinedRuntime}});<\/script>`)
       .replace(/href="\.\/rc47b\.css[^"]*"/g, 'href="https://cryptoferd.github.io/relicforge/rc47b.css"')
+      .replace(/href="\.\/rc47c\.css[^"]*"/g, 'href="https://cryptoferd.github.io/relicforge/rc47c.css"')
       .replace(/href="\.\/relic-forge-logo\.svg"/g, 'href="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"')
       .replace(/src="\.\/relic-forge-logo\.svg"/g, 'src="https://cryptoferd.github.io/relicforge/relic-forge-logo.svg"');
     const blob = new Blob([html], {type:'text/html'});
