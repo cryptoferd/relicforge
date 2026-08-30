@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090909" />
+  <title>Relic Forge — Collaboration</title>
+  <meta name="description" content="Share Relic Forge projects with granular wallet permissions and append-only version history." />
+  <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
+  <link rel="stylesheet" href="./styles.css?v=rc4.7a.1" />
+  <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
+</head>
+<body class="rc47b-page">
+  <header class="rc47b-nav">
+    <a class="rc47b-brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><div><strong>RELIC FORGE</strong><span>Collaboration</span></div></a>
+    <nav class="rc47b-nav-links">
+      <a href="./how-to.html">How-To</a>
+      <a href="./upcoming.html">Upcoming Mints</a>
+      <a href="./dashboard.html">Creator Dashboard</a>
+      <a href="./studio.html">Studio</a>
+    </nav>
+  </header>
+
+  <main class="rc47b-shell">
+    <section class="rc47b-hero">
+      <div class="rc47b-kicker">RC4.7B · SHARED PROJECTS</div>
+      <h1>Build together without sharing control.</h1>
+      <p>Invite an EVM wallet, choose exactly what it may edit, review every saved version, and restore earlier work without deleting history. Collaboration never grants creator signing authority or contract ownership.</p>
+    </section>
+
+    <section class="rc47b-grid">
+      <article class="rc47b-card">
+        <div class="rc47b-row">
+          <div><h2>Projects</h2><small id="collabWalletLabel">Connect a wallet to load owned and shared projects.</small></div>
+          <div class="rc47b-actions"><button class="rc47b-btn primary" id="collabConnectBtn" type="button">Connect Wallet</button><button class="rc47b-btn" id="collabRefreshBtn" type="button" disabled>Refresh</button></div>
+        </div>
+        <div class="rc47b-status" id="collabStatus">Wallet not connected.</div>
+        <div class="rc47b-list" id="collabProjectList" style="margin-top:14px"><div class="rc47b-empty">No projects loaded.</div></div>
+      </article>
+
+      <article class="rc47b-card half" id="collabAccessCard">
+        <h2>Collaborator Access</h2>
+        <p id="collabAccessIntro">Select an owned project to manage collaborators.</p>
+        <div id="collabOwnerControls" class="hidden">
+          <label class="rc47b-field"><span>Collaborator wallet</span><input id="collabWalletInput" placeholder="0x..." type="text" /></label>
+          <div class="rc47b-perms" id="collabPermissionPicker"></div>
+          <div class="rc47b-actions"><button class="rc47b-btn primary" id="collabSaveAccessBtn" type="button">Add / Update Wallet</button></div>
+          <div class="rc47b-list" id="collaboratorList" style="margin-top:14px"></div>
+        </div>
+        <div class="rc47b-empty" id="collabAccessEmpty">Only the project creator can add, update, or remove collaborator wallets.</div>
+      </article>
+
+      <article class="rc47b-card half">
+        <h2>Change Log & Rollback</h2>
+        <p>Each save records the actor wallet, changed sections, note, and version. A rollback creates a new version; later history remains intact.</p>
+        <div class="rc47b-list" id="collabHistory"><div class="rc47b-empty">Select a project to load version history.</div></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="./wallet.js?v=11.1.6" defer></script>
+  <script src="./cloud.js?v=rc4.7a" defer></script>
+  <script src="./collab-dashboard.js?v=rc4.7b" defer></script>
+</body>
+</html>

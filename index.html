@@ -28,6 +28,7 @@
   <meta name="twitter:image" content="https://cryptoferd.github.io/relicforge/relic-forge-preview.png" />
   <meta name="twitter:image:alt" content="Relic Forge — Your artwork. Your collection. No code." />
   <link rel="stylesheet" href="./styles.css?v=11.1.6" />
+  <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
 </head>
 <body class="site-page-body">
   <header class="site-nav">
@@ -36,7 +37,9 @@
       <div><strong>RELIC FORGE</strong><span>Studio</span></div>
     </a>
     <nav class="site-nav-links" aria-label="Main navigation">
-      <a href="#workflow">How it works</a>
+      <a href="./how-to.html">How-To</a>
+      <a href="./upcoming.html">Upcoming Mints</a>
+      <a href="./collab.html">Collaboration</a>
       <a href="./dashboard.html">Creator Dashboard</a>
       <a class="site-studio-link" href="./studio.html">Open Studio</a>
     </nav>
@@ -64,6 +67,16 @@
       <div><strong>Exact or generated</strong><span>Set percentages, counts, or exact token recipes.</span></div>
       <div><strong>Rules before surprises</strong><span>Check trait compatibility before generation.</span></div>
       <div><strong>EVM ready</strong><span>Built toward Ethereum and EVM-compatible launches.</span></div>
+    </section>
+
+    <section class="site-upcoming-mints" aria-labelledby="siteUpcomingTitle">
+      <div class="site-upcoming-inner">
+        <div class="site-upcoming-heading">
+          <div><p class="site-eyebrow">UPCOMING MINTS</p><h2 id="siteUpcomingTitle">Next out of the forge.</h2></div>
+          <a href="./upcoming.html">View all →</a>
+        </div>
+        <div class="site-upcoming-carousel" id="landingUpcomingCarousel"><div class="site-upcoming-empty">Loading upcoming mints…</div></div>
+      </div>
     </section>
 
     <section id="workflow" class="site-workflow">
@@ -102,7 +115,9 @@
 
   <footer class="site-footer">
     <a class="brand site-footer-brand" href="./index.html"><img class="brand-logo" src="./relic-forge-logo.svg" alt="" /><div><strong>RELIC FORGE</strong><span>Studio</span></div></a>
-    <span>Collection builder prototype</span>
+    <span>Release candidate · Testnet · Unaudited</span>
   </footer>
+  <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="./landing-mints.js?v=rc4.7b"></script>
 </body>
 </html>

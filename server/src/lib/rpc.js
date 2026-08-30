@@ -3,15 +3,42 @@ import { alchemyNetworkForChain, alchemyRpcUrl } from './alchemy-networks.js';
 
 const PROVIDERS = new Map();
 export const COLLECTION_READ_ABI = [
-  'function name() view returns (string)', 'function description() view returns (string)', 'function owner() view returns (address)',
-  'function maxSupply() view returns (uint32)', 'function totalMinted() view returns (uint32)', 'function maxPerWallet() view returns (uint32)',
-  'function mintPrice() view returns (uint256)', 'function whitelistMintPrice() view returns (uint256)', 'function publicMintEnabled() view returns (bool)',
-  'function whitelistMintEnabled() view returns (bool)', 'function whitelistRoot() view returns (bytes32)', 'function revealMode() view returns (uint8)',
-  'function mintedByWallet(address) view returns (uint32)', 'function whitelistMintedByWallet(address) view returns (uint32)',
-  'function balanceOf(address) view returns (uint256)', 'function isRevealed(uint256) view returns (bool)',
-  'function renderToken(uint256) view returns (string)', 'function renderMode(uint256) view returns (uint8)',
-  'function holderRenderModeEnabled() view returns (bool)', 'function flattenedRenderBaseURI() view returns (string)',
-  'function tokenURI(uint256) view returns (string)'
+  // Shared ERC-721 / metadata reads.
+  'function name() view returns (string)',
+  'function description() view returns (string)',
+  'function maxSupply() view returns (uint32)',
+  'function totalMinted() view returns (uint32)',
+  'function balanceOf(address) view returns (uint256)',
+  'function isRevealed(uint256) view returns (bool)',
+  'function renderToken(uint256) view returns (string)',
+  'function renderMode(uint256) view returns (uint8)',
+  'function holderRenderModeEnabled() view returns (bool)',
+  'function flattenedRenderBaseURI() view returns (string)',
+  'function tokenURI(uint256) view returns (string)',
+
+  // Canonical Relic Forge V1.
+  'function creator() view returns (address)',
+  'function controller() view returns (address)',
+  'function masterMintEnabled() view returns (bool)',
+  'function futureRevealMode() view returns (uint8)',
+  'function phaseCount() view returns (uint32)',
+  'function phases(uint32) view returns (uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 minted,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled)',
+  'function phaseWalletMinted(uint32,address) view returns (uint32)',
+  'function phaseIsOpen(uint32) view returns (bool)',
+  'function quoteMint(uint32,uint32) view returns (uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
+
+  // Legacy V11 compatibility. These are intentionally retained so already-published
+  // test collections continue to work while V1 becomes the canonical path.
+  'function owner() view returns (address)',
+  'function maxPerWallet() view returns (uint32)',
+  'function mintPrice() view returns (uint256)',
+  'function whitelistMintPrice() view returns (uint256)',
+  'function publicMintEnabled() view returns (bool)',
+  'function whitelistMintEnabled() view returns (bool)',
+  'function whitelistRoot() view returns (bytes32)',
+  'function revealMode() view returns (uint8)',
+  'function mintedByWallet(address) view returns (uint32)',
+  'function whitelistMintedByWallet(address) view returns (uint32)'
 ];
 
 function jsonOverrides() {
@@ -29,15 +56,12 @@ export function rpcUrl(chainId) {
   const id = Number(chainId);
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`Invalid EVM chain ID: ${chainId}`);
 
-  // Per-chain environment variables remain the highest priority emergency override.
   const explicit = String(process.env[`RPC_${id}_URL`] || '').trim();
   if (explicit) return explicit;
 
-  // One JSON variable can override several networks without adding many Railway vars.
   const bulkOverride = String(jsonOverrides()[String(id)] || '').trim();
   if (bulkOverride) return bulkOverride;
 
-  // Normal V11.1.6 path: one ALCHEMY_API_KEY + built-in endpoint registry.
   return alchemyRpcUrl(id);
 }
 
@@ -59,12 +83,28 @@ export function providerFor(chainId) {
   if (!PROVIDERS.has(id)) PROVIDERS.set(id, new JsonRpcProvider(rpcUrl(id), id, { staticNetwork: true, batchMaxCount: 20 }));
   return PROVIDERS.get(id);
 }
+
 export function collectionFor(chainId, address) {
   return new Contract(getAddress(address), COLLECTION_READ_ABI, providerFor(chainId));
 }
-export async function verifyCollectionOwner(chainId, address, wallet) {
+
+export async function collectionCreator(chainId, address) {
   const contract = collectionFor(chainId, address);
-  const owner = String(await contract.owner()).toLowerCase();
-  if (owner !== String(wallet).toLowerCase()) throw new Error('Connected wallet is not the collection owner.');
-  return getAddress(owner);
+  try {
+    return getAddress(await contract.creator());
+  } catch (v1Error) {
+    try {
+      return getAddress(await contract.owner());
+    } catch {
+      throw v1Error;
+    }
+  }
+}
+
+export async function verifyCollectionOwner(chainId, address, wallet) {
+  const creator = await collectionCreator(chainId, address);
+  if (creator.toLowerCase() !== String(wallet).toLowerCase()) {
+    throw new Error('Connected wallet is not the collection creator.');
+  }
+  return creator;
 }

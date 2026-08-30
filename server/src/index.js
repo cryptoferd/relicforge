@@ -7,6 +7,7 @@ import assetRoutes from './routes/assets.js';
 import collectionRoutes from './routes/collections.js';
 import publicRoutes from './routes/public.js';
 import founderRoutes from './routes/founder.js';
+import rc47bRoutes from './routes/rc47b.js';
 import { db } from './lib/db.js';
 import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
@@ -31,9 +32,6 @@ function originAllowed(origin) {
   try { candidate = new URL(origin); }
   catch { return false; }
 
-  // Wildcards are intentionally restricted to one HTTPS hostname label.
-  // Example:
-  // https://relicforge-*-cryptoferds-projects.vercel.app
   for (const pattern of origins) {
     if (!pattern.includes('*')) continue;
 
@@ -73,7 +71,7 @@ await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' }
 
 app.get('/health', async () => {
   await db.query('SELECT 1');
-  return { ok: true, service: 'relicforge-cloud-api', version: '11.1.6', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
+  return { ok: true, service: 'relicforge-cloud-api', version: 'rc4.7b', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
 });
 await app.register(authRoutes);
 await app.register(projectRoutes);
@@ -81,6 +79,7 @@ await app.register(assetRoutes);
 await app.register(founderRoutes);
 await app.register(collectionRoutes);
 await app.register(publicRoutes);
+await app.register(rc47bRoutes);
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);

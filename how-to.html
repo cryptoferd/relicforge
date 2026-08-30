@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090909" />
+  <title>Relic Forge — How-To</title>
+  <meta name="description" content="Relic Forge Studio guide for artwork, rarity, rules, preview, forging, mint pages, and collaboration." />
+  <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
+  <link rel="stylesheet" href="./styles.css?v=rc4.7a.1" />
+  <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
+</head>
+<body class="rc47b-page">
+  <header class="rc47b-nav">
+    <a class="rc47b-brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><div><strong>RELIC FORGE</strong><span>How-To</span></div></a>
+    <nav class="rc47b-nav-links"><a href="./upcoming.html">Upcoming Mints</a><a href="./collab.html">Collaboration</a><a href="./studio.html">Open Studio</a></nav>
+  </header>
+  <main class="rc47b-shell">
+    <section class="rc47b-hero">
+      <div class="rc47b-kicker">HOW-TO · RC4.7B</div>
+      <h1>From artwork to the forge.</h1>
+      <p>Relic Forge is currently a release-candidate/testnet implementation. The canonical V1 contracts are not professionally audited and should not be described as mainnet-ready. Read permanent and irreversible actions carefully before signing.</p>
+    </section>
+
+    <section class="rc47b-grid">
+      <article class="rc47b-card half"><div class="rc47b-kicker">01 · CONNECT AND SAVE</div><h2>Connect your creator wallet.</h2><p>Use an EVM wallet to sign into RelicForge Cloud. Cloud projects are scoped to the connected creator wallet so the editable Studio project can be reopened on another device. Downloaded backups remain a separate recovery path.</p><p>Starting a New Project clears the open workspace; it does not delete saved cloud projects or backups. Save before closing if the current work matters.</p></article>
+      <article class="rc47b-card half"><div class="rc47b-kicker">02 · ARTWORK</div><h2>Build the layer stack your way.</h2><p>Upload an organized folder, create empty layer categories and add traits later, or create a category from loose files. Categories and traits remain editable throughout the build, including renaming and reordering.</p><p>Optional full-canvas 1/1 artwork occupies its own collection recipe slot and bypasses normal layered rendering for that token.</p></article>
+
+      <article class="rc47b-card half"><div class="rc47b-kicker">03 · RARITY & METADATA</div><h2>Percentages or exact counts.</h2><p>Set rarity by percentages, exact amounts, tiers, or equal distribution. Auto Fill preserves values you entered manually and distributes only what remains.</p><p>Metadata controls can hide selected None traits globally, hide an entire rendered category from metadata, or hide an individual trait only on tokens that use it. Standalone 1/1s can override token name, description, and custom trait_type/value attributes.</p></article>
+      <article class="rc47b-card half"><div class="rc47b-kicker">04 · RULES</div><h2>Define compatibility before generation.</h2><p>Create compatibility and incompatibility rules between traits. Relic Forge warns about conflicts and can show examples of outcomes before the collection is finalized.</p><p>Rules are part of the deterministic generation input, so review them before sealing content.</p></article>
+
+      <article class="rc47b-card half"><div class="rc47b-kicker">05 · PREVIEW & AUDIT</div><h2>Generate, inspect, curate.</h2><p>The Preview step summarizes supply, layers, rules, manual recipes, duplicates, and exports. Collection Preview is paginated; Rarity Audit groups expandable trait categories.</p><p>Generation is deterministic from the chosen seed. Enter a seed manually, regenerate, or generate a new random 16-character alphanumeric seed. Export the final manifest before permanent steps if you want an independent record.</p></article>
+      <article class="rc47b-card half"><div class="rc47b-kicker">06 · FORGE</div><h2>Create through canonical V1 infrastructure.</h2><p>The canonical V1 Factory creates creator-owned Collection and ProjectData clones. Artwork/DNA are prepared for onchain storage, and Chainlink VRF is used for reveal randomness.</p><p>Choose Sponsored or Minter Supported Relic Forge platform fees. Content finalization does <strong>not</strong> turn minting on. Every new V1 collection begins with Master Mint OFF; the creator must explicitly arm it after checking the deployed collection.</p><p><strong>Permanent actions:</strong> content sealing freezes canonical artwork/DNA/provenance. Controller renounce is irreversible and removes creator sale/content control defined by the contract. Verify addresses, phases, payout, royalties, reveal settings, and content before signing.</p></article>
+
+      <article class="rc47b-card half"><div class="rc47b-kicker">07 · MINT PAGE / UPCOMING</div><h2>Publish the collection once.</h2><p>The public V1 mint page uses the configured public and whitelist phase IDs. It reads phase state from the canonical collection and uses <code>quoteMint()</code> so the submitted value includes the creator price and any live Minter Supported platform fee.</p><p>Add collection and banner media, publish the mint page, and optionally enable <strong>Show on Upcoming Mints</strong> with a start date/time. The public Upcoming page and landing carousel reuse the same title, description, image, chain, contract, and mint-page link—no duplicate promo record is required.</p></article>
+      <article class="rc47b-card half"><div class="rc47b-kicker">08 · COLLABORATION</div><h2>Share editing, never signing authority.</h2><p>Add collaborator EVM wallets from the Collaboration dashboard and grant only the sections they need: Artwork & Layers, Rarity & Metadata, Trait Rules, Curation & Preview, Launch Setup, or Mint Page & Showcase.</p><p>Collaborators sign in with their own wallet. They never receive the creator private key, creator wallet impersonation, deployed NFT ownership, contract controller authority, or creator-only transaction signing.</p><p>Every collaboration save appends a version with actor wallet, changed sections, and a note. Creator rollback creates another new version and keeps all later history and historical artwork available.</p></article>
+
+      <article class="rc47b-card">
+        <div class="rc47b-kicker">REVEAL MODEL</div>
+        <h2>Forge Reveal or Deferred Reveal.</h2>
+        <p><strong>Forge Reveal</strong> resolves random assignment as the mint-time forge flow completes. <strong>Deferred Reveal</strong> leaves minted tokens pending until a later reveal epoch. V1 uses fresh VRF requests, a global no-replacement recipe pool, no rerolls, bounded processing for large reveal epochs, and exact replay behavior if a callback must be recovered.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

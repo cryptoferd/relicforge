@@ -619,6 +619,10 @@
 
   async function init(){
     await hydratePublishedConfig();
+    if(config.schema==='relic-forge/mint-page@2'&&window.RelicForgeMintV1Adapter?.start){
+      await window.RelicForgeMintV1Adapter.start(config);
+      return;
+    }
     if(config.collectionImage)imageInto('mintAvatar',config.collectionImage);if(config.bannerImage)imageInto('mintBanner',config.bannerImage);
     $('networkStat').textContent=Number(config.chainId)===11155111?'Sepolia':Number(config.chainId)===1?'Ethereum':`Chain ${config.chainId}`;
     $('connectBtn').addEventListener('click',connect);$('publicMintBtn').addEventListener('click',publicMint);$('whitelistMintBtn').addEventListener('click',whitelistMint);bindStrictQty('publicQty');bindStrictQty('whitelistQty');

@@ -1,6 +1,7 @@
 import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
 import { deleteObjects } from '../lib/storage.js';
+import { classifyProjectChanges } from '../lib/project-diff.js';
 
 const PROJECT_LIMIT = Math.max(1, Number(process.env.PROJECT_LIMIT || 10));
 
@@ -69,9 +70,7 @@ export default async function projectRoutes(app) {
   app.put('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
     const { name, snapshot } = request.body || {};
     if (!name || !snapshot || typeof snapshot !== 'object') return reply.code(400).send({ error: 'Project name and snapshot are required.' });
-    const incomingRefs = collectAssetIds(snapshot);
     const client = await db.connect();
-    let previousRefs = new Set();
     let created = false;
     try {
       await client.query('BEGIN');
@@ -86,32 +85,38 @@ export default async function projectRoutes(app) {
           throw error;
         }
         created = true;
+        const changed = classifyProjectChanges(null, snapshot);
         await client.query(
           `INSERT INTO projects(id,owner_wallet,name,current_version,snapshot) VALUES($1,$2,$3,1,$4::jsonb)`,
           [request.params.id, request.user.wallet, String(name).slice(0, 180), JSON.stringify(snapshot)]
         );
-        await client.query(`INSERT INTO project_versions(project_id,version,snapshot) VALUES($1,1,$2::jsonb)`, [request.params.id, JSON.stringify(snapshot)]);
+        await client.query(
+          `INSERT INTO project_versions(project_id,version,snapshot,actor_wallet,action,change_sections)
+           VALUES($1,1,$2::jsonb,$3,'owner_save',$4::jsonb)`,
+          [request.params.id, JSON.stringify(snapshot), request.user.wallet, JSON.stringify(changed)]
+        );
       } else {
-        previousRefs = collectAssetIds(existing.rows[0].snapshot);
         const version = Number(existing.rows[0].current_version) + 1;
+        const changed = classifyProjectChanges(existing.rows[0].snapshot, snapshot);
         const owned = await client.query(
           `UPDATE projects SET name=$3,current_version=$4,snapshot=$5::jsonb,updated_at=now()
            WHERE id=$1 AND owner_wallet=$2 RETURNING id`,
           [request.params.id, request.user.wallet, String(name).slice(0, 180), version, JSON.stringify(snapshot)]
         );
         if (!owned.rows.length) throw new Error('Project ownership mismatch.');
-        await client.query(`INSERT INTO project_versions(project_id,version,snapshot) VALUES($1,$2,$3::jsonb)`, [request.params.id, version, JSON.stringify(snapshot)]);
+        await client.query(
+          `INSERT INTO project_versions(project_id,version,snapshot,actor_wallet,action,change_sections)
+           VALUES($1,$2,$3::jsonb,$4,'owner_save',$5::jsonb)`,
+          [request.params.id, version, JSON.stringify(snapshot), request.user.wallet, JSON.stringify(changed)]
+        );
       }
       await client.query('COMMIT');
       const project = await one(`SELECT id,name,current_version,created_at,updated_at FROM projects WHERE id=$1`, [request.params.id]);
-      let cleanup = { deletedAssets: 0, freedBytes: 0 };
-      try {
-        const candidates = new Set([...previousRefs]);
-        cleanup = await cleanupAssets({ ownerWallet: request.user.wallet, projectId: request.params.id, candidateIds: candidates, keepIds: incomingRefs });
-      } catch (error) {
-        app.log.warn({ err: error, projectId: request.params.id }, 'Project saved but obsolete bucket asset cleanup failed');
-      }
-      return { project, limit: PROJECT_LIMIT, ...cleanup };
+
+      // RC4.7B intentionally does NOT delete artwork that disappeared from the latest
+      // snapshot. Historical project_versions remain rollback-capable, so their asset
+      // markers must stay valid. Full project deletion still removes project assets.
+      return { project, limit: PROJECT_LIMIT, deletedAssets: 0, freedBytes: 0 };
     } catch (error) {
       await client.query('ROLLBACK');
       if (created || error.statusCode === 409) {
@@ -138,12 +143,15 @@ export default async function projectRoutes(app) {
     if (!rows.length) return reply.code(404).send({ error: 'Project not found.' });
     return { project: rows[0] };
   });
+
   app.delete('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
     const project = await one('SELECT id,name,snapshot FROM projects WHERE id=$1 AND owner_wallet=$2', [request.params.id, request.user.wallet]);
     if (!project) return reply.code(404).send({ error: 'Project not found.' });
     const projectRefs = collectAssetIds(project.snapshot);
     let cleanup = { deletedAssets: 0, freedBytes: 0 };
     try {
+      // Selecting by project_id removes every historical project asset, not merely
+      // those still referenced by the latest snapshot.
       cleanup = await cleanupAssets({ ownerWallet: request.user.wallet, projectId: request.params.id, candidateIds: projectRefs, keepIds: new Set() });
     } catch (error) {
       request.log.error({ err: error, projectId: request.params.id }, 'Could not free project bucket objects');

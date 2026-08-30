@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090909" />
+  <title>Upcoming Mints — Relic Forge</title>
+  <meta name="description" content="Discover creator-published Relic Forge collections with upcoming mint starts." />
+  <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
+  <link rel="stylesheet" href="./styles.css?v=rc4.7a.1" />
+  <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
+</head>
+<body class="rc47b-page">
+  <header class="rc47b-nav">
+    <a class="rc47b-brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><div><strong>RELIC FORGE</strong><span>Upcoming Mints</span></div></a>
+    <nav class="rc47b-nav-links"><a href="./how-to.html">How-To</a><a href="./collab.html">Collaboration</a><a href="./studio.html">Studio</a></nav>
+  </header>
+  <main class="rc47b-shell">
+    <section class="rc47b-hero">
+      <div class="rc47b-kicker">UPCOMING MINTS</div>
+      <h1>Next out of the forge.</h1>
+      <p>Collections shown here are creator-published and opt-in. A listing is not an audit, endorsement, or guarantee; inspect the collection and mint terms before signing.</p>
+    </section>
+    <section class="rc47b-grid">
+      <article class="rc47b-card">
+        <div class="rc47b-row"><div><h2>Mint schedule</h2><small>Upcoming starts first, plus recently started mints for roughly 24 hours.</small></div><button class="rc47b-btn" id="upcomingRefreshBtn" type="button">Refresh</button></div>
+        <div class="rc47b-status" id="upcomingStatus">Loading creator-published mints…</div>
+        <div class="rc47b-mint-grid" id="upcomingGrid" style="margin-top:16px"></div>
+      </article>
+    </section>
+  </main>
+  <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="./upcoming.js?v=rc4.7b"></script>
+</body>
+</html>
