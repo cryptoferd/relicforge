@@ -18,6 +18,8 @@
     'function feePolicy() view returns (address)',
     'function randomnessProvider() view returns (address)',
     'function renderer() view returns (address)',
+    'function creatorCollectionCount(address creator) view returns (uint256)',
+    'function creatorCollectionAt(address creator,uint256 index) view returns (address)',
     'event CollectionCreated(address indexed creator,address indexed collection,address indexed projectData,uint256 number)',
     'event CollectionFeeTerms(address indexed collection,uint8 feeMode,uint32 lockedFeeCents,uint256 upfrontFeeWei,bool oracleHealthy,bool feeActive)'
   ];
@@ -37,18 +39,36 @@
     'function validateNextRecipes(uint32 quantity)',
     'function validatedRecipeCursor() view returns(uint64)',
     'function sealContent(bytes32 provenanceHash)',
-    'function contentSealed() view returns(bool)'
+    'function contentSealed() view returns(bool)',
+    'function provenanceHash() view returns(bytes32)'
   ];
 
   const V1_COLLECTION_ABI = [
+    'function name() view returns(string)',
+    'function symbol() view returns(string)',
+    'function description() view returns(string)',
+    'function creator() view returns(address)',
     'function dataContract() view returns(address)',
     'function controller() view returns(address)',
+    'function payoutReceiver() view returns(address)',
+    'function royaltyReceiver() view returns(address)',
+    'function royaltyBps() view returns(uint96)',
+    'function holderRenderModeEnabled() view returns(bool)',
+    'function defaultRenderMode() view returns(uint8)',
+    'function flattenedRenderBaseURI() view returns(string)',
     'function maxSupply() view returns(uint32)',
     'function totalMinted() view returns(uint32)',
     'function masterMintEnabled() view returns(bool)',
+    'function futureRevealMode() view returns(uint8)',
     'function phaseCount() view returns(uint32)',
+    'function phases(uint32) view returns(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 minted,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled)',
+    'function phaseIsOpen(uint32 phaseId) view returns(bool)',
     'function createPhase(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled) returns(uint32 phaseId)',
     'function setMasterMintEnabled(bool enabled)',
+    'function setPhaseEnabled(uint32 phaseId,bool enabled)',
+    'function updatePhase(uint32 phaseId,uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority)',
+    'function setPayoutReceiver(address receiver)',
+    'function setRoyalty(address receiver,uint96 bps)',
     'function setFutureRevealMode(uint8 mode)',
     'function setRenderConfig(string baseURI,bool holderEnabled,uint8 defaultMode)',
     'function quoteMint(uint32 phaseId,uint32 quantity) view returns(uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
@@ -1972,12 +1992,24 @@ ${await file.text()}`;
       if ($('forgeProcessRevealBtn')) $('forgeProcessRevealBtn').disabled = false;
       if ($('forgeInspectBtn')) $('forgeInspectBtn').disabled = false;
 
-      // V1 public mint-page ABI adaptation is a separate patch. Do not publish an old V11 ABI page.
-      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = true;
-      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = true;
-      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = true;
-      if ($('mintPageStatus')) $('mintPageStatus').textContent =
-        'V1 collection forged. Public mint-page ABI/phase integration will be enabled in the next UI patch; the old V11 mint page is intentionally disabled.';
+      const rc47bMintPageReady = !!window.RelicForgeCloud?.__rc47bPublishWrapped;
+      if ($('openMintPageBtn')) $('openMintPageBtn').disabled = !rc47bMintPageReady;
+      if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !rc47bMintPageReady || !window.RelicForgeCloud?.enabled?.();
+      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = !rc47bMintPageReady;
+      if ($('mintPageStatus')) $('mintPageStatus').textContent = rc47bMintPageReady
+        ? 'Canonical V1 mint-page adapter ready. Registering this forged collection with RelicForge Cloud…'
+        : 'V1 collection forged. Open the Creator Dashboard to recover/register this collection if the mint-page adapter is unavailable.';
+
+      if (rc47bMintPageReady && window.RelicForgeCloud?.enabled?.() && (forgeState.publicPhaseId || forgeState.whitelistPhaseId)) {
+        try {
+          await publishMintPageCloud(forgeState.collectionAddress);
+          if ($('mintPageStatus')) $('mintPageStatus').textContent =
+            '✓ Canonical V1 mint page registered with RelicForge Cloud. Upcoming Mints settings were published if enabled.';
+        } catch (registrationError) {
+          if ($('mintPageStatus')) $('mintPageStatus').textContent =
+            `V1 collection forged, but Cloud registration did not complete: ${registrationError.message}. The Creator Dashboard can recover this collection from the canonical factory without redeploying it.`;
+        }
+      }
 
       log(
         'forgeTestStatus',
@@ -2300,6 +2332,7 @@ ${await file.text()}`;
       if (!out.some(x => x.toLowerCase() === normalized.toLowerCase())) out.push(normalized);
     };
     try { (JSON.parse(localStorage.getItem(FACTORY_REGISTRY_KEY) || '[]') || []).forEach(push); } catch (_) {}
+    try { push(canonicalV1Config().factory); } catch (_) {}
     push(forgeState.infra?.factory);
     push($('factoryAddress')?.value.trim());
     push($('launchedFactoryInput')?.value.trim());
@@ -2344,7 +2377,7 @@ ${await file.text()}`;
     }
   }
 
-  async function collectionDashboardSnapshot(address, runner = readProvider(11155111) || forgeState.provider) {
+  async function legacyCollectionDashboardSnapshot(address, runner) {
     const c = new window.ethers.Contract(address, COLLECTION_DASHBOARD_ABI, runner);
     const [name, symbol, description, owner, maxSupply, totalMinted, mintPrice, maxPerWallet, publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId, snapshotBlock, sourceType, royaltyReceiver, royaltyBps, revealMode, creatorRevealSeed, finalized, sealed, provenance, holderRenderEnabled, defaultRenderMode, flattenedRenderBaseURI] = await Promise.all([
       c.name(), c.symbol(), c.description(), c.owner(), c.maxSupply(), c.totalMinted(), c.mintPrice(), c.maxPerWallet(), c.publicMintEnabled(), c.whitelistMintEnabled(), c.whitelistRoot(), c.whitelistMintPrice(),
@@ -2352,12 +2385,128 @@ ${await file.text()}`;
       c.holderRenderModeEnabled().catch(() => false), c.defaultRenderMode().catch(() => 0n), c.flattenedRenderBaseURI().catch(() => '')
     ]);
     return {
+      isV1: false,
       address, name, symbol, description, owner,
       maxSupply: Number(maxSupply), totalMinted: Number(totalMinted), mintPrice, maxPerWallet: Number(maxPerWallet),
       publicEnabled, whitelistEnabled, root, whitelistPrice, sourceContract, sourceChainId: Number(sourceChainId), snapshotBlock: Number(snapshotBlock), sourceType: Number(sourceType),
       royaltyReceiver, royaltyBps: Number(royaltyBps), revealMode: Number(revealMode), creatorRevealSeed: BigInt(creatorRevealSeed), finalized, sealed, provenance,
       holderRenderEnabled: Boolean(holderRenderEnabled), defaultRenderMode: Number(defaultRenderMode), flattenedRenderBaseURI,
     };
+  }
+
+  async function collectionDashboardSnapshot(address, runner = readProvider(11155111) || forgeState.provider) {
+    const v1 = new window.ethers.Contract(address, V1_COLLECTION_ABI, runner);
+    try {
+      const creator = await v1.creator();
+      const [
+        name, symbol, description, controller, dataAddress, payoutReceiver, royaltyReceiver, royaltyBps,
+        maxSupply, totalMinted, masterMintEnabled, futureRevealMode, phaseCount,
+        holderRenderEnabled, defaultRenderMode, flattenedRenderBaseURI
+      ] = await Promise.all([
+        v1.name(), v1.symbol(), v1.description(), v1.controller(), v1.dataContract(), v1.payoutReceiver(), v1.royaltyReceiver(), v1.royaltyBps(),
+        v1.maxSupply(), v1.totalMinted(), v1.masterMintEnabled(), v1.futureRevealMode(), v1.phaseCount(),
+        v1.holderRenderModeEnabled().catch(() => false), v1.defaultRenderMode().catch(() => 0n), v1.flattenedRenderBaseURI().catch(() => '')
+      ]);
+
+      const totalPhases = Number(phaseCount);
+      if (!Number.isSafeInteger(totalPhases) || totalPhases < 0) throw new Error('Invalid V1 phaseCount response.');
+      const scanCount = Math.min(totalPhases, 500);
+      const phases = [];
+      for (let start = 1; start <= scanCount; start += 25) {
+        const ids = Array.from({ length: Math.min(25, scanCount - start + 1) }, (_, i) => start + i);
+        const rows = await Promise.all(ids.map(async id => {
+          const raw = await v1.phases(id);
+          let open = false;
+          try { open = Boolean(await v1.phaseIsOpen(id)); } catch (_) {}
+          return {
+            id,
+            price: BigInt(raw.price ?? raw[0] ?? 0n),
+            startTime: Number(raw.startTime ?? raw[1] ?? 0n),
+            endTime: Number(raw.endTime ?? raw[2] ?? 0n),
+            phaseSupply: Number(raw.phaseSupply ?? raw[3] ?? 0n),
+            minted: Number(raw.minted ?? raw[4] ?? 0n),
+            maxPerWallet: Number(raw.maxPerWallet ?? raw[5] ?? 0n),
+            merkleRoot: String(raw.merkleRoot ?? raw[6] ?? window.ethers.ZeroHash),
+            accessType: Number(raw.accessType ?? raw[7] ?? 0n),
+            priority: Number(raw.priority ?? raw[8] ?? 0n),
+            enabled: Boolean(raw.enabled ?? raw[9] ?? false),
+            open,
+          };
+        }));
+        phases.push(...rows);
+      }
+
+      const publicPhases = phases.filter(phase => phase.accessType === 0);
+      const whitelistPhases = phases.filter(phase => phase.accessType === 1);
+      const preferred = rows => [...rows].sort((a, b) =>
+        Number(b.open) - Number(a.open) ||
+        Number(b.enabled) - Number(a.enabled) ||
+        b.priority - a.priority ||
+        a.id - b.id
+      )[0] || null;
+      const publicPhase = preferred(publicPhases);
+      const whitelistPhase = preferred(whitelistPhases);
+
+      let contentSealed = false;
+      let provenance = window.ethers.ZeroHash;
+      try {
+        const data = new window.ethers.Contract(dataAddress, V1_PROJECT_DATA_ABI, runner);
+        [contentSealed, provenance] = await Promise.all([data.contentSealed(), data.provenanceHash()]);
+      } catch (_) {}
+
+      const controllerActive = String(controller).toLowerCase() !== window.ethers.ZeroAddress.toLowerCase();
+      return {
+        isV1: true,
+        address: window.ethers.getAddress(address),
+        name, symbol, description,
+        owner: window.ethers.getAddress(creator),
+        creator: window.ethers.getAddress(creator),
+        controller: window.ethers.getAddress(controller),
+        controllerActive,
+        dataAddress: window.ethers.getAddress(dataAddress),
+        payoutReceiver: window.ethers.getAddress(payoutReceiver),
+        maxSupply: Number(maxSupply),
+        totalMinted: Number(totalMinted),
+        masterMintEnabled: Boolean(masterMintEnabled),
+        futureRevealMode: Number(futureRevealMode),
+        phaseCount: totalPhases,
+        phases,
+        phasesTruncated: totalPhases > scanCount,
+        publicPhases,
+        whitelistPhases,
+        publicPhaseId: publicPhase?.id || null,
+        whitelistPhaseId: whitelistPhase?.id || null,
+        publicPhase,
+        whitelistPhase,
+        mintPrice: publicPhase?.price || 0n,
+        maxPerWallet: publicPhase?.maxPerWallet || 0,
+        publicEnabled: Boolean(publicPhase?.enabled),
+        whitelistEnabled: Boolean(whitelistPhase?.enabled),
+        root: whitelistPhase?.merkleRoot || window.ethers.ZeroHash,
+        whitelistPrice: whitelistPhase?.price || 0n,
+        sourceContract: window.ethers.ZeroAddress,
+        sourceChainId: 0,
+        snapshotBlock: 0,
+        sourceType: 0,
+        royaltyReceiver: window.ethers.getAddress(royaltyReceiver),
+        royaltyBps: Number(royaltyBps),
+        revealMode: Number(futureRevealMode) === 1 ? 0 : 1,
+        creatorRevealSeed: 0n,
+        finalized: Boolean(contentSealed),
+        sealed: Boolean(contentSealed),
+        contentSealed: Boolean(contentSealed),
+        provenance,
+        holderRenderEnabled: Boolean(holderRenderEnabled),
+        defaultRenderMode: Number(defaultRenderMode),
+        flattenedRenderBaseURI,
+      };
+    } catch (v1Error) {
+      try {
+        return await legacyCollectionDashboardSnapshot(address, runner);
+      } catch (_) {
+        throw v1Error;
+      }
+    }
   }
 
   async function loadLaunchedProjects() {
@@ -2385,9 +2534,29 @@ ${await file.text()}`;
         const rp = readProvider(11155111) || forgeState.provider;
         const code = await rp.getCode(factoryAddress);
         if (!code || code === '0x') continue;
-        const factory = new window.ethers.Contract(factoryAddress, FACTORY_DASHBOARD_ABI, rp);
-        const found = await factory.collectionsByCreator(wallet);
-        found.forEach(address => addresses.add(String(address).toLowerCase()));
+        const factory = new window.ethers.Contract(factoryAddress, [
+          'function creatorCollectionCount(address creator) view returns(uint256)',
+          'function creatorCollectionAt(address creator,uint256 index) view returns(address)',
+          'function collectionsByCreator(address creator) view returns(address[])'
+        ], rp);
+        let v1Found = false;
+        try {
+          const count = Number(await factory.creatorCollectionCount(wallet));
+          if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid V1 creator collection count.');
+          const bounded = Math.min(count, 5000);
+          for (let start = 0; start < bounded; start += 50) {
+            const indexes = Array.from({ length: Math.min(50, bounded - start) }, (_, i) => start + i);
+            const found = await Promise.all(indexes.map(index => factory.creatorCollectionAt(wallet, index)));
+            found.forEach(address => addresses.add(String(address).toLowerCase()));
+          }
+          v1Found = true;
+        } catch (_) {}
+        if (!v1Found) {
+          try {
+            const found = await factory.collectionsByCreator(wallet);
+            found.forEach(address => addresses.add(String(address).toLowerCase()));
+          } catch (_) {}
+        }
       } catch (_) {}
     }
     const snapshots = [];
@@ -2406,7 +2575,7 @@ ${await file.text()}`;
         <button class="launched-collection-item${forgeState.launchedSelected?.toLowerCase() === item.address.toLowerCase() ? ' selected' : ''}" data-launched-address="${esc(item.address)}" type="button">
           <strong>${esc(item.name || 'Unnamed collection')}</strong>
           <span>${esc(item.symbol || '')} · ${item.totalMinted.toLocaleString()} / ${item.maxSupply.toLocaleString()} minted</span>
-          <small>${esc(shortAddr(item.address))}${item.sealed ? ' · SEALED' : ''}</small>
+          <small>${esc(shortAddr(item.address))}${item.isV1 ? (item.controllerActive ? ' · V1' : ' · V1 · CONTROL RENOUNCED') : (item.sealed ? ' · SEALED' : '')}</small>
         </button>`).join('') : '<div class="forge-market-empty">No launched collections found for this wallet with the known Sepolia factories.</div>';
       list.querySelectorAll('[data-launched-address]').forEach(button => button.addEventListener('click', () => openLaunchedCollection(button.dataset.launchedAddress)));
     }
@@ -2419,10 +2588,281 @@ ${await file.text()}`;
     }
   }
 
+  function dashboardDatetimeLocal(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  function dashboardV1PhaseOptions(phases, selected) {
+    const selectedId = Number(selected || 0);
+    const rows = ['<option value="">None</option>'];
+    for (const phase of phases || []) {
+      const state = phase.open ? 'OPEN' : (phase.enabled ? 'Enabled' : 'Disabled');
+      rows.push(`<option value="${phase.id}" ${phase.id === selectedId ? 'selected' : ''}>Phase ${phase.id} · ${state} · ${esc(window.ethers.formatEther(phase.price))} ETH</option>`);
+    }
+    return rows.join('');
+  }
+
+  function dashboardV1PhaseRows(snap) {
+    if (!snap.phases?.length) return '<div class="forge-market-empty">No V1 mint phases have been created.</div>';
+    return `<div class="forge-rows">${snap.phases.map(phase => {
+      const access = phase.accessType === 1 ? 'Merkle' : 'Public';
+      const state = phase.open ? 'OPEN' : (phase.enabled ? 'Enabled / not open' : 'Disabled');
+      const limit = phase.maxPerWallet ? `${phase.maxPerWallet} / wallet` : 'Unlimited / wallet';
+      const supply = phase.phaseSupply ? `${phase.minted}/${phase.phaseSupply}` : `${phase.minted} minted`;
+      return `<div class="forge-row"><span>Phase ${phase.id} · ${access}</span><strong>${esc(window.ethers.formatEther(phase.price))} ETH · ${esc(state)} · ${esc(limit)} · ${esc(supply)}</strong></div>`;
+    }).join('')}</div>${snap.phasesTruncated ? '<small class="forge-footnote">Only the first 500 phases are shown in the browser recovery view.</small>' : ''}`;
+  }
+
+  async function publishRecoveredV1MintPage(snap) {
+    if (!window.RelicForgeCloud?.enabled?.()) throw new Error('RelicForge Cloud is not configured.');
+    if (!forgeState.wallet) await connectWallet();
+    await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
+
+    const current = await publishedMintPageConfig(snap.address);
+    const imageAsset = forgeState.dashboardMintPageImageFile
+      ? await window.RelicForgeCloud.uploadAsset(forgeState.dashboardMintPageImageFile, { purpose: 'mint-page' })
+      : null;
+    const bannerAsset = forgeState.dashboardMintPageBannerFile
+      ? await window.RelicForgeCloud.uploadAsset(forgeState.dashboardMintPageBannerFile, { purpose: 'mint-page' })
+      : null;
+
+    const publicPhaseId = Number($('dashboardV1PublicPhase')?.value || 0) || null;
+    const whitelistPhaseId = Number($('dashboardV1WhitelistPhase')?.value || 0) || null;
+    if (publicPhaseId && !snap.publicPhases.some(phase => phase.id === publicPhaseId)) throw new Error('Selected Public phase is not a canonical V1 public phase.');
+    if (whitelistPhaseId && !snap.whitelistPhases.some(phase => phase.id === whitelistPhaseId)) throw new Error('Selected Whitelist phase is not a canonical V1 Merkle phase.');
+
+    const showcaseEnabled = !!$('dashboardV1ShowcaseEnabled')?.checked;
+    const rawStart = $('dashboardV1ShowcaseStart')?.value || '';
+    let showcaseStart = null;
+    if (rawStart) {
+      const parsed = new Date(rawStart);
+      if (!Number.isFinite(parsed.getTime())) throw new Error('Upcoming Mints start date/time is invalid.');
+      showcaseStart = parsed.toISOString();
+    }
+    if (showcaseEnabled && !showcaseStart) throw new Error('Choose a mint start date/time before enabling Upcoming Mints.');
+
+    const config = {
+      schema: 'relic-forge/mint-page@2',
+      chainId: 11155111,
+      contract: snap.address,
+      title: String($('dashboardV1Title')?.value || snap.name || 'Relic Forge Collection').trim(),
+      description: String($('dashboardV1Description')?.value || snap.description || '').trim(),
+      publicPhaseId,
+      whitelistPhaseId,
+      collectionImageAssetId: imageAsset?.id || current.collectionImageAssetId || null,
+      bannerImageAssetId: bannerAsset?.id || current.bannerImageAssetId || null,
+      showcaseEnabled,
+      showcaseStart,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await window.RelicForgeCloud.json(
+      `/api/rc47b/collections/11155111/${encodeURIComponent(snap.address)}/mint-page`,
+      { method: 'PUT', body: JSON.stringify({ projectId: null, config }) },
+      true
+    );
+
+    forgeState.dashboardMintPageImageFile = null;
+    forgeState.dashboardMintPageBannerFile = null;
+    try {
+      const refreshed = await publishedMintPageConfig(snap.address);
+      writeMintPageConfig(refreshed);
+    } catch (_) {}
+    return result?.config || config;
+  }
+
+  async function handleV1LaunchedAction(action, snap) {
+    try {
+      if (!forgeState.signer) await connectWallet();
+      const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
+      const contract = new window.ethers.Contract(snap.address, V1_COLLECTION_ABI, forgeState.signer);
+
+      if (action === 'mintpage') {
+        const config = await publishedMintPageConfig(snap.address);
+        if (config.schema !== 'relic-forge/mint-page@2') throw new Error('Publish this recovered V1 mint page before opening it.');
+        window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
+        return;
+      }
+
+      if (!isOwner) throw new Error('Connected wallet is not the collection creator.');
+
+      if (action === 'publish') {
+        launchedStatus('Publishing recovered V1 mint page to RelicForge Cloud…');
+        const config = await publishRecoveredV1MintPage(snap);
+        launchedStatus(config.showcaseEnabled ? 'V1 mint page published and Upcoming Mints enabled.' : 'V1 mint page published and collection registered with RelicForge Cloud.');
+        await loadLaunchedProjects();
+        return;
+      }
+
+      if (!snap.controllerActive) throw new Error('V1 controller has been renounced; creator onchain controls are permanently disabled.');
+
+      if (action === 'mastermint') {
+        const next = !snap.masterMintEnabled;
+        launchedStatus(`${next ? 'Enabling' : 'Disabling'} V1 master mint…`);
+        const tx = await contract.setMasterMintEnabled(next);
+        launchedStatus(`Transaction submitted · ${tx.hash.slice(0, 12)}…`);
+        await tx.wait();
+        launchedStatus(`V1 master mint ${next ? 'enabled' : 'disabled'}.`);
+      } else if (action === 'creatormint') {
+        const quantity = Math.max(1, Math.min(50, Math.floor(Number($('dashboardV1CreatorMintQty')?.value || 1))));
+        launchedStatus(`Creator minting ${quantity} V1 NFT${quantity === 1 ? '' : 's'}…`);
+        const tx = await contract.creatorMint(forgeState.wallet, quantity);
+        launchedStatus(`Creator Mint submitted · ${tx.hash.slice(0, 12)}…`);
+        await tx.wait();
+        launchedStatus('V1 Creator Mint confirmed.');
+      }
+
+      await loadLaunchedProjects();
+    } catch (error) {
+      launchedStatus(`Dashboard error: ${error.shortMessage || error.message}`);
+    }
+  }
+
+  async function openV1LaunchedCollection(snap) {
+    forgeState.launchedSelected = snap.address;
+    $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button => {
+      button.classList.toggle('selected', button.dataset.launchedAddress.toLowerCase() === snap.address.toLowerCase());
+    });
+
+    const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
+    const canControl = isOwner && snap.controllerActive;
+    const dashboardMintConfig = await publishedMintPageConfig(snap.address);
+    const publishedV1 = dashboardMintConfig.schema === 'relic-forge/mint-page@2';
+    const dashboardMintImage = dashboardMintConfig.collectionImage || '';
+    const dashboardMintBanner = dashboardMintConfig.bannerImage || '';
+    const selectedPublic = snap.publicPhases.some(phase => phase.id === Number(dashboardMintConfig.publicPhaseId))
+      ? Number(dashboardMintConfig.publicPhaseId)
+      : snap.publicPhaseId;
+    const selectedWhitelist = snap.whitelistPhases.some(phase => phase.id === Number(dashboardMintConfig.whitelistPhaseId))
+      ? Number(dashboardMintConfig.whitelistPhaseId)
+      : snap.whitelistPhaseId;
+
+    forgeState.dashboardMintPageImageFile = null;
+    forgeState.dashboardMintPageBannerFile = null;
+
+    const detail = $('launchedCollectionDetail');
+    if (!detail) return;
+    detail.innerHTML = `
+      <div class="launched-detail-head">
+        <div><span class="eyebrow">CANONICAL V1 COLLECTION</span><h3>${esc(snap.name)}</h3><p>${esc(snap.address)}</p></div>
+        <span class="launched-badge ${snap.controllerActive ? 'good' : 'warn'}">${snap.controllerActive ? 'CREATOR CONTROL ACTIVE' : 'CONTROL RENOUNCED'}</span>
+      </div>
+      ${isOwner ? '' : '<div class="launched-owner-warning">The connected wallet is not the creator of this collection. Creator actions are disabled.</div>'}
+      <div class="launched-stats">
+        <div><span>Supply</span><strong>${snap.totalMinted.toLocaleString()} / ${snap.maxSupply.toLocaleString()}</strong></div>
+        <div><span>Master Mint</span><strong>${snap.masterMintEnabled ? 'ON' : 'OFF'}</strong></div>
+        <div><span>Reveal</span><strong>${snap.futureRevealMode === 1 ? 'Forge Reveal' : 'Deferred Reveal'}</strong></div>
+        <div><span>Phases</span><strong>${snap.phaseCount.toLocaleString()}</strong></div>
+      </div>
+
+      <div class="launched-actions">
+        <button class="ghost-btn" data-v1-dashboard-action="mintpage" ${publishedV1 ? '' : 'disabled'} type="button">Open Public Mint Page</button>
+        <a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/${esc(snap.address)}" rel="noreferrer" target="_blank">View on Etherscan</a>
+      </div>
+
+      <div class="launched-section">
+        <h4>V1 Mint Page & Upcoming Mints</h4>
+        <p class="forge-footnote">This recovery panel registers an already-forged V1 collection with RelicForge Cloud. It does not redeploy or alter your NFT artwork.</p>
+        <div class="launched-controls-grid">
+          <label class="field"><span>Display title</span><input id="dashboardV1Title" type="text" maxlength="180" value="${esc(dashboardMintConfig.title || snap.name || '')}" ${!isOwner ? 'disabled' : ''}/></label>
+          <label class="field"><span>Public phase</span><select id="dashboardV1PublicPhase" ${!isOwner ? 'disabled' : ''}>${dashboardV1PhaseOptions(snap.publicPhases, selectedPublic)}</select></label>
+          <label class="field"><span>Whitelist phase</span><select id="dashboardV1WhitelistPhase" ${!isOwner ? 'disabled' : ''}>${dashboardV1PhaseOptions(snap.whitelistPhases, selectedWhitelist)}</select></label>
+          <label class="field"><span>Mint start</span><input id="dashboardV1ShowcaseStart" type="datetime-local" value="${esc(dashboardDatetimeLocal(dashboardMintConfig.showcaseStart))}" ${!isOwner ? 'disabled' : ''}/><small>Used for Upcoming Mints and the homepage carousel.</small></label>
+        </div>
+        <label class="field"><span>Description</span><textarea id="dashboardV1Description" maxlength="3000" rows="3" ${!isOwner ? 'disabled' : ''}>${esc(dashboardMintConfig.description || snap.description || '')}</textarea></label>
+        <label class="project-toggle-row"><span><strong>Show on Upcoming Mints</strong><small>Opt this published V1 mint page into Relic Forge discovery.</small></span><input id="dashboardV1ShowcaseEnabled" type="checkbox" ${dashboardMintConfig.showcaseEnabled ? 'checked' : ''} ${!isOwner ? 'disabled' : ''}/></label>
+
+        <div class="mint-page-builder-grid dashboard-mint-page-builder">
+          <div class="mint-page-media-settings">
+            <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
+            <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
+            <div class="launched-actions">
+              <button class="primary-btn" data-v1-dashboard-action="publish" ${!isOwner ? 'disabled' : ''} type="button">${publishedV1 ? 'Update / Publish Mint Page' : 'Register & Publish Mint Page'}</button>
+              <button class="ghost-btn" data-v1-dashboard-action="mintpage" ${publishedV1 ? '' : 'disabled'} type="button">Open Mint Page</button>
+            </div>
+            <small class="forge-footnote">${publishedV1 ? 'This collection is registered with RelicForge Cloud.' : 'This collection exists onchain but has not yet been registered with RelicForge Cloud.'} Whitelist wallet proofs are not recreated from chain state; if this collection uses a whitelist, reopen the saved Studio project to republish its proof table.</small>
+          </div>
+          <div class="mint-page-studio-preview">
+            <div class="mint-page-preview-banner" id="dashboardMintPagePreviewBanner">${dashboardMintBanner ? `<img src="${esc(dashboardMintBanner)}" alt=""/>` : '<span>BANNER</span>'}</div>
+            <div class="mint-page-preview-content">
+              <div class="mint-page-preview-avatar" id="dashboardMintPagePreviewImage">${dashboardMintImage ? `<img src="${esc(dashboardMintImage)}" alt=""/>` : '<span>RF</span>'}</div>
+              <div><small>CANONICAL V1</small><strong>${esc(dashboardMintConfig.title || snap.name)}</strong><p>${esc(dashboardMintConfig.description || snap.description || 'A fully onchain collection forged with Relic Forge.')}</p></div>
+              <div class="mint-page-preview-action"><span>Mint</span><button type="button" disabled>Connect Wallet</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="launched-section">
+        <h4>V1 Onchain Controls</h4>
+        <p class="forge-footnote">Collection content is ${snap.contentSealed ? 'sealed' : 'not sealed'}. V1 sale controls remain creator-controlled until controller renunciation.</p>
+        <div class="launched-actions">
+          <button class="primary-btn" data-v1-dashboard-action="mastermint" ${canControl ? '' : 'disabled'} type="button">${snap.masterMintEnabled ? 'Disable Master Mint' : 'Enable Master Mint'}</button>
+          <label class="field"><span>Creator Mint quantity</span><input id="dashboardV1CreatorMintQty" min="1" max="${Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted))}" type="number" value="1" ${canControl && snap.totalMinted < snap.maxSupply ? '' : 'disabled'}/></label>
+          <button class="ghost-btn" data-v1-dashboard-action="creatormint" ${canControl && snap.totalMinted < snap.maxSupply ? '' : 'disabled'} type="button">Creator Mint</button>
+        </div>
+      </div>
+
+      <div class="launched-section">
+        <h4>Mint Phases</h4>
+        ${dashboardV1PhaseRows(snap)}
+      </div>
+
+      <div class="launched-section">
+        <h4>Collection Integrity</h4>
+        <div class="forge-rows">
+          <div class="forge-row"><span>ProjectData</span><strong>${esc(shortAddr(snap.dataAddress))}</strong></div>
+          <div class="forge-row"><span>Content sealed</span><strong>${snap.contentSealed ? 'Yes' : 'No'}</strong></div>
+          <div class="forge-row"><span>Provenance</span><strong>${esc(shortAddr(snap.provenance))}</strong></div>
+          <div class="forge-row"><span>Controller</span><strong>${snap.controllerActive ? esc(shortAddr(snap.controller)) : 'Renounced'}</strong></div>
+        </div>
+      </div>
+
+      <div class="launched-tx-status" id="launchedTxStatus">Ready.</div>`;
+
+    detail.querySelectorAll('[data-v1-dashboard-action]').forEach(button => {
+      button.addEventListener('click', () => handleV1LaunchedAction(button.dataset.v1DashboardAction, snap));
+    });
+
+    $('dashboardMintPageImageInput')?.addEventListener('change', async event => {
+      try {
+        forgeState.dashboardMintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
+        if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile
+          ? `${forgeState.dashboardMintPageImageFile.name} · ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB`
+          : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file');
+        const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
+        setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
+      } catch (error) {
+        event.target.value = '';
+        forgeState.dashboardMintPageImageFile = null;
+        if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = `Image rejected: ${error.message}`;
+      }
+    });
+
+    $('dashboardMintPageBannerInput')?.addEventListener('change', async event => {
+      try {
+        forgeState.dashboardMintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
+        if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile
+          ? `${forgeState.dashboardMintPageBannerFile.name} · ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB`
+          : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file');
+        const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
+        setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
+      } catch (error) {
+        event.target.value = '';
+        forgeState.dashboardMintPageBannerFile = null;
+        if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = `Banner rejected: ${error.message}`;
+      }
+    });
+  }
+
   async function openLaunchedCollection(address) {
     try {
       if (!forgeState.signer) await connectWallet();
       const snap = await collectionDashboardSnapshot(address, forgeState.signer);
+      if (snap.isV1) { await openV1LaunchedCollection(snap); return; }
       forgeState.launchedSelected = snap.address;
       $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button => button.classList.toggle('selected', button.dataset.launchedAddress.toLowerCase() === snap.address.toLowerCase()));
       const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
