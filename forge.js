@@ -1578,8 +1578,10 @@ ${await file.text()}`;
     if (!window.ethers || !$('vrfQuoteStatus')) return;
     try {
       const requests = requestedVrfFundingRequests();
-      const price = await v1RandomnessContract().quoteRequestPrice();
-      if (price <= 0n) throw new Error('Chainlink wrapper returned a zero request price.');
+      const live = await liveSepoliaGasPrice();
+      if (!live?.gasPrice) throw new Error('Live Sepolia gas price is unavailable for the Chainlink VRF estimate.');
+      const price = await v1RandomnessContract().quoteRequestPrice({ gasPrice: live.gasPrice });
+      if (price <= 0n) throw new Error('Chainlink wrapper returned a zero request price even with a live gas-price simulation.');
       const funded = (price * BigInt(requests) * 120n + 99n) / 100n;
       $('vrfQuoteStatus').textContent =
         `Current VRF request ~ ${Number(window.ethers.formatEther(price)).toFixed(6)} ETH  -  initial isolated credit ~ ${Number(window.ethers.formatEther(funded)).toFixed(6)} ETH (${requests} requests + 20% buffer).`;
