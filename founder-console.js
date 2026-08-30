@@ -292,7 +292,7 @@
   }
 
   function setNormalProjectControlsDisabled(disabled) {
-    ['saveProjectBtn','openProjectsBtn','importProjectBtn','exportProjectBtn'].forEach(id => {
+    ['newProjectBtn','saveProjectBtn','openProjectsBtn','importProjectBtn','exportProjectBtn'].forEach(id => {
       const node = $(id);
       if (!node) return;
       node.disabled = !!disabled;

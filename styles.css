@@ -2006,4 +2006,58 @@ body.modal-open { overflow: hidden; }
   .seed-actions,.preview-export-actions{justify-content:stretch}
   .seed-actions>*,.preview-export-actions>*{flex:1}
   .preview-section-tabs button{flex:1}
+}/* RC4.7A.1 — full-width Preview workspace */
+.preview-controls {
+  display: block;
+  width: 100%;
+  padding: 18px 30px 0;
 }
+.preview-summary-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+}
+.preview-summary-top .stats-grid {
+  flex: 1 1 auto;
+}
+.preview-export-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.preview-section-tabs {
+  margin: 16px 0 0;
+}
+.preview-tab-panel {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.preview-tab-panel .collection-preview-toolbar {
+  margin: 18px 0 0;
+  width: 100%;
+}
+.preview-tab-panel .preview-grid {
+  padding: 12px 0 30px;
+  width: 100%;
+}
+#previewRarityPanel .rarity-audit {
+  width: 100%;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .preview-controls {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .preview-summary-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .preview-export-actions {
+    justify-content: stretch;
+  }
+}
+

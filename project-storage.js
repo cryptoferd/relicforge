@@ -706,6 +706,26 @@
     document.body.classList.remove('modal-open');
   }
 
+  function startNewProject() {
+    if (window.RelicForgeFounderSupportActive) {
+      setStatus('Exit Founder Support Mode before starting a new project.', 'warning');
+      return;
+    }
+
+    const warning = hasUnsavedChanges
+      ? 'Start a new project? Your current unsaved changes will be discarded. Saved cloud projects and backups will not be deleted.'
+      : 'Start a new project? The current Studio workspace will be cleared. Saved cloud projects and backups will not be deleted.';
+    if (!window.confirm(warning)) return;
+
+    // Prevent the normal beforeunload warning; the reload resets only the open
+    // Studio workspace. Saved projects/backups remain untouched and the wallet
+    // session can reconnect normally.
+    hasUnsavedChanges = false;
+    currentProjectId = null;
+    currentProjectOwner = null;
+    window.location.reload();
+  }
+
   function handleWalletAccountsChanged(accounts) {
     const next = accounts?.[0] || null;
     const previous = wallet;
@@ -768,6 +788,7 @@
       const action = wallet ? ensureCloudSession() : connectWallet({ requireCloud: !!window.RelicForgeCloud?.enabled?.() });
       Promise.resolve(action).catch(error => setStatus(error.message, 'error'));
     });
+    $('newProjectBtn')?.addEventListener('click', startNewProject);
     $('saveProjectBtn')?.addEventListener('click', () => saveProject().catch(error => setStatus(error.message, 'error')));
     $('openProjectsBtn')?.addEventListener('click', openManager);
     $('projectManagerCloseBtn')?.addEventListener('click', closeManager);
@@ -859,6 +880,7 @@
     changeWallet,
     disconnectWallet,
     saveProject,
+    startNewProject,
     openManager,
     getWallet: () => wallet,
     getCurrentProjectId: () => currentProjectId,
