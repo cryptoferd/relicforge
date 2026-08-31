@@ -2914,10 +2914,10 @@ ${await file.text()}`;
       </div>
 
       <div class="launched-section">
-        <h4>V1 Onchain Controls</h4>
-        <p class="forge-footnote">Collection content is ${snap.contentSealed ? 'sealed' : 'not sealed'}. V1 sale controls remain creator-controlled until controller renunciation.</p>
+        <h4>Mint & Creator Controls</h4>
+        <p class="forge-footnote">${snap.masterMintEnabled ? 'Minting is LIVE, subject to each phase schedule. Pause Mint immediately stops all collector minting without changing phase dates, prices, or allowlists.' : 'Minting is PAUSED. Phase schedules and settings are preserved; Resume Mint re-enables any phase that is otherwise eligible to open.'}</p>
         <div class="launched-actions">
-          <button class="primary-btn" data-v1-dashboard-action="mastermint" ${canControl ? '' : 'disabled'} type="button">${snap.masterMintEnabled ? 'Disable Master Mint' : 'Enable Master Mint'}</button>
+          <button class="${snap.masterMintEnabled ? 'ghost-btn danger-btn' : 'primary-btn'}" data-v1-dashboard-action="mastermint" ${canControl ? '' : 'disabled'} type="button">${snap.masterMintEnabled ? 'Pause Mint' : 'Resume Mint'}</button>
           <label class="field"><span>Creator Mint quantity</span><input id="dashboardV1CreatorMintQty" min="1" max="${Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted))}" type="number" value="1" ${canControl && snap.totalMinted < snap.maxSupply ? '' : 'disabled'}/></label>
           <button class="ghost-btn" data-v1-dashboard-action="creatormint" ${canControl && snap.totalMinted < snap.maxSupply ? '' : 'disabled'} type="button">Creator Mint</button>
         </div>

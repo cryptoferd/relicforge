@@ -227,6 +227,25 @@
 
   const ONCHAIN_SINGLE_ASSET_LIMIT = 22000;
 
+  function traitArtworkSizeError(files) {
+    const rejected = [];
+    for (const file of files || []) {
+      if (!file || !isArtworkFile(file)) continue;
+      const rawBytes = Number(file.size || 0);
+      const gifBytes = isGifFile(file) ? estimatedGifOnchainBytes(file) : rawBytes;
+      if (rawBytes <= ONCHAIN_SINGLE_ASSET_LIMIT && gifBytes <= ONCHAIN_SINGLE_ASSET_LIMIT) continue;
+      const rawLabel = `${(rawBytes / 1024).toFixed(1)} KB`;
+      const detail = isGifFile(file) && gifBytes > ONCHAIN_SINGLE_ASSET_LIMIT && rawBytes <= ONCHAIN_SINGLE_ASSET_LIMIT
+        ? `${file.name} (${rawLabel} raw; ~${(gifBytes / 1024).toFixed(1)} KB after animated GIF embedding)`
+        : `${file.name} (${rawLabel})`;
+      rejected.push(detail);
+    }
+    if (!rejected.length) return '';
+    const shown = rejected.slice(0, 5).join(', ');
+    const more = rejected.length > 5 ? `, +${rejected.length - 5} more` : '';
+    return `Trait artwork rejected: each trait must be 21.5 KB (22,000 bytes) or smaller before upload. ${shown}${more}. Animated GIFs may need a smaller raw file because animation-preserving onchain embedding expands them.`;
+  }
+
   function isGifFile(file) {
     return !!file && (/^image\/gif$/i.test(file.type || '') || /\.gif$/i.test(file.name || ''));
   }
@@ -313,6 +332,8 @@
     if (!layer) throw new Error('Layer not found.');
     const valid = [...files].filter(isArtworkFile);
     if (!valid.length) throw new Error('Choose PNG, WEBP, JPG, GIF, or SVG trait artwork.');
+    const sizeError = traitArtworkSizeError(valid);
+    if (sizeError) throw new Error(sizeError);
     valid.sort((a, b) => naturalSort(a.name, b.name));
     for (const file of valid) layer.traits.push(await traitFromFile(layer, file));
     const firstReal = allTraits().find(t => !t.isNone && t.width && t.height);
@@ -595,6 +616,12 @@
     const imageFiles = [...files].filter(isArtworkFile);
     if (!imageFiles.length) {
       showStatus('No PNG, WEBP, JPG, GIF, or SVG artwork was found in that folder.', 'error');
+      return;
+    }
+
+    const sizeError = traitArtworkSizeError(imageFiles);
+    if (sizeError) {
+      showStatus(sizeError, 'error');
       return;
     }
 
@@ -3064,6 +3091,14 @@
   });
   el.categoryTraitInput?.addEventListener('change', e => {
     state.categoryPendingFiles = [...(e.target.files || [])];
+    const sizeError = traitArtworkSizeError(state.categoryPendingFiles.filter(isArtworkFile));
+    if (sizeError) {
+      state.categoryPendingFiles = [];
+      e.target.value = '';
+      if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = 'Files rejected — over onchain trait limit';
+      showStatus(sizeError, 'error');
+      return;
+    }
     if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = state.categoryPendingFiles.length ? `${state.categoryPendingFiles.length} file${state.categoryPendingFiles.length === 1 ? '' : 's'} selected` : 'No files selected';
   });
   el.addCategoryBtn?.addEventListener('click', async () => {

@@ -175,7 +175,8 @@
     else setStatus(`Confirm ${fmtEth(minimumValue)} in your wallet. This value comes directly from quoteMint().`);
     const tx = await app.contract.mint(phase.id, qty, isWhitelist ? Number(entry.allowance) : 0, isWhitelist ? entry.proof : [], { value: minimumValue });
     setStatus(`Transaction submitted: ${short(tx.hash)}. Waiting for confirmation…`);
-    await tx.wait();
+    const receipt = await tx.wait();
+    window.dispatchEvent(new CustomEvent('relicforge:v1-mint-confirmed', { detail: { chainId:Number(app.config.chainId), contract:app.config.contract, wallet:app.wallet, transactionHash:receipt?.hash || tx.hash } }));
     setStatus(`Mint confirmed: ${short(tx.hash)}. Refreshing V1 phase state…`);
     await refreshStatic();
     await refreshWallet();
@@ -188,8 +189,8 @@
     setText('networkStat', networkLabel(app.config.chainId));
     const explorer = document.querySelector('.explorer');
     const myNfts = document.querySelector('.my-nfts');
-    if (explorer) explorer.classList.add('hidden');
-    if (myNfts) myNfts.classList.add('hidden');
+    if (explorer) explorer.classList.remove('hidden');
+    if (myNfts && !app.wallet) myNfts.classList.add('hidden');
     const note = document.querySelector('.forge-note');
     if (note) note.innerHTML = 'Canonical Relic Forge V1 mint page <span class="rf-v1-phase-badge">RC4.7B</span><br/>Mint transactions use configured phase IDs and <code>quoteMint()</code> minimumValue.';
 
