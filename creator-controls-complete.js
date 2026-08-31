@@ -6,7 +6,7 @@
   const ZERO_HASH = '0x' + '00'.repeat(32);
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const short = value => { const s=String(value||''); return s.length > 14 ? `${s.slice(0,6)}…${s.slice(-4)}` : s; };
+  const short = value => { const s=String(value||''); return s.length > 14 ? `${s.slice(0,6)}â€¦${s.slice(-4)}` : s; };
 
   const COLLECTION_ABI = [
     'function creator() view returns(address)',
@@ -325,7 +325,7 @@
       <details class="rfcc-technical"><summary>Technical verification</summary><div class="rfcc-tech-grid"><span>Current root</span><code>${esc(p.merkleRoot)}</code></div></details>
     </details>`;
     return `<article class="rfcc-stage" data-rfcc-stage="${p.id}">
-      <div class="rfcc-stage-head"><div><strong>Mint Stage ${p.id}</strong><small>${p.accessType===1?'Approved Wallets':'Everyone'} · ${p.minted.toLocaleString()} minted</small></div><span>${statusText}</span></div>
+      <div class="rfcc-stage-head"><div><strong>Mint Stage ${p.id}</strong><small>${p.accessType===1?'Approved Wallets':'Everyone'} Â· ${p.minted.toLocaleString()} minted</small></div><span>${statusText}</span></div>
       <div class="rfcc-grid rfcc-grid-4">
         <label><span>Who can mint</span><select data-k="access" ${canControl?'':'disabled'}><option value="0" ${p.accessType===0?'selected':''}>Everyone</option><option value="1" ${p.accessType===1?'selected':''}>Approved wallets only</option></select><small>Choose Approved wallets only, then save the wallet list below.</small></label>
         <label><span>Price</span><div class="rfcc-suffix"><input data-k="price" type="number" min="0" step="0.0001" value="${esc(window.ethers.formatEther(p.price))}" ${canControl?'':'disabled'}/><b>ETH</b></div></label>
@@ -346,8 +346,8 @@
     const revealRequestsRemaining = s.revealRequestPrice > 0n ? Number(s.revealCredit / s.revealRequestPrice) : null;
     const renounceSafe = s.contentSealed && s.deferredPendingCount === 0 && (!s.mintEnabled || s.totalMinted >= s.maxSupply || s.futureRevealMode === 1);
     const nextRevealText = !s.nextReveal ? 'No reveal request is waiting.' : s.nextReveal.fulfilled
-      ? `Verified randomness received for NFTs #${s.nextReveal.cursor}–#${s.nextReveal.end}.`
-      : `Waiting for verified randomness for NFTs #${s.nextReveal.start}–#${s.nextReveal.end}.`;
+      ? `Verified randomness received for NFTs #${s.nextReveal.cursor}â€“#${s.nextReveal.end}.`
+      : `Waiting for verified randomness for NFTs #${s.nextReveal.start}â€“#${s.nextReveal.end}.`;
 
     return `<section class="rfcc-panel" id="rfCompleteCreatorControls">
       <div class="rfcc-title"><div><span class="eyebrow">COMPLETE CREATOR CONTROLS</span><h3>Manage your launched collection</h3><p>Every creator-facing control available in the collection contracts is surfaced here, including post-launch approved-wallet management. Permanent actions are kept in a separate danger area.</p></div><button class="ghost-btn" data-rfcc-action="refresh">Refresh</button></div>
@@ -380,7 +380,7 @@
 
       <section class="rfcc-section"><div class="rfcc-section-head"><div><h4>Reveal</h4><p>Choose how NFTs minted from this point forward reveal. Changing this does not change NFTs that are already waiting to reveal.</p></div></div>
         <div class="rfcc-grid rfcc-grid-3">
-          <label><span>Future reveal choice</span><select id="rfccRevealMode" ${canControl?'':'disabled'}><option value="1" ${s.futureRevealMode===1?'selected':''}>Forge Reveal — start reveal after each mint</option><option value="0" ${s.futureRevealMode===0?'selected':''}>Reveal Later — I choose when to reveal</option></select></label>
+          <label><span>Future reveal choice</span><select id="rfccRevealMode" ${canControl?'':'disabled'}><option value="1" ${s.futureRevealMode===1?'selected':''}>Forge Reveal â€” start reveal after each mint</option><option value="0" ${s.futureRevealMode===0?'selected':''}>Reveal Later â€” I choose when to reveal</option></select></label>
           <div class="rfcc-field-action"><button data-rfcc-action="save-reveal-mode" ${canControl?'':'disabled'}>Save Future Reveal Choice</button></div>
           <div class="rfcc-readout"><span>NFTs waiting to reveal</span><strong>${s.deferredPendingCount.toLocaleString()}</strong></div>
         </div>
@@ -389,7 +389,7 @@
       </section>
 
       <section class="rfcc-section"><div class="rfcc-section-head"><div><h4>Reveal Balance</h4><p>Verified randomness is paid from a balance dedicated to this collection. Anyone can add funds; only the current payout wallet can withdraw unused funds.</p></div></div>
-        <div class="rfcc-stats"><div><span>Available</span><strong>${fmtEth(s.revealCredit)} ETH</strong></div><div><span>Estimated request</span><strong>${fmtEth(s.revealRequestPrice)} ETH</strong></div><div><span>Estimated requests remaining</span><strong>${revealRequestsRemaining==null?'—':revealRequestsRemaining.toLocaleString()}</strong></div></div>
+        <div class="rfcc-stats"><div><span>Available</span><strong>${fmtEth(s.revealCredit)} ETH</strong></div><div><span>Estimated request</span><strong>${fmtEth(s.revealRequestPrice)} ETH</strong></div><div><span>Estimated requests remaining</span><strong>${revealRequestsRemaining==null?'â€”':revealRequestsRemaining.toLocaleString()}</strong></div></div>
         <div class="rfcc-grid rfcc-grid-3"><label><span>Add reveal balance</span><div class="rfcc-suffix"><input id="rfccFundReveal" type="number" min="0" step="0.001" placeholder="0.01"/><b>ETH</b></div></label><div class="rfcc-field-action"><button data-rfcc-action="fund-reveal">Add Balance</button></div><div></div><label><span>Withdraw unused balance</span><div class="rfcc-suffix"><input id="rfccWithdrawReveal" type="number" min="0" step="0.001" placeholder="0.01" ${payoutWalletConnected?'':'disabled'}/><b>ETH</b></div><small>${payoutWalletConnected?'Sent to the payout wallet.':'Connect the current payout wallet to withdraw.'}</small></label><div class="rfcc-field-action"><button data-rfcc-action="withdraw-reveal" ${payoutWalletConnected?'':'disabled'}>Withdraw Reveal Balance</button></div></div>
       </section>
 
@@ -445,12 +445,12 @@
     const serial = ++renderSerial;
     currentAddress = address;
     hideLegacySections(detail);
-    let host = $('rfCompleteCreatorControls');
+    let host = $('rfCompleteCreatorControls') || $('rfCompleteCreatorControlsLoading');
     if (!host) {
       host = document.createElement('div');
       host.id = 'rfCompleteCreatorControlsLoading';
       host.className = 'rfcc-loading';
-      host.textContent = 'Loading complete creator controls…';
+      host.textContent = 'Loading complete creator controlsâ€¦';
       const firstSection = detail.querySelector('.launched-section');
       if (firstSection) detail.insertBefore(host, firstSection); else detail.appendChild(host);
     }
@@ -485,7 +485,7 @@
       if (!state.controllerActive) throw new Error('Creator control has already been permanently surrendered.');
       const c = new window.ethers.Contract(state.address, COLLECTION_ABI, sg);
       const tx = await fn(c, sg);
-      status(`Transaction submitted · ${short(tx.hash)}. Waiting for confirmation…`);
+      status(`Transaction submitted Â· ${short(tx.hash)}. Waiting for confirmationâ€¦`);
       await tx.wait();
       await refreshCurrent();
       status(done);
@@ -501,7 +501,7 @@
       const sg = await signer();
       const c = new window.ethers.Contract(state.address, COLLECTION_ABI, sg);
       const tx = await fn(c, sg);
-      status(`Transaction submitted · ${short(tx.hash)}. Waiting for confirmation…`);
+      status(`Transaction submitted Â· ${short(tx.hash)}. Waiting for confirmationâ€¦`);
       await tx.wait(); await refreshCurrent(); status(done);
     } catch (error) { status(error.shortMessage || error.message, true); }
     finally { busy = false; }
@@ -538,16 +538,16 @@
       if (!btn || btn.disabled) return;
       const action = btn.dataset.rfccAction;
       if (action==='refresh') { await refreshCurrent(); return; }
-      if (action==='toggle-mint') return writeCollection(state,c=>c.setMasterMintEnabled(!state.mintEnabled),state.mintEnabled?'Pausing mint…':'Resuming mint…',state.mintEnabled?'Mint paused.':'Mint resumed.');
+      if (action==='toggle-mint') return writeCollection(state,c=>c.setMasterMintEnabled(!state.mintEnabled),state.mintEnabled?'Pausing mintâ€¦':'Resuming mintâ€¦',state.mintEnabled?'Mint paused.':'Mint resumed.');
       if (action==='creator-mint') {
         const to=String($('rfccCreatorRecipient')?.value||'').trim(); if(!window.ethers.isAddress(to)) return status('Creator mint recipient is not a valid wallet address.',true);
         const qty=safeInt($('rfccCreatorQty')?.value,1,50,'Quantity');
-        return writeCollection(state,c=>c.creatorMint(to,qty),`Minting ${qty} creator cop${qty===1?'y':'ies'}…`,'Creator mint confirmed.');
+        return writeCollection(state,c=>c.creatorMint(to,qty),`Minting ${qty} creator cop${qty===1?'y':'ies'}â€¦`,'Creator mint confirmed.');
       }
       if (action==='load-allowlist') {
         const id=Number(btn.dataset.id);
         if (busy) return; busy=true;
-        try { status(`Loading approved wallets for Mint Stage ${id}…`); await loadApprovedWallets(state,id); status(`Approved wallets loaded for Mint Stage ${id}.`); }
+        try { status(`Loading approved wallets for Mint Stage ${id}â€¦`); await loadApprovedWallets(state,id); status(`Approved wallets loaded for Mint Stage ${id}.`); }
         catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
         return;
       }
@@ -565,9 +565,9 @@
           const supply=safeInt(get('supply').value,0,4294967295,'Stage supply limit'); if(supply!==0&&supply<old.minted)throw new Error(`Stage supply cannot be lower than ${old.minted}, which are already minted.`);
           const walletLimit=safeInt(get('wallet').value,0,4294967295,'Wallet limit'), priority=safeInt(get('priority').value,0,65535,'Priority');
           const sg=await signer(), c=new window.ethers.Contract(state.address,COLLECTION_ABI,sg);
-          status(`Updating Mint Stage ${id} with ${entries.length.toLocaleString()} approved wallet${entries.length===1?'':'s'}…`);
+          status(`Updating Mint Stage ${id} with ${entries.length.toLocaleString()} approved wallet${entries.length===1?'':'s'}â€¦`);
           const tx=await c.updatePhase(id,price,start,end,supply,walletLimit,tree.root,1,priority); await tx.wait();
-          status('Onchain wallet verification updated. Publishing matching mint proofs…');
+          status('Onchain wallet verification updated. Publishing matching mint proofsâ€¦');
           await publishApprovedWallets(state,id,tree);
           await refreshCurrent();
           status(`Mint Stage ${id} approved-wallet list updated and published.`);
@@ -578,11 +578,11 @@
         const id=Number(btn.dataset.id), old=state.phases.find(p=>p.id===id), v=readStageElement(id);
         if (!old) return status('Mint stage was not found.',true);
         if (v.supply!==0 && v.supply<old.minted) return status(`Stage supply cannot be lower than ${old.minted}, which are already minted.`,true);
-        return writeCollection(state,c=>c.updatePhase(id,v.price,v.start,v.end,v.supply,v.wallet,v.root,v.access,v.priority),`Saving Mint Stage ${id}…`,`Mint Stage ${id} updated.`);
+        return writeCollection(state,c=>c.updatePhase(id,v.price,v.start,v.end,v.supply,v.wallet,v.root,v.access,v.priority),`Saving Mint Stage ${id}â€¦`,`Mint Stage ${id} updated.`);
       }
       if (action==='toggle-stage') {
         const id=Number(btn.dataset.id), old=state.phases.find(p=>p.id===id); if(!old)return;
-        return writeCollection(state,c=>c.setPhaseEnabled(id,!old.enabled),`${old.enabled?'Pausing':'Enabling'} Mint Stage ${id}…`,`Mint Stage ${id} ${old.enabled?'paused':'enabled'}.`);
+        return writeCollection(state,c=>c.setPhaseEnabled(id,!old.enabled),`${old.enabled?'Pausing':'Enabling'} Mint Stage ${id}â€¦`,`Mint Stage ${id} ${old.enabled?'paused':'enabled'}.`);
       }
       if (action==='create-stage') {
         const access=safeInt($('rfccNewAccess')?.value,0,1,'Who can mint');
@@ -599,13 +599,13 @@
           const liveCount=Number(await c.phaseCount());
           let predictedId=liveCount+1, tree=null, root=ZERO_HASH;
           if(access===1){ const entries=parseApprovedWalletText($('rfccNewApprovedWallets')?.value||''); tree=buildApprovedWalletTree(entries,state.address,predictedId); root=tree.root; }
-          status('Creating mint stage…');
+          status('Creating mint stageâ€¦');
           const tx=await c.createPhase(price,start,end,supply,maxWallet,root,access,priority,enabled); const receipt=await tx.wait();
           let actualId=predictedId;
           for(const log of receipt.logs||[]){ try{const parsed=c.interface.parseLog(log); if(parsed?.name==='PhaseCreated'){actualId=Number(parsed.args.phaseId);break;}}catch(_){} }
           if(access===1){
-            if(actualId!==predictedId){ tree=buildApprovedWalletTree(parseApprovedWalletText($('rfccNewApprovedWallets')?.value||''),state.address,actualId); status('Stage number changed while the transaction was pending. Correcting approved-wallet verification…'); const fix=await c.updatePhase(actualId,price,start,end,supply,maxWallet,tree.root,1,priority); await fix.wait(); }
-            status('Mint stage created. Publishing approved-wallet proofs…'); await publishApprovedWallets(state,actualId,tree);
+            if(actualId!==predictedId){ tree=buildApprovedWalletTree(parseApprovedWalletText($('rfccNewApprovedWallets')?.value||''),state.address,actualId); status('Stage number changed while the transaction was pending. Correcting approved-wallet verificationâ€¦'); const fix=await c.updatePhase(actualId,price,start,end,supply,maxWallet,tree.root,1,priority); await fix.wait(); }
+            status('Mint stage created. Publishing approved-wallet proofsâ€¦'); await publishApprovedWallets(state,actualId,tree);
           }
           await refreshCurrent(); status(`Mint Stage ${actualId} created${access===1?' with approved wallets published':''}.`);
         } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
@@ -613,23 +613,23 @@
       }
       if (action==='save-reveal-mode') {
         const mode=safeInt($('rfccRevealMode')?.value,0,1,'Reveal choice');
-        return writeCollection(state,c=>c.setFutureRevealMode(mode),'Saving future reveal choice…',`Future mints will use ${mode===1?'Forge Reveal':'Reveal Later'}.`);
+        return writeCollection(state,c=>c.setFutureRevealMode(mode),'Saving future reveal choiceâ€¦',`Future mints will use ${mode===1?'Forge Reveal':'Reveal Later'}.`);
       }
-      if (action==='request-reveal') return writeCollection(state,c=>c.requestRevealEpoch(),'Starting reveal for pending NFTs…','Reveal request created. Waiting for verified randomness.');
+      if (action==='request-reveal') return writeCollection(state,c=>c.requestRevealEpoch(),'Starting reveal for pending NFTsâ€¦','Reveal request created. Waiting for verified randomness.');
       if (action==='process-reveal') {
         const steps=safeInt($('rfccRevealSteps')?.value,1,500,'NFTs per transaction');
-        return permissionlessWrite(state,c=>c.processReveal(steps),'Completing revealed NFTs…','Reveal processing confirmed.');
+        return permissionlessWrite(state,c=>c.processReveal(steps),'Completing revealed NFTsâ€¦','Reveal processing confirmed.');
       }
       if (action==='fund-reveal') {
         const amount=String($('rfccFundReveal')?.value||'').trim(); if(!amount||Number(amount)<=0)return status('Enter an amount to add to the reveal balance.',true);
         if (busy) return; busy=true;
-        try { status('Adding reveal balance…'); const sg=await signer(); const r=new window.ethers.Contract(state.randomnessProvider,RANDOMNESS_ABI,sg); const tx=await r.fundConsumer(state.address,{value:window.ethers.parseEther(amount)}); status(`Transaction submitted · ${short(tx.hash)}…`); await tx.wait(); await refreshCurrent(); status('Reveal balance added.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
+        try { status('Adding reveal balanceâ€¦'); const sg=await signer(); const r=new window.ethers.Contract(state.randomnessProvider,RANDOMNESS_ABI,sg); const tx=await r.fundConsumer(state.address,{value:window.ethers.parseEther(amount)}); status(`Transaction submitted Â· ${short(tx.hash)}â€¦`); await tx.wait(); await refreshCurrent(); status('Reveal balance added.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
         return;
       }
       if (action==='withdraw-reveal') {
         const amount=String($('rfccWithdrawReveal')?.value||'').trim(); if(!amount||Number(amount)<=0)return status('Enter an amount to withdraw.',true);
         if (busy)return; busy=true;
-        try { status('Withdrawing unused reveal balance…'); const sg=await signer(); const who=window.ethers.getAddress(await sg.getAddress()); if(who.toLowerCase()!==state.payoutReceiver.toLowerCase())throw new Error('Only the current payout wallet can withdraw unused reveal balance.'); const r=new window.ethers.Contract(state.randomnessProvider,RANDOMNESS_ABI,sg); const tx=await r.withdrawConsumerCredit(state.address,window.ethers.parseEther(amount)); status(`Transaction submitted · ${short(tx.hash)}…`); await tx.wait(); await refreshCurrent(); status('Unused reveal balance withdrawn to the payout wallet.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
+        try { status('Withdrawing unused reveal balanceâ€¦'); const sg=await signer(); const who=window.ethers.getAddress(await sg.getAddress()); if(who.toLowerCase()!==state.payoutReceiver.toLowerCase())throw new Error('Only the current payout wallet can withdraw unused reveal balance.'); const r=new window.ethers.Contract(state.randomnessProvider,RANDOMNESS_ABI,sg); const tx=await r.withdrawConsumerCredit(state.address,window.ethers.parseEther(amount)); status(`Transaction submitted Â· ${short(tx.hash)}â€¦`); await tx.wait(); await refreshCurrent(); status('Unused reveal balance withdrawn to the payout wallet.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
         return;
       }
       if (action==='save-money') {
@@ -637,19 +637,19 @@
         if(!window.ethers.isAddress(payout)||!window.ethers.isAddress(royaltyWallet))return status('Payout and royalty wallets must be valid addresses.',true);
         const pct=Number($('rfccRoyaltyPct')?.value||0); if(!Number.isFinite(pct)||pct<0||pct>10)return status('Royalty must be between 0% and 10% in Relic Forge Studio.',true); const bps=Math.round(pct*100);
         if (busy)return; busy=true;
-        try { const sg=await signer(), who=window.ethers.getAddress(await sg.getAddress()); if(who.toLowerCase()!==state.creator.toLowerCase())throw new Error('Connect the collection creator wallet.'); const c=new window.ethers.Contract(state.address,COLLECTION_ABI,sg); const calls=[]; if(window.ethers.getAddress(payout)!==state.payoutReceiver)calls.push(['payout wallet',()=>c.setPayoutReceiver(payout)]); if(window.ethers.getAddress(royaltyWallet)!==state.royaltyReceiver||bps!==state.royaltyBps)calls.push(['royalties',()=>c.setRoyalty(royaltyWallet,bps)]); if(!calls.length){status('No payout or royalty settings changed.');return;} for(let i=0;i<calls.length;i++){status(`Updating ${calls[i][0]} · ${i+1}/${calls.length}…`); const tx=await calls[i][1](); await tx.wait();} await refreshCurrent(); status('Payout and royalty settings updated.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
+        try { const sg=await signer(), who=window.ethers.getAddress(await sg.getAddress()); if(who.toLowerCase()!==state.creator.toLowerCase())throw new Error('Connect the collection creator wallet.'); const c=new window.ethers.Contract(state.address,COLLECTION_ABI,sg); const calls=[]; if(window.ethers.getAddress(payout)!==state.payoutReceiver)calls.push(['payout wallet',()=>c.setPayoutReceiver(payout)]); if(window.ethers.getAddress(royaltyWallet)!==state.royaltyReceiver||bps!==state.royaltyBps)calls.push(['royalties',()=>c.setRoyalty(royaltyWallet,bps)]); if(!calls.length){status('No payout or royalty settings changed.');return;} for(let i=0;i<calls.length;i++){status(`Updating ${calls[i][0]} Â· ${i+1}/${calls.length}â€¦`); const tx=await calls[i][1](); await tx.wait();} await refreshCurrent(); status('Payout and royalty settings updated.'); } catch(e){status(e.shortMessage||e.message,true)} finally{busy=false}
         return;
       }
-      if (action==='withdraw-creator') return permissionlessWrite(state,c=>c.withdraw(),'Sending creator earnings to the payout wallet…','Creator earnings sent to the payout wallet.');
-      if (action==='forward-fees') return permissionlessWrite(state,c=>c.withdrawPlatformFees(),'Forwarding reserved platform fees…','Reserved platform fees forwarded.');
+      if (action==='withdraw-creator') return permissionlessWrite(state,c=>c.withdraw(),'Sending creator earnings to the payout walletâ€¦','Creator earnings sent to the payout wallet.');
+      if (action==='forward-fees') return permissionlessWrite(state,c=>c.withdrawPlatformFees(),'Forwarding reserved platform feesâ€¦','Reserved platform fees forwarded.');
       if (action==='save-display') {
         const mode=safeInt($('rfccDisplayMode')?.value,0,1,'Default display'); const uri=String($('rfccDisplayUri')?.value||'').trim(), holders=!!$('rfccHolderDisplay')?.checked;
-        return writeCollection(state,c=>c.setRenderConfig(uri,holders,mode),'Saving display settings…','Display settings updated.');
+        return writeCollection(state,c=>c.setRenderConfig(uri,holders,mode),'Saving display settingsâ€¦','Display settings updated.');
       }
       if (action==='renounce') {
         if(String($('rfccSurrenderConfirm')?.value||'').trim()!=='SURRENDER')return status('Type SURRENDER exactly before using the permanent action.',true);
         if(!window.confirm('Permanently surrender creator control? This cannot be undone.'))return;
-        return writeCollection(state,c=>c.renounceControl(),'Permanently surrendering creator control…','Creator control has been permanently surrendered.');
+        return writeCollection(state,c=>c.renounceControl(),'Permanently surrendering creator controlâ€¦','Creator control has been permanently surrendered.');
       }
       } catch (error) { status(error.shortMessage || error.message, true); }
     });
@@ -664,7 +664,19 @@
   function start() {
     const detail = $('launchedCollectionDetail');
     if (!detail) return;
-    const observer = new MutationObserver(() => { if (!mutatingOwnUi) schedule(detail); });
+    const observer = new MutationObserver(records => {
+      if (mutatingOwnUi) return;
+
+      // Only rerender when the legacy dashboard replaces/creates the selected
+      // collection detail. Ignore mutations made by this controls panel itself.
+      const relevant = records.some(record => [...record.addedNodes].some(node => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return false;
+        return node.matches?.('[data-v1-dashboard-action], .launched-detail-head') ||
+          !!node.querySelector?.('[data-v1-dashboard-action], .launched-detail-head');
+      }));
+
+      if (relevant) schedule(detail);
+    });
     observer.observe(detail,{childList:true,subtree:true});
     window.addEventListener('relicforge:wallet-accounts-changed',()=>schedule(detail));
     schedule(detail);
