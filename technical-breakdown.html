@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0e0e0e" />
+  <title>Relic Forge — Technical Breakdown</title>
+  <meta name="description" content="A technical explanation of Relic Forge's onchain NFT architecture, storage, mint stages, reveal system, fees, randomness, and creator controls." />
+  <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
+  <link rel="stylesheet" href="./technical-breakdown.css?v=tech1" />
+</head>
+<body>
+  <header class="tech-nav">
+    <a class="tech-brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><div><strong>RELIC FORGE</strong><span>Technical Breakdown</span></div></a>
+    <div class="tech-nav-actions"><a href="./index.html">Back to Relic Forge</a><a class="tech-button primary" href="./studio.html">Open Studio</a></div>
+  </header>
+
+  <main class="tech-main" data-rf-technical="true">
+    <section class="tech-hero">
+      <div class="tech-kicker">UNDER THE FORGE</div>
+      <h1>How Relic Forge works under the hood.</h1>
+      <p>The normal Relic Forge interface deliberately hides most blockchain terminology. This page does the opposite. It explains the contract suite, storage model, mint-stage engine, reveal flow, fee accounting, randomness funding, rendering, creator authority, and the exact relationship between what a creator clicks in Studio and what happens onchain.</p>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">01 · SYSTEM MAP</div><h2>One Studio, several specialized contracts.</h2>
+      <p>Relic Forge separates creation, immutable project data, ERC-721 ownership, rendering, randomness, and platform-fee accounting instead of placing everything in one monolithic contract.</p>
+      <div class="tech-flow"><div>Artwork + Rules</div><div>Collection Recipes</div><div>ProjectData</div><div>Collection</div><div>Renderer + Randomness</div><div>Minters + Holders</div></div>
+      <div class="tech-grid three">
+        <article class="tech-card"><h3>RelicForgeFactoryV1</h3><p>Creates the collection and data-contract clones, records creator collections, binds the network's renderer/randomness infrastructure, and locks the selected platform-fee mode at creation.</p></article>
+        <article class="tech-card"><h3>RelicProjectDataV1</h3><p>Stores trait artwork references, layer names, metadata visibility, one-of-one metadata, compact collection recipes, placeholder art, validation state, and the final provenance hash.</p></article>
+        <article class="tech-card"><h3>RelicCollectionV1</h3><p>The ERC-721 collection. It owns mint stages, balances, ownership, creator sale controls, royalties, payout destination, reveal queue, random recipe assignment, and token display policy.</p></article>
+        <article class="tech-card"><h3>RelicRendererV1</h3><p>Builds <code>tokenURI()</code>, <code>contractURI()</code>, and the token's SVG/image output from the immutable project data and the token's assigned recipe.</p></article>
+        <article class="tech-card"><h3>Randomness Adapter</h3><p>Provides isolated per-collection Chainlink VRF v2.5 direct-funding credit. A collection cannot consume another collection's randomness budget.</p></article>
+        <article class="tech-card"><h3>RelicForgeFeePolicyV1</h3><p>Handles platform-fee economics and USD-to-native-token quoting. Platform authority is deliberately separated from creator content, sale controls, NFT ownership, and reveal state.</p></article>
+      </div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">02 · ARTWORK & DATA</div><h2>Artwork becomes immutable, addressable onchain data.</h2>
+      <p>Studio preprocesses uploaded artwork into compact payloads. RelicProjectDataV1 writes artwork and collection-recipe bytes into small code-backed storage contracts. Trait records then point to a shard address plus an offset and length instead of copying the same bytes repeatedly.</p>
+      <div class="tech-grid">
+        <article class="tech-card"><h3>Artwork shards</h3><p><code>addArtShard(bytes)</code> stores packed visual data. Each trait records its layer, index, name, storage pointer, byte range, encoding, and metadata-visibility flag.</p></article>
+        <article class="tech-card"><h3>Recipe / DNA shards</h3><p><code>addDnaShard(bytes)</code> stores the finished collection recipe table. A recipe is a compact sequence of trait indexes—one byte per layer—for a particular collection slot.</p></article>
+        <article class="tech-card"><h3>Storage ceiling</h3><p>The data contract rejects any individual storage shard above 23,000 bytes. Studio currently uses a more conservative 22,000-byte single-trait ceiling so an asset cannot make it through upload only to fail during Forge compilation.</p></article>
+        <article class="tech-card"><h3>1/1 metadata</h3><p>Standalone one-of-one artwork can occupy a dedicated recipe slot and carry its own token name, description, and custom attribute pairs through <code>setOneOfOneMetadata()</code>.</p></article>
+      </div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">03 · VALIDATION & IMMUTABILITY</div><h2>The collection is checked before it is sealed.</h2>
+      <p>After all artwork and recipe bytes are written, Relic Forge validates recipes in bounded batches with <code>validateNextRecipes()</code>. Each recipe is checked to ensure every referenced trait actually exists. Only after the validation cursor reaches the full supply can the creator call <code>sealContent(provenanceHash)</code>.</p>
+      <div class="tech-grid">
+        <article class="tech-card"><h3>Provenance hash</h3><p>The final provenance hash is a cryptographic fingerprint of the compiled project. It provides an independent reference to the collection content that was finalized.</p></article>
+        <article class="tech-card"><h3>Content seal</h3><p>Once <code>contentSealed</code> becomes true, ProjectData's artwork/recipe mutation functions can no longer run. The collection's render configuration is also locked because <code>setRenderConfig()</code> refuses changes after the data contract is sealed.</p></article>
+      </div>
+      <div class="tech-warning"><strong>Important:</strong> sealing artwork is different from surrendering creator control. The artwork can be permanently locked while mint stages, mint pause/resume, future reveal mode, payout wallet, and royalties remain creator-controlled.</div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">04 · MINT-STAGE ENGINE</div><h2>Minting is a global gate plus independently configurable stages.</h2>
+      <p><code>masterMintEnabled</code> is the collection-wide safety switch. When it is false, no collector mint can succeed. Each <code>MintPhase</code> then provides its own schedule, price, access rules, supply cap, and wallet limit.</p>
+      <div class="tech-table-wrap"><table class="tech-table"><thead><tr><th>MintPhase field</th><th>What it controls</th></tr></thead><tbody>
+        <tr><td><code>price</code></td><td>Creator price per NFT for this stage.</td></tr>
+        <tr><td><code>startTime / endTime</code></td><td>Onchain opening and optional closing timestamps.</td></tr>
+        <tr><td><code>phaseSupply</code></td><td>Optional stage-specific supply cap; zero means no stage-specific cap.</td></tr>
+        <tr><td><code>maxPerWallet</code></td><td>Optional wallet limit inside that stage.</td></tr>
+        <tr><td><code>merkleRoot</code></td><td>Approved-wallet verification root when the stage is restricted.</td></tr>
+        <tr><td><code>accessType</code></td><td>Open/public or Merkle-approved wallets.</td></tr>
+        <tr><td><code>priority</code></td><td>Lets the application choose which published stage should be preferred when stages overlap.</td></tr>
+        <tr><td><code>enabled</code></td><td>Lets a creator pause one stage without changing its schedule or deleting it.</td></tr>
+      </tbody></table></div>
+      <p class="tech-note">For a restricted stage, the leaf includes the chain ID, collection address, stage ID, wallet, and allowance: <code>keccak256(abi.encode(block.chainid, address(this), phaseId, msg.sender, allowance))</code>. This prevents a proof from being casually reused across another chain, collection, or mint stage.</p>
+      <h3>Post-launch allowlist changes</h3>
+      <p>The collection contract does not store a mutable array of approved wallets. It stores the stage's <code>merkleRoot</code>. Because <code>updatePhase()</code> may replace that root while creator control remains active, a creator can add wallets, remove wallets, or change per-wallet allowances after launch without redeploying the NFT contract.</p>
+      <p>The Creator Dashboard rebuilds the V1 Merkle tree from the edited wallet list, submits the replacement root onchain, then publishes the matching wallet proofs to RelicForge Cloud. The public mint page requests the connected wallet's proof from that table. The root and proof table therefore need to stay synchronized, and Relic Forge handles them as one creator operation.</p>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">05 · REVEAL</div><h2>Forge Reveal and Deferred Reveal use the same no-reroll recipe pool.</h2>
+      <div class="tech-grid">
+        <article class="tech-card"><h3>Forge Reveal</h3><p>When <code>futureRevealMode == REVEAL_FORGE</code>, each mint batch automatically creates a randomness request for the newly minted token range. After VRF fulfillment, anyone may call <code>processReveal(maxSteps)</code> to finish recipe assignment.</p></article>
+        <article class="tech-card"><h3>Deferred Reveal</h3><p>When the mode is deferred, minted NFTs are marked <code>pendingDeferred</code> instead of immediately creating a randomness request. The creator later calls <code>requestRevealEpoch()</code> to group the unrequested pending range into a reveal request.</p></article>
+      </div>
+      <p>Both paths eventually enter <code>_assignRecipe()</code>. Relic Forge uses a swap-style global pool so each recipe is consumed once. There is no creator reroll path. Large reveal ranges are processed in bounded chunks so a collection does not need one enormous transaction.</p>
+      <div class="tech-warning">Changing <code>futureRevealMode</code> affects NFTs minted after the change. Already-minted deferred NFTs remain in the deferred queue and still need their pending reveal requested and completed.</div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">06 · VERIFIED RANDOMNESS</div><h2>Each collection has its own randomness budget.</h2>
+      <p>The Chainlink VRF adapter maintains <code>nativeCredit[collection]</code>. Anyone can sponsor a collection with <code>fundConsumer()</code>, but a collection can spend only its own balance. The adapter quotes the current request cost before sending a request upstream.</p>
+      <ul class="tech-list"><li><code>quoteRequestPrice()</code> estimates one VRF request.</li><li><code>fundConsumer(collection)</code> adds native-token credit.</li><li>Insufficient credit causes the mint/reveal request to revert atomically instead of creating an unfunded reveal.</li><li><code>withdrawConsumerCredit()</code> can withdraw unused credit only to the collection's current payout receiver.</li><li>Randomness callback IDs are mapped back to Relic Forge's local request sequence.</li><li>The VRF wrapper is chain-specific infrastructure, so each supported network can have its own adapter configuration.</li><li>If a verified word is recorded but delivery back to the collection fails, <code>replayFulfillment()</code> can retry delivery of that exact stored word. It cannot request a replacement word or reroll the result.</li></ul>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">07 · FEES & PAYOUT ACCOUNTING</div><h2>Creator proceeds and platform fees are accounted for separately.</h2>
+      <p>At collection creation, the creator chooses a fee mode. In Sponsored mode the creator covers the platform cost up front. In Minter Supported mode a USD-denominated per-NFT fee can be converted into native token at mint time through the fee policy's price feed.</p>
+      <div class="tech-grid">
+        <article class="tech-card"><h3>Creator proceeds</h3><p><code>withdraw()</code> sends only the collection balance that is not reserved as accrued platform fees to <code>payoutReceiver</code>. Anyone may trigger the function; the destination is enforced by the contract.</p></article>
+        <article class="tech-card"><h3>Reserved platform fees</h3><p><code>withdrawPlatformFees()</code> forwards reserved mint fees to the immutable collection fee policy. They are not sent to the creator payout wallet.</p></article>
+      </div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">08 · RENDERING</div><h2>The canonical token can always be rendered from onchain state.</h2>
+      <p>The renderer exposes ERC-721 metadata plus a direct <code>renderToken()</code> path. A collection may optionally have a cached display endpoint for marketplace presentation, but the canonical onchain artwork remains independently renderable. If holder switching is enabled, a token owner can set that token's display preference.</p>
+      <p class="tech-note">Render configuration is creator-controlled only before ProjectData is sealed. Once artwork and metadata are locked, the display-policy configuration is locked with them.</p>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">09 · CREATOR CONTROL MATRIX</div><h2>What the Creator Dashboard controls onchain.</h2>
+      <div class="tech-table-wrap"><table class="tech-table"><thead><tr><th>Creator Dashboard</th><th>Solidity method</th><th>Effect</th></tr></thead><tbody>
+        <tr><td>Pause / Resume Mint</td><td><code>setMasterMintEnabled()</code></td><td>Collection-wide collector-mint safety switch.</td></tr>
+        <tr><td>Create Mint Stage</td><td><code>createPhase()</code></td><td>Adds another configurable mint stage.</td></tr>
+        <tr><td>Edit Mint Stage</td><td><code>updatePhase()</code></td><td>Changes price, schedule, supply, wallet limit, access, root and priority.</td></tr>
+        <tr><td>Add / Remove Approved Wallets</td><td><code>updatePhase()</code> + proof publication</td><td>Rebuilds the Merkle root for the stage and publishes matching per-wallet proofs to RelicForge Cloud.</td></tr>
+        <tr><td>Pause / Enable Stage</td><td><code>setPhaseEnabled()</code></td><td>Stops or reopens one stage without deleting its configuration.</td></tr>
+        <tr><td>Future Reveal Choice</td><td><code>setFutureRevealMode()</code></td><td>Selects Forge or Deferred behavior for future mints.</td></tr>
+        <tr><td>Mint Creator Copies</td><td><code>creatorMint()</code></td><td>Mints to a creator-selected recipient while respecting remaining total supply.</td></tr>
+        <tr><td>Reveal Pending NFTs</td><td><code>requestRevealEpoch()</code></td><td>Starts a verified-randomness request for unrequested deferred NFTs.</td></tr>
+        <tr><td>Complete Reveal</td><td><code>processReveal()</code></td><td>Assigns recipes in bounded steps after randomness arrives.</td></tr>
+        <tr><td>Change Payout Wallet</td><td><code>setPayoutReceiver()</code></td><td>Changes the destination for creator proceeds and unused reveal-credit withdrawal.</td></tr>
+        <tr><td>Change Royalty</td><td><code>setRoyalty()</code></td><td>Updates ERC-2981 royalty receiver and basis points.</td></tr>
+        <tr><td>Display Settings</td><td><code>setRenderConfig()</code></td><td>Sets display cache/default/holder-switching policy before content is sealed.</td></tr>
+        <tr><td>Send Creator Earnings</td><td><code>withdraw()</code></td><td>Forwards creator proceeds to the payout wallet.</td></tr>
+        <tr><td>Forward Reserved Platform Fees</td><td><code>withdrawPlatformFees()</code></td><td>Moves reserved collector-supported platform fees from the collection to the immutable fee policy.</td></tr>
+        <tr><td>Add Reveal Balance</td><td><code>fundConsumer()</code></td><td>Adds per-collection randomness funding.</td></tr>
+        <tr><td>Withdraw Reveal Balance</td><td><code>withdrawConsumerCredit()</code></td><td>Returns unused randomness credit to the payout receiver.</td></tr>
+        <tr><td>Surrender Creator Control</td><td><code>renounceControl()</code></td><td>Permanently burns the collection controller after contract safety checks pass.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">10 · CREATION PIPELINE MAPPING</div><h2>Studio also maps creation-only methods to visual controls.</h2>
+      <div class="tech-table-wrap"><table class="tech-table"><thead><tr><th>Studio action</th><th>ProjectData method(s)</th></tr></thead><tbody>
+        <tr><td>Store artwork</td><td><code>addArtShard()</code>, <code>addTraits()</code></td></tr>
+        <tr><td>Store collection recipes</td><td><code>addDnaShard()</code>, <code>setDNAConfig()</code></td></tr>
+        <tr><td>Set unrevealed placeholder</td><td><code>setPlaceholder()</code></td></tr>
+        <tr><td>Layer names / metadata visibility</td><td><code>setLayerNames()</code>, <code>setLayerMetadataVisibility()</code></td></tr>
+        <tr><td>Standalone 1/1 support</td><td><code>setOneOfOneLayer()</code>, <code>setOneOfOneMetadata()</code></td></tr>
+        <tr><td>Verify every generated recipe</td><td><code>validateNextRecipes()</code></td></tr>
+        <tr><td>Lock final artwork and recipes</td><td><code>sealContent()</code></td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">11 · AUTHORITY BOUNDARIES</div><h2>The creator, platform, and public callers have different powers.</h2>
+      <div class="tech-grid three">
+        <article class="tech-card"><h3>Creator controller</h3><p>Controls minting, mint stages, future reveal mode, payout destination, royalty settings, creator mints, and deferred-reveal requests until creator control is surrendered.</p></article>
+        <article class="tech-card"><h3>Platform fee admin</h3><p>Controls platform-fee economics inside RelicForgeFeePolicyV1. It cannot modify collection artwork, token ownership, creator proceeds destination, mint stages, or reveal assignments.</p></article>
+        <article class="tech-card"><h3>Permissionless maintenance</h3><p>Reveal processing, creator-proceeds withdrawal trigger, and platform-fee forwarding can be called by anyone, but the contracts enforce the destination and state transition. This keeps completion possible even after creator control is surrendered.</p></article>
+      </div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">12 · PLAIN LANGUAGE ↔ CONTRACT LANGUAGE</div><h2>What the normal interface is translating.</h2>
+      <div class="tech-table-wrap"><table class="tech-table"><thead><tr><th>Relic Forge UI</th><th>Technical term</th></tr></thead><tbody>
+        <tr><td>Mint Stage</td><td><code>MintPhase</code></td></tr>
+        <tr><td>Reveal Later</td><td>Deferred Reveal / <code>REVEAL_DEFERRED</code></td></tr>
+        <tr><td>Reveal Pending NFTs</td><td><code>requestRevealEpoch()</code></td></tr>
+        <tr><td>Complete Reveal</td><td><code>processReveal(maxSteps)</code></td></tr>
+        <tr><td>Reveal Balance</td><td><code>nativeCredit[collection]</code></td></tr>
+        <tr><td>Artwork & Metadata Locked</td><td><code>contentSealed</code></td></tr>
+        <tr><td>Content Fingerprint</td><td><code>provenanceHash</code></td></tr>
+        <tr><td>Creator Control</td><td><code>controller</code></td></tr>
+        <tr><td>Approved Wallet verification</td><td>Merkle root / proof</td></tr>
+        <tr><td>Fully Onchain Artwork</td><td>SVG renderer output</td></tr>
+        <tr><td>Cached Display</td><td>Offchain render base-URI mode</td></tr>
+        <tr><td>Live onchain price check</td><td><code>quoteMint()</code></td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="tech-section">
+      <div class="tech-kicker">13 · NETWORK MODEL</div><h2>The architecture is deployed independently per EVM network.</h2>
+      <p>Relic Forge's application can use the same contract architecture on multiple compatible networks, but each network requires its own official Factory, Collection implementation, ProjectData implementation, Renderer, Randomness Adapter, Fee Policy, oracle configuration, and randomness-provider configuration. The application selects the correct canonical registry for the chosen chain.</p>
+      <div class="tech-warning">The current public development build may use testing-network infrastructure. A network is not production-enabled merely because the frontend can name or connect to it; the canonical contract suite must first be deployed and configured for that chain.</div>
+    </section>
+
+    <footer class="tech-footer"><p>Relic Forge · Technical architecture reference</p><div><a class="tech-button" href="./index.html">Back to Relic Forge</a><a class="tech-button primary" href="./studio.html">Open Studio</a></div></footer>
+  </main>
+</body>
+</html>

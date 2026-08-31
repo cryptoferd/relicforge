@@ -460,6 +460,54 @@ export default async function rc47bRoutes(app) {
     return { ok: true, config: sanitized, publicPhase, whitelistPhase };
   });
 
+  app.get('/api/rc47b/collections/:chainId/:contract/whitelist/:phaseId', { preHandler: authenticate }, async (request, reply) => {
+    const chainId = Number(request.params.chainId);
+    const phaseId = Number(request.params.phaseId);
+    let contractAddress;
+    try { contractAddress = getAddress(request.params.contract); }
+    catch { return reply.code(400).send({ error: 'Invalid collection address.' }); }
+    if (!Number.isInteger(phaseId) || phaseId <= 0) return reply.code(400).send({ error: 'Invalid approved-wallet stage id.' });
+
+    const auth = await authorizeCollectionAction({
+      chainId,
+      contractAddress,
+      requester: request.user.wallet,
+      projectId: null,
+      permission: 'launch'
+    });
+    if (!auth) return reply.code(403).send({ error: 'Only the collection creator can read the editable approved-wallet list from this dashboard.' });
+
+    const contract = collectionFor(chainId, contractAddress);
+    let phase;
+    try { phase = await readConfiguredPhase(contract, phaseId); }
+    catch (error) { return reply.code(400).send({ error: `Approved-wallet stage could not be read: ${error.shortMessage || error.message}` }); }
+    if (!phase || phase.accessType !== 1) return reply.code(400).send({ error: 'This mint stage is not currently restricted to approved wallets.' });
+
+    const meta = await one(
+      `SELECT merkle_root,phase_id,source_type,source_chain_id,source_contract,snapshot_block
+       FROM whitelists WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3`,
+      [chainId, contractAddress.toLowerCase(), phaseId]
+    );
+    const { rows } = await db.query(
+      `SELECT wallet,allowance FROM whitelist_entries
+       WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3
+       ORDER BY wallet ASC`,
+      [chainId, contractAddress.toLowerCase(), phaseId]
+    );
+    const publishedRoot = meta?.merkle_root ? String(meta.merkle_root) : null;
+    const onchainRoot = String(phase.merkleRoot);
+    return {
+      phaseId,
+      onchainMerkleRoot: onchainRoot,
+      publishedMerkleRoot: publishedRoot,
+      matchesOnchain: Boolean(publishedRoot && publishedRoot.toLowerCase() === onchainRoot.toLowerCase()),
+      sourceType: Number(meta?.source_type || 0),
+      sourceChainId: Number(meta?.source_chain_id || 0),
+      sourceContract: meta?.source_contract || null,
+      snapshotBlock: Number(meta?.snapshot_block || 0),
+      entries: rows.map(row => ({ address: row.wallet, allowance: Number(row.allowance) }))
+    };
+  });
   app.put('/api/rc47b/collections/:chainId/:contract/whitelist/:phaseId', { preHandler: authenticate }, async (request, reply) => {
     const chainId = Number(request.params.chainId);
     const phaseId = Number(request.params.phaseId);
