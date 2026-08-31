@@ -1,0 +1,98 @@
+{
+  "schema": "relicforge-randomness-capabilities-v2",
+  "policy": {
+    "unknownChainForgeReveal": "disabled",
+    "blockLocalEntropyFallback": false,
+    "requiresCertifiedProvider": true
+  },
+  "profiles": [
+    {
+      "chainId": 1,
+      "name": "Ethereum",
+      "family": "ethereum-pos",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "provider-benchmark-required"
+    },
+    {
+      "chainId": 8453,
+      "name": "Base",
+      "family": "op-stack",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "provider-benchmark-required"
+    },
+    {
+      "chainId": 4663,
+      "name": "Robinhood Chain",
+      "family": "arbitrum-orbit",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "provider-benchmark-required"
+    },
+    {
+      "chainId": 42161,
+      "name": "Arbitrum One",
+      "family": "arbitrum-nitro",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 10,
+      "name": "OP Mainnet",
+      "family": "op-stack",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 137,
+      "name": "Polygon PoS",
+      "family": "polygon-pos",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 56,
+      "name": "BNB Smart Chain",
+      "family": "bsc",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 43114,
+      "name": "Avalanche C-Chain",
+      "family": "avalanche-c",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 324,
+      "name": "ZKsync Era",
+      "family": "zksync-era",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 534352,
+      "name": "Scroll",
+      "family": "scroll",
+      "forgeReveal": "provider-required",
+      "revealLater": "provider-required",
+      "certification": "research-required"
+    },
+    {
+      "chainId": 1284,
+      "name": "Moonbeam",
+      "family": "moonbeam",
+      "forgeReveal": "native-or-provider-candidate",
+      "revealLater": "native-or-provider-candidate",
+      "certification": "research-required"
+    }
+  ]
+}
