@@ -19,7 +19,7 @@
   const $ = id => document.getElementById(id);
 
   function shortAddress(address) {
-    return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : 'Connect Wallet';
+    return address ? `${address.slice(0, 6)}â€¦${address.slice(-4)}` : 'Connect Wallet';
   }
 
   function esc(value) {
@@ -113,7 +113,7 @@
       if (copy) copy.textContent = 'Relic Forge ties cloud projects to your EVM wallet. Connect and sign a one-time message before closing this tab if you want this project available on other devices.';
       if (action) action.textContent = 'Connect Wallet to Save';
     } else {
-      if (title) title.textContent = 'Wallet connected — cloud sign-in required';
+      if (title) title.textContent = 'Wallet connected â€” cloud sign-in required';
       if (copy) copy.textContent = 'Sign the Relic Forge login message to enable global saves for this wallet. The signature does not send a transaction or cost gas.';
       if (action) action.textContent = 'Sign In to Save';
     }
@@ -136,7 +136,7 @@
     }
     const btn = $('projectWalletBtn');
     if (btn) {
-      btn.textContent = wallet ? `${shortAddress(wallet)}  ▾` : 'Connect Wallet';
+      btn.textContent = wallet ? `${shortAddress(wallet)}  â–¾` : 'Connect Wallet';
       btn.classList.toggle('wallet-connected', !!wallet);
       btn.title = wallet ? `Project wallet: ${wallet}. Click for wallet options.` : 'Connect an EVM wallet to save projects';
       btn.setAttribute('aria-expanded', 'false');
@@ -165,11 +165,11 @@
   }
 
   function saveSafetyText() {
-    if (hasUnsavedChanges) return `${saveTimeLabel(lastSavedAt)} · Closing this tab will lose unsaved progress.`;
-    if (lastSavedAt) return `${saveTimeLabel(lastSavedAt)} · All current changes are saved.`;
-    if (!wallet) return 'Not saved yet · Connect and sign in with a wallet before closing if you want to keep this project.';
-    if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) return 'Not saved yet · Wallet connected, but cloud sign-in is still required.';
-    return 'Not saved yet · No changes to protect yet.';
+    if (hasUnsavedChanges) return `${saveTimeLabel(lastSavedAt)} Â· Closing this tab will lose unsaved progress.`;
+    if (lastSavedAt) return `${saveTimeLabel(lastSavedAt)} Â· All current changes are saved.`;
+    if (!wallet) return 'Not saved yet Â· Connect and sign in with a wallet before closing if you want to keep this project.';
+    if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) return 'Not saved yet Â· Wallet connected, but cloud sign-in is still required.';
+    return 'Not saved yet Â· No changes to protect yet.';
   }
 
   function setStatus(message, type = '') {
@@ -202,10 +202,10 @@
       updateSaveGate();
       return active;
     }
-    setStatus('Wallet connected. Sign once to enable global project saves…');
+    setStatus('Wallet connected. Sign once to enable global project savesâ€¦');
     const signed = await cloud.ensureSignedIn(wallet);
     updateSaveGate();
-    setStatus(`Signed in · global saves enabled for ${shortAddress(wallet)}.`, 'success');
+    setStatus(`Signed in Â· global saves enabled for ${shortAddress(wallet)}.`, 'success');
     return signed;
   }
 
@@ -246,7 +246,7 @@
     }
     setWallet(null, 'disconnect');
     window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
-    setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected' : 'Wallet disconnected', hasUnsavedChanges ? 'warning' : '');
+    setStatus(hasUnsavedChanges ? 'Unsaved changes Â· wallet disconnected' : 'Wallet disconnected', hasUnsavedChanges ? 'warning' : '');
     updateSaveGate();
   }
 
@@ -344,7 +344,7 @@
       forge,
     };
 
-    setStatus('Saving project + artwork locally…');
+    setStatus('Saving project + artwork locallyâ€¦');
     try {
       await idbPut(record);
     } catch (error) {
@@ -355,10 +355,10 @@
     currentProjectOwner = wallet;
     if (window.RelicForgeCloud?.enabled?.()) {
       try {
-        setStatus(`Local cache ready · syncing “${name}” to RelicForge Cloud…`);
+        setStatus(`Local cache ready Â· syncing â€œ${name}â€ to RelicForge Cloudâ€¦`);
         await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
         markSaved(now);
-        setStatus(`Saved globally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+        setStatus(`Saved globally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
       } catch (error) {
         hasUnsavedChanges = true;
         updateSaveGate();
@@ -367,7 +367,7 @@
       }
     } else {
       markSaved(now);
-      setStatus(`Saved locally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+      setStatus(`Saved locally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
     }
     await renderProjects();
     return record;
@@ -391,7 +391,7 @@
     const remoteNewer = remoteMeta && (!local || String(remoteMeta.updated_at || '') > String(local.updatedAt || ''));
     if (window.RelicForgeCloud?.enabled?.() && remoteMeta && (remoteNewer || !local)) {
       await ensureCloudSession();
-      setStatus('Downloading project + artwork from RelicForge Cloud…');
+      setStatus('Downloading project + artwork from RelicForge Cloudâ€¦');
       const remote = await window.RelicForgeCloud.loadProject(id);
       const payload = remote.snapshot || {};
       if (!payload.studio) throw new Error('Cloud project snapshot is incomplete.');
@@ -406,16 +406,19 @@
         studio: payload.studio,
         forge: payload.forge || null,
       };
-      await idbPut(local);
+      // Cache the cloud copy locally without blocking the visible Studio restore.
+      idbPut(local).catch(() => {});
       return { record: local, fromCloud: true };
     }
     return { record: local, fromCloud: false };
   }
 
   async function loadProject(id) {
-    const { record, fromCloud } = await fetchProjectRecord(id);
+    // The project manager already refreshed cloud metadata before presenting its
+    // list. Reuse that metadata instead of immediately requesting it a second time.
+    const { record, fromCloud } = await fetchProjectRecord(id, { preferFreshCloud: false });
     if (!record) throw new Error('That project was not found for the connected wallet.');
-    setStatus(`Opening “${record.name}”…`);
+    setStatus(`Opening â€œ${record.name}â€â€¦`);
     await window.RelicForgeStudioBridge.restoreStudioProjectSnapshot(record.studio);
     window.RelicForgeForge?.restoreForgeProjectState?.(record.forge);
     currentProjectId = record.id;
@@ -423,7 +426,7 @@
     hasUnsavedChanges = false;
     lastSavedAt = record.updatedAt || new Date().toISOString();
     closeManager();
-    setStatus(`Opened “${record.name}”${fromCloud ? ' from the latest cloud save' : ''}.`, 'success');
+    setStatus(`Opened â€œ${record.name}â€${fromCloud ? ' from the latest cloud save' : ''}.`, 'success');
   }
 
   async function deleteProject(id) {
@@ -435,8 +438,8 @@
     }
     const name = local?.name || remote?.name || 'this project';
     if (remote) {
-      if (!window.confirm(`Delete “${name}” from RelicForge Cloud and this browser?\n\nThis permanently removes the editable cloud project and any project artwork no longer used by another project. Download a backup first if you may want to revisit it. Deployed contracts and published mint pages are not deleted.`)) return;
-      setStatus(`Deleting “${name}” from cloud and freeing bucket space…`);
+      if (!window.confirm(`Delete â€œ${name}â€ from RelicForge Cloud and this browser?\n\nThis permanently removes the editable cloud project and any project artwork no longer used by another project. Download a backup first if you may want to revisit it. Deployed contracts and published mint pages are not deleted.`)) return;
+      setStatus(`Deleting â€œ${name}â€ from cloud and freeing bucket spaceâ€¦`);
       await ensureCloudSession();
       const result = await window.RelicForgeCloud.deleteProject(id);
       await idbDelete(`${wallet}:${id}`);
@@ -447,9 +450,9 @@
         hasUnsavedChanges = false;
       }
       const freed = Number(result?.freedBytes || 0);
-      setStatus(`Deleted “${name}” globally${freed ? ` · freed ${formatBytes(freed)}` : ''}.`, 'success');
+      setStatus(`Deleted â€œ${name}â€ globally${freed ? ` Â· freed ${formatBytes(freed)}` : ''}.`, 'success');
     } else if (local) {
-      if (!window.confirm(`Delete the local project “${name}”?\n\nThis removes the saved artwork and settings from this browser. Deployed contracts and downloaded backups are not affected.`)) return;
+      if (!window.confirm(`Delete the local project â€œ${name}â€?\n\nThis removes the saved artwork and settings from this browser. Deployed contracts and downloaded backups are not affected.`)) return;
       await idbDelete(local.key);
       if (currentProjectId === id && currentProjectOwner === wallet) {
         currentProjectId = null;
@@ -457,7 +460,7 @@
         lastSavedAt = null;
         hasUnsavedChanges = false;
       }
-      setStatus(`Deleted local save “${name}”.`, 'success');
+      setStatus(`Deleted local save â€œ${name}â€.`, 'success');
     }
     await renderProjects();
   }
@@ -549,10 +552,10 @@
     if (!wallet) await connectWallet();
     const { record } = await fetchProjectRecord(id);
     if (!record) throw new Error('Project not found.');
-    setStatus(`Building complete backup for “${record.name}”…`);
+    setStatus(`Building complete backup for â€œ${record.name}â€â€¦`);
     const backup = await createBackup({ name: record.name, studio: record.studio, forge: record.forge, sourceProjectId: record.id, sourceOwner: wallet });
     downloadJsonFile(`${slug(record.name)}.relicforge`, backup);
-    setStatus(`Downloaded complete backup for “${record.name}” · ${backup.assets.length} embedded artwork file${backup.assets.length === 1 ? '' : 's'}.`, 'success');
+    setStatus(`Downloaded complete backup for â€œ${record.name}â€ Â· ${backup.assets.length} embedded artwork file${backup.assets.length === 1 ? '' : 's'}.`, 'success');
   }
 
   async function downloadCurrentProjectBackup() {
@@ -561,15 +564,15 @@
     const studio = studioBridge.getStudioProjectSnapshot();
     const forge = window.RelicForgeForge?.getForgeProjectState?.() || null;
     const name = String(studio?.ui?.collectionName || 'Untitled Collection').trim() || 'Untitled Collection';
-    setStatus(`Building self-contained backup for “${name}”…`);
+    setStatus(`Building self-contained backup for â€œ${name}â€â€¦`);
     const backup = await createBackup({ name, studio, forge, sourceProjectId: currentProjectId, sourceOwner: wallet });
     downloadJsonFile(`${slug(name)}.relicforge`, backup);
-    setStatus(`Downloaded complete project backup · settings, rules, and ${backup.assets.length} artwork file${backup.assets.length === 1 ? '' : 's'} included.`, 'success');
+    setStatus(`Downloaded complete project backup Â· settings, rules, and ${backup.assets.length} artwork file${backup.assets.length === 1 ? '' : 's'} included.`, 'success');
   }
 
   async function importProjectBackup(file) {
     if (!file) return;
-    setStatus(`Reading backup “${file.name}”…`);
+    setStatus(`Reading backup â€œ${file.name}â€â€¦`);
     let backup;
     try { backup = JSON.parse(await file.text()); }
     catch { throw new Error('That file is not a valid Relic Forge project backup.'); }
@@ -592,7 +595,7 @@
     lastSavedAt = null;
     hasUnsavedChanges = true;
     closeManager();
-    setStatus(`Loaded backup “${backup.project.name || file.name}”. It is open as a new unsaved project; click Save Project to add it to your wallet cloud.`, 'success');
+    setStatus(`Loaded backup â€œ${backup.project.name || file.name}â€. It is open as a new unsaved project; click Save Project to add it to your wallet cloud.`, 'success');
   }
 
   async function renderStorageEstimate() {
@@ -606,7 +609,7 @@
       } catch {}
     }
     const cloudText = window.RelicForgeCloud?.enabled?.() ? `Cloud slots: ${cloudProjects.length} / ${cloudProjectLimit}` : 'Cloud sync not configured';
-    node.textContent = [cloudText, browserText].filter(Boolean).join(' · ');
+    node.textContent = [cloudText, browserText].filter(Boolean).join(' Â· ');
   }
 
   async function setFounderSupport(projectId, enable) {
@@ -676,11 +679,11 @@
     list.innerHTML = projects.map(project => {
       const active = project.id === currentProjectId && currentProjectOwner === wallet;
       const updated = new Date(project.updatedAt);
-      const location = project.cloud && project.local ? (project.cloudNewer ? 'Cloud newer · local cache available' : 'Cloud + local cache') : project.cloud ? 'Cloud' : 'Local only';
+      const location = project.cloud && project.local ? (project.cloudNewer ? 'Cloud newer Â· local cache available' : 'Cloud + local cache') : project.cloud ? 'Cloud' : 'Local only';
       return `<article class="saved-project-card ${active ? 'active' : ''}">
         <div class="saved-project-main">
           <div class="saved-project-title-row"><strong>${esc(project.name)}</strong>${active ? '<span class="project-current-badge">OPEN</span>' : ''}</div>
-          <span>${esc(updated.toLocaleString())} · ${esc(location)}${project.bytes ? ` · ${esc(formatBytes(project.bytes))}` : ''}</span>
+          <span>${esc(updated.toLocaleString())} Â· ${esc(location)}${project.bytes ? ` Â· ${esc(formatBytes(project.bytes))}` : ''}</span>
         </div>
         <div class="saved-project-actions">
           <button class="ghost-btn" data-load-project="${esc(project.id)}" type="button">Open</button>
@@ -733,7 +736,7 @@
       window.RelicForgeCloud?.clearSession?.();
       setWallet(null);
       window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
-      setStatus(hasUnsavedChanges ? 'Unsaved changes · wallet disconnected in extension' : 'Wallet disconnected in extension', hasUnsavedChanges ? 'warning' : '');
+      setStatus(hasUnsavedChanges ? 'Unsaved changes Â· wallet disconnected in extension' : 'Wallet disconnected in extension', hasUnsavedChanges ? 'warning' : '');
       return;
     }
     if (!previous || previous.toLowerCase() !== String(next).toLowerCase()) window.RelicForgeCloud?.clearSession?.();
@@ -869,7 +872,7 @@
       dirtyTrackingReady = true;
       updateSaveGate();
       if (!wallet) setStatus('Wallet required to save', 'warning');
-      else if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) setStatus('Wallet connected · sign in to enable global saves', 'warning');
+      else if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) setStatus('Wallet connected Â· sign in to enable global saves', 'warning');
       else setStatus('No unsaved changes', '');
     }, 0);
   }

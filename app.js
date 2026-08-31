@@ -39,6 +39,9 @@
     hideNoneMetadata: false,
     previewPage: 1,
     previewPageSize: 48,
+    compiledInputSignature: null,
+    previewStaleAlerted: false,
+    previewRenderPending: false,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -311,9 +314,93 @@
     };
   }
 
+  function buildInputSignature() {
+    const fileSignature = file => file ? [
+      String(file.name || ''),
+      Number(file.size || 0),
+      Number(file.lastModified || 0),
+      String(file.type || ''),
+    ] : null;
+
+    return JSON.stringify({
+      name: String(el.collectionName?.value || ''),
+      supply: getSupply(),
+      seed: String(el.seedInput?.value || ''),
+      buildMode: state.buildMode,
+      hideNoneMetadata: !!state.hideNoneMetadata,
+      layers: state.layers.map(layer => ({
+        id: layer.id,
+        name: layer.name,
+        allowNone: !!layer.allowNone,
+        rarityMode: layer.rarityMode,
+        autoFillStyle: layer.autoFillStyle,
+        rarityOrder: layer.rarityOrder,
+        metadataHidden: !!layer.metadataHidden,
+        traits: layer.traits.map(trait => ({
+          id: trait.id,
+          name: trait.name,
+          file: fileSignature(trait.file),
+          rarity: trait.rarity,
+          distribution: trait.distribution,
+          exactCount: trait.exactCount,
+          percentage: trait.percentage,
+          isNone: !!trait.isNone,
+          metadataHidden: !!trait.metadataHidden,
+        })),
+      })),
+      oneOfOnes: state.oneOfOnes.map(item => ({
+        id: item.id,
+        name: item.name,
+        tokenName: item.tokenName || '',
+        description: item.description || '',
+        includeDefaultAttribute: item.includeDefaultAttribute !== false,
+        metadata: (item.metadata || []).map(row => [row.traitType || '', row.value || '']),
+        file: fileSignature(item.file),
+      })),
+      rulesEnabled: !!state.rulesEnabled,
+      rules: state.rules.map(rule => ({
+        id: rule.id,
+        type: rule.type,
+        sources: [...rule.sources],
+        targets: [...rule.targets],
+      })),
+      manual: [...state.manifestTokens.entries()]
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([tokenId, recipe]) => [Number(tokenId), Object.entries(recipe || {}).sort((a, b) => a[0].localeCompare(b[0]))]),
+    });
+  }
+
+  function previewIsStale() {
+    return !!state.compiledInputSignature && state.compiledInputSignature !== buildInputSignature();
+  }
+
+  function showPreviewStaleWarning(alertUser = false) {
+    if (!previewIsStale()) return false;
+
+    state.previewRenderPending = false;
+    if (el.previewGrid) el.previewGrid.innerHTML = '';
+    el.previewControls?.classList.add('hidden');
+    el.collectionPreviewToolbar?.classList.add('hidden');
+    if (el.toLaunchBtn) el.toLaunchBtn.disabled = true;
+    if (el.compilerStatus) {
+      el.compilerStatus.innerHTML = `<div class="compiler-box error"><strong>Your preview is out of date.</strong><ul><li>The collection changed after this preview was generated.</li><li>Click Regenerate to rebuild the preview before reviewing it or continuing to launch.</li></ul></div>`;
+    }
+
+    if (alertUser && !state.previewStaleAlerted) {
+      state.previewStaleAlerted = true;
+      window.alert('Your collection has changed since this preview was generated. Regenerate the preview before relying on it or continuing to launch.');
+    }
+    return true;
+  }
+
   function resetCompiledForArtworkChange() {
+    const hadPreview = !!state.compiledInputSignature || !!state.compilerReport || state.compiledTokens.length > 0;
     state.compiledTokens = [];
     state.compilerReport = null;
+    state.previewRenderPending = false;
+    if (hadPreview) state.previewStaleAlerted = false;
+    if (el.toLaunchBtn) el.toLaunchBtn.disabled = true;
+    if (state.step === 4 && hadPreview) showPreviewStaleWarning(false);
   }
 
   function refreshArtworkUi() {
@@ -459,7 +546,7 @@
     if (!node) return;
     node.classList.remove('valid', 'over', 'under');
     node.classList.add(valid ? 'valid' : total > 100 ? 'over' : 'under');
-    node.textContent = `Total ${formatPercent(total)}% ${valid ? '✓' : total > 100 ? `· Over by ${formatPercent(Math.abs(diff))}%` : `· Add ${formatPercent(Math.abs(diff))}%`}`;
+    node.textContent = `Total ${formatPercent(total)}% ${valid ? 'âœ“' : total > 100 ? `Â· Over by ${formatPercent(Math.abs(diff))}%` : `Â· Add ${formatPercent(Math.abs(diff))}%`}`;
   }
 
   function percentageManualTotal(layer) {
@@ -526,7 +613,7 @@
     if (!node) return;
     node.classList.remove('valid','over','under');
     node.classList.add(total === target ? 'valid' : total > target ? 'over' : 'under');
-    node.textContent = total === target ? `Total ${total.toLocaleString()} ✓` : total > target ? `Over by ${(total-target).toLocaleString()}` : `${(target-total).toLocaleString()} remaining`;
+    node.textContent = total === target ? `Total ${total.toLocaleString()} âœ“` : total > target ? `Over by ${(total-target).toLocaleString()}` : `${(target-total).toLocaleString()} remaining`;
   }
 
   function autoFillLayerExact(layerId, equal = false) {
@@ -715,7 +802,7 @@
       <span class="summary-pill"><strong>${traits.length}</strong> traits</span>
       ${gifCount ? `<span class="summary-pill"><strong>${gifCount}</strong> animated GIF${gifCount === 1 ? '' : 's'}</span>` : ''}
       ${largeGifCount ? `<span class="summary-pill warning"><strong>${largeGifCount}</strong> GIF${largeGifCount === 1 ? '' : 's'} over onchain limit</span>` : ''}
-      <span class="summary-pill"><strong>${state.imageWidth}×${state.imageHeight}</strong> canvas</span>
+      <span class="summary-pill"><strong>${state.imageWidth}Ã—${state.imageHeight}</strong> canvas</span>
       <span class="summary-pill"><strong>${mismatchCount}</strong> size mismatch${mismatchCount === 1 ? '' : 'es'}</span>
       <span class="summary-pill"><strong>Drag & drop</strong> reorder layers</span>
     `;
@@ -728,14 +815,14 @@
             <span class="layer-index">${index + 1}</span>
             <div class="layer-title-edit">
               <label>Trait category<input class="layer-name-input" data-layer-id="${escapeHtml(layer.id)}" type="text" value="${escapeHtml(layer.name)}" maxlength="80" aria-label="Rename trait category ${escapeHtml(layer.name)}" /></label>
-              <small>${layer.traits.length} traits · rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small>
+              <small>${layer.traits.length} traits Â· rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small>
             </div>
           </div>
           <div class="layer-actions">
-            <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">⠿</span>
-            <button class="icon-btn move-layer" data-dir="up" title="Move layer backward" ${index === 0 ? 'disabled' : ''}>↑</button>
-            <button class="icon-btn move-layer" data-dir="down" title="Move layer forward" ${index === state.layers.length - 1 ? 'disabled' : ''}>↓</button>
-            <button class="icon-btn delete-layer-btn" data-delete-layer="${escapeHtml(layer.id)}" title="Delete layer">×</button>
+            <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">â ¿</span>
+            <button class="icon-btn move-layer" data-dir="up" title="Move layer backward" ${index === 0 ? 'disabled' : ''}>â†‘</button>
+            <button class="icon-btn move-layer" data-dir="down" title="Move layer forward" ${index === state.layers.length - 1 ? 'disabled' : ''}>â†“</button>
+            <button class="icon-btn delete-layer-btn" data-delete-layer="${escapeHtml(layer.id)}" title="Delete layer">Ã—</button>
           </div>
         </div>
         <div class="trait-thumbs">
@@ -839,7 +926,7 @@
           </div>
           <div class="trait-config-grid">
             ${layer.traits.map(trait => `<div class="trait-config" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
-              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}"/>`}
+              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}"/>`}
               <div><div class="trait-config-name">${escapeHtml(trait.name)}</div><label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''}/> Hide this trait from metadata</label>${trait.isNone ? '' : `<button class="rarity-remove-trait-btn" type="button" data-rarity-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">Remove trait</button>`}</div>
             </div>`).join('')}
           </div>
@@ -862,7 +949,7 @@
         <div class="trait-config-header">
           <div class="trait-layer-heading">
             <strong>${escapeHtml(layer.name)}</strong>
-            <span>${layer.traits.length} traits${layer.allowNone ? ' · None enabled' : ''}${showExact ? ` · ${genSupply.toLocaleString()} generative slots` : ''}</span>
+            <span>${layer.traits.length} traits${layer.allowNone ? ' Â· None enabled' : ''}${showExact ? ` Â· ${genSupply.toLocaleString()} generative slots` : ''}</span>
           </div>
         </div>
         <div class="trait-config-toolbar">
@@ -890,27 +977,27 @@
               </label>
               <label class="mini-select">Rarity order
                 <select class="layer-rarity-order" data-layer-id="${escapeHtml(layer.id)}">
-                  <option value="most_to_least" ${layer.rarityOrder !== 'least_to_most' ? 'selected' : ''}>Descending — common first</option>
-                  <option value="least_to_most" ${layer.rarityOrder === 'least_to_most' ? 'selected' : ''}>Ascending — rarest first</option>
+                  <option value="most_to_least" ${layer.rarityOrder !== 'least_to_most' ? 'selected' : ''}>Descending â€” common first</option>
+                  <option value="least_to_most" ${layer.rarityOrder === 'least_to_most' ? 'selected' : ''}>Ascending â€” rarest first</option>
                 </select>
               </label>
               <button type="button" class="ghost-btn small-btn ${showExact ? 'exact-autofill-btn' : 'autofill-btn'}" data-layer-id="${escapeHtml(layer.id)}">Auto Fill Remainder</button>
               <button type="button" class="ghost-btn small-btn ${showExact ? 'exact-equalize-btn' : 'equalize-btn'}" data-layer-id="${escapeHtml(layer.id)}">Equal Split Remainder</button>
               ${showExact
-                ? `<div class="exact-total ${countClass}" aria-live="polite">${countTotal === genSupply ? `Total ${countTotal.toLocaleString()} ✓` : countTotal > genSupply ? `Over by ${(countTotal-genSupply).toLocaleString()}` : `${(genSupply-countTotal).toLocaleString()} remaining`}</div>`
-                : `<div class="percent-total ${pctClass}" aria-live="polite">Total ${formatPercent(pctTotal)}% ${pctValid ? '✓' : pctTotal > 100 ? `· Over by ${formatPercent(Math.abs(pctDiff))}%` : `· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>`}
+                ? `<div class="exact-total ${countClass}" aria-live="polite">${countTotal === genSupply ? `Total ${countTotal.toLocaleString()} âœ“` : countTotal > genSupply ? `Over by ${(countTotal-genSupply).toLocaleString()}` : `${(genSupply-countTotal).toLocaleString()} remaining`}</div>`
+                : `<div class="percent-total ${pctClass}" aria-live="polite">Total ${formatPercent(pctTotal)}% ${pctValid ? 'âœ“' : pctTotal > 100 ? `Â· Over by ${formatPercent(Math.abs(pctDiff))}%` : `Â· Add ${formatPercent(Math.abs(pctDiff))}%`}</div>`}
             ` : ''}
           </div>
         </div>
-        ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
+        ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">â ¿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
         <div class="trait-config-grid ${sortMode ? 'sortable-grid' : ''}">
           ${layer.traits.map(trait => `
             <div class="trait-config ${sortMode ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
-              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
+              ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
               <div>
                 <div class="trait-config-topline">
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
-                  ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
+                  ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">â ¿</span>` : ''}
                 </div>
                 <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : (autoMode && layer.rarityMode === 'tier' ? 'tier-mode' : '')}">
                   ${showExact
@@ -932,11 +1019,12 @@
     updateBuildContinueState();
   }
 
-  function setBuildMode(mode) {
+  function setBuildMode(mode, renderNow = true) {
     state.buildMode = mode;
     $$('.build-card').forEach(card => card.classList.toggle('selected', card.dataset.buildMode === mode));
     el.manifestPanel.classList.toggle('hidden', mode !== 'manifest');
     el.manualPanel.classList.toggle('hidden', mode !== 'manual');
+    if (!renderNow) return;
     if (mode === 'manual') renderManualBuilder();
     renderTraitSetup();
   }
@@ -994,6 +1082,7 @@
       return;
     }
     state.manifestTokens.set(tokenId, recipe);
+    resetCompiledForArtworkChange();
     state.manifestSourceName = 'Manual curator';
     renderManualSavedList();
     showStatus(`Token #${tokenId} saved with ${Object.keys(recipe).length} locked layer choice(s).`, 'success');
@@ -1001,7 +1090,10 @@
 
   function clearManualToken() {
     const tokenId = Number.parseInt(el.manualTokenId.value || '0', 10);
-    if (state.manifestTokens.has(tokenId)) state.manifestTokens.delete(tokenId);
+    if (state.manifestTokens.has(tokenId)) {
+      state.manifestTokens.delete(tokenId);
+      resetCompiledForArtworkChange();
+    }
     renderManualBuilder(tokenId);
     showStatus(`Token #${tokenId} is no longer manually locked.`);
   }
@@ -1019,11 +1111,13 @@
       const labels = state.layers
         .filter(layer => recipe[layer.id])
         .map(layer => `${layer.name}: ${getTrait(recipe[layer.id])?.name || 'Unknown'}`);
-      return `<div class="manual-saved-token"><span><strong>#${tokenId}</strong> · ${escapeHtml(labels.join(' · '))}</span><button type="button" data-load-manual="${tokenId}">Edit</button></div>`;
+      return `<div class="manual-saved-token"><span><strong>#${tokenId}</strong> Â· ${escapeHtml(labels.join(' Â· '))}</span><button type="button" data-load-manual="${tokenId}">Edit</button></div>`;
     }).join('') + (entries.length > 100 ? `<div class="empty-state">+ ${entries.length - 100} more curated tokens</div>` : '');
   }
 
   function gotoStep(step) {
+    if (step === 5 && previewIsStale()) step = 4;
+
     state.step = step;
     $$('.step-panel').forEach(panel => panel.classList.toggle('active', Number(panel.dataset.panel) === step));
     $$('.step').forEach(btn => {
@@ -1031,9 +1125,35 @@
       btn.classList.toggle('active', n === step);
       btn.classList.toggle('complete', n < step);
     });
-    if (step === 2) renderTraitSetup();
-    if (step === 3) { renderRulePickers(); renderRulesList(); updateRuleSentence(); }
-    if (step === 4 && !state.compiledTokens.length) buildCollection();
+
+    if (step === 1) {
+      renderArtwork();
+      renderOneOfOnes();
+    }
+    if (step === 2) {
+      renderTraitSetup();
+      if (state.buildMode === 'manual') renderManualBuilder();
+    }
+    if (step === 3) {
+      renderRulePickers();
+      renderRulesList();
+      updateRuleSentence();
+    }
+    if (step === 4) {
+      if (!showPreviewStaleWarning(true)) {
+        if (!state.compiledTokens.length) {
+          buildCollection();
+        } else {
+          if (state.compilerReport) renderCompilerReport();
+          el.previewControls?.classList.remove('hidden');
+          el.collectionPreviewToolbar?.classList.remove('hidden');
+          if (state.previewRenderPending || !el.previewGrid?.children?.length) {
+            state.previewRenderPending = false;
+            renderPreviewGrid().catch(error => showStatus(error.message, 'error'));
+          }
+        }
+      }
+    }
     if (step === 5) updateLaunchSummary();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1119,18 +1239,18 @@
       for (const [layerName, traitName] of Object.entries(recipe.traits || {})) {
         const layer = layerLookup.get(normalizeName(layerName));
         if (!layer) {
-          errors.push(`Token #${recipe.tokenId}: layer “${layerName}” was not found.`);
+          errors.push(`Token #${recipe.tokenId}: layer â€œ${layerName}â€ was not found.`);
           continue;
         }
         const wantedName = normalizeName(traitName);
         const trait = layer.traits.find(t => normalizeName(t.name) === wantedName || normalizeName(t.filename) === wantedName);
         if (!trait) {
           if (wantedName === 'none') {
-            errors.push(`Token #${recipe.tokenId}: ${layer.name} is set to “None”, but None is not enabled for that layer yet.`);
+            errors.push(`Token #${recipe.tokenId}: ${layer.name} is set to â€œNoneâ€, but None is not enabled for that layer yet.`);
             continue;
           }
           const possibilities = layer.traits.slice(0, 4).map(t => t.name).join(', ');
-          errors.push(`Token #${recipe.tokenId}: “${traitName}” was not found in ${layer.name}${possibilities ? ` (examples: ${possibilities})` : ''}.`);
+          errors.push(`Token #${recipe.tokenId}: â€œ${traitName}â€ was not found in ${layer.name}${possibilities ? ` (examples: ${possibilities})` : ''}.`);
           continue;
         }
         tokenTraits[layer.id] = trait.id;
@@ -1154,14 +1274,15 @@
       state.manifestSourceName = file.name;
       if (result.errors.length) {
         el.manifestResult.className = 'validation-box error';
-        el.manifestResult.innerHTML = `<strong>We found ${result.errors.length} thing(s) to fix.</strong><br>${result.errors.slice(0, 10).map(escapeHtml).join('<br>')}${result.errors.length > 10 ? '<br>…and more.' : ''}`;
+        el.manifestResult.innerHTML = `<strong>We found ${result.errors.length} thing(s) to fix.</strong><br>${result.errors.slice(0, 10).map(escapeHtml).join('<br>')}${result.errors.length > 10 ? '<br>â€¦and more.' : ''}`;
         el.manifestResult.classList.remove('hidden');
         return;
       }
       state.manifestTokens = result.resolved;
+      resetCompiledForArtworkChange();
       el.manifestResult.className = 'validation-box success';
       const fullyDefined = [...result.resolved.values()].filter(t => Object.keys(t).length === state.layers.length).length;
-      el.manifestResult.innerHTML = `<strong>✓ ${result.resolved.size} token recipe(s) loaded</strong><br>✓ ${fullyDefined} fully defined · ${result.resolved.size - fullyDefined} partially defined${result.warnings.length ? `<br>⚠ ${result.warnings.map(escapeHtml).join('<br>⚠ ')}` : ''}`;
+      el.manifestResult.innerHTML = `<strong>âœ“ ${result.resolved.size} token recipe(s) loaded</strong><br>âœ“ ${fullyDefined} fully defined Â· ${result.resolved.size - fullyDefined} partially defined${result.warnings.length ? `<br>âš  ${result.warnings.map(escapeHtml).join('<br>âš  ')}` : ''}`;
       el.manifestResult.classList.remove('hidden');
       showStatus('Collection list matched to your uploaded layers.', 'success');
     } catch (error) {
@@ -1223,19 +1344,19 @@
     picker.innerHTML = traits.map(trait => {
       const layer = getLayer(trait.layerId);
       return `<button class="pick-trait ${selected.has(trait.id) ? 'selected' : ''}" data-kind="${kind}" data-trait-id="${escapeHtml(trait.id)}" type="button">
-        ${trait.isNone ? '<div class="pick-trait-none">None</div>' : `<img src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
+        ${trait.isNone ? '<div class="pick-trait-none">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
         <strong>${escapeHtml(trait.name)}</strong>
         <small>${escapeHtml(layer?.name || '')}</small>
       </button>`;
     }).join('') || '<div class="empty-state">No traits in this layer.</div>';
   }
 
-  function setRulesEnabled(enabled) {
+  function setRulesEnabled(enabled, renderNow = true) {
     state.rulesEnabled = enabled;
     el.noRulesBtn.classList.toggle('selected', !enabled);
     el.yesRulesBtn.classList.toggle('selected', enabled);
     el.rulesWorkspace.classList.toggle('hidden', !enabled);
-    if (enabled) renderRulePickers();
+    if (enabled && renderNow) renderRulePickers();
   }
 
   function updateRuleSentence() {
@@ -1372,7 +1493,7 @@
 
     const lockedConflicts = lockedRuleConflicts(rule);
     if (lockedConflicts.length) {
-      hardReasons.push(`${lockedConflicts.length} manually/imported token${lockedConflicts.length === 1 ? '' : 's'} already lock an invalid combination (${lockedConflicts.slice(0, 5).map(id => `#${id}`).join(', ')}${lockedConflicts.length > 5 ? '…' : ''}).`);
+      hardReasons.push(`${lockedConflicts.length} manually/imported token${lockedConflicts.length === 1 ? '' : 's'} already lock an invalid combination (${lockedConflicts.slice(0, 5).map(id => `#${id}`).join(', ')}${lockedConflicts.length > 5 ? 'â€¦' : ''}).`);
     }
 
     if (rule.type === 'excludes') {
@@ -1395,7 +1516,7 @@
           }
         }
       }
-      messages.push(`Estimated source coverage: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}–${sourceMax.toLocaleString()}`} of ${supply.toLocaleString()} NFTs.`);
+      messages.push(`Estimated source coverage: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}â€“${sourceMax.toLocaleString()}`} of ${supply.toLocaleString()} NFTs.`);
     } else {
       for (const [targetLayerId, allowedIds] of targetGroups) {
         const sameLayerBadSources = (sourceGroups.get(targetLayerId) || []).filter(id => !allowedIds.includes(id) && traitCountFromEstimates(id, estimates) > 0);
@@ -1414,7 +1535,7 @@
           warningReasons.push(`${targetName} has very little headroom above the estimated source demand. Small manual changes could make the rule impossible.`);
         }
       }
-      messages.unshift(`Estimated source demand: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}–${sourceMax.toLocaleString()}`} NFT${sourceMax === 1 ? '' : 's'}.`);
+      messages.unshift(`Estimated source demand: ${sourceMin === sourceMax ? sourceMax.toLocaleString() : `${sourceMin.toLocaleString()}â€“${sourceMax.toLocaleString()}`} NFT${sourceMax === 1 ? '' : 's'}.`);
     }
 
     let status = 'good';
@@ -1441,7 +1562,7 @@
 
   function preflightMarkup(analysis, compact = false) {
     const detail = [...analysis.hardReasons, ...analysis.warningReasons, ...analysis.messages];
-    const icon = analysis.status === 'good' ? '✓' : analysis.status === 'warning' ? '!' : '×';
+    const icon = analysis.status === 'good' ? 'âœ“' : analysis.status === 'warning' ? '!' : 'Ã—';
     return `<div class="preflight-status-row"><span class="preflight-icon">${icon}</span><strong>${escapeHtml(analysis.title)}</strong></div>${detail.length ? `<div class="preflight-details">${detail.slice(0, compact ? 2 : 5).map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}`;
   }
 
@@ -1588,6 +1709,7 @@
       targets: [...state.targetSelected],
     };
     state.rules.push(rule);
+    resetCompiledForArtworkChange();
     state.sourceSelected.clear();
     state.targetSelected.clear();
     renderTraitPicker('source');
@@ -1624,7 +1746,7 @@
         <div class="rule-preflight ${analysis.status}">${preflightMarkup(analysis)}${analysis.status !== 'good' ? `<div class="rule-preflight-actions"><button type="button" class="ghost-btn rule-adjust-settings">Adjust Percentages / Counts</button></div>` : ''}</div>
         <div class="rule-examples-section">
           <div class="rule-examples-heading"><strong>Example outcomes</strong><span>Small samples using your current rarity/count settings and this rule.</span></div>
-          <div class="rule-examples-grid" data-rule-examples="${escapeHtml(rule.id)}"><div class="rule-example-loading">Rendering examples…</div></div>
+          <div class="rule-examples-grid" data-rule-examples="${escapeHtml(rule.id)}"><div class="rule-example-loading">Rendering examplesâ€¦</div></div>
         </div>
       </article>`;
     }).join('');
@@ -1710,7 +1832,7 @@
       const locked = lockedCounts.get(trait.id) || 0;
       if (trait.distribution === 'exact') {
         const exact = Math.max(0, Number.parseInt(trait.exactCount ?? '0', 10) || 0);
-        if (exact < locked) throw new Error(`${layer.name} → ${trait.name}: exact amount ${exact} is lower than ${locked} manually assigned token(s).`);
+        if (exact < locked) throw new Error(`${layer.name} â†’ ${trait.name}: exact amount ${exact} is lower than ${locked} manually assigned token(s).`);
         targetCounts.set(trait.id, exact);
         exactTargetSum += exact;
       } else if (usesPercentageRarity(layer)) {
@@ -1737,7 +1859,7 @@
         const allocated = pctAlloc.get(trait.id) || 0;
         const locked = lockedCounts.get(trait.id) || 0;
         if (allocated < locked) {
-          throw new Error(`${layer.name} → ${trait.name}: ${formatPercent(trait.percentage)}% is too low for the manual/imported tokens already locked to this trait.`);
+          throw new Error(`${layer.name} â†’ ${trait.name}: ${formatPercent(trait.percentage)}% is too low for the manual/imported tokens already locked to this trait.`);
         }
         targetCounts.set(trait.id, allocated);
       }
@@ -1757,7 +1879,7 @@
     const bag = [];
     for (const trait of layer.traits) {
       const need = (targetCounts.get(trait.id) || 0) - (lockedCounts.get(trait.id) || 0);
-      if (need < 0) throw new Error(`${layer.name} → ${trait.name}: manual assignments exceed its target amount.`);
+      if (need < 0) throw new Error(`${layer.name} â†’ ${trait.name}: manual assignments exceed its target amount.`);
       for (let i = 0; i < need; i++) bag.push(trait.id);
     }
     shuffle(bag, rng);
@@ -2063,7 +2185,7 @@
       for (const trait of layer.traits.filter(t => t.distribution === 'exact')) {
         const actual = tokens.reduce((count, token) => count + (token.traits[layer.id] === trait.id ? 1 : 0), 0);
         const expected = Number.parseInt(trait.exactCount || '0', 10) || 0;
-        if (actual !== expected) issues.push(`${layer.name} → ${trait.name}: expected exactly ${expected}, generated ${actual}.`);
+        if (actual !== expected) issues.push(`${layer.name} â†’ ${trait.name}: expected exactly ${expected}, generated ${actual}.`);
       }
     }
     return issues;
@@ -2097,7 +2219,7 @@
           actualPercent: (actual / supply) * 100,
           ok: expected === actual,
         });
-        if (expected !== actual) issues.push(`${layer.name} → ${trait.name}: target ${expected}, generated ${actual}.`);
+        if (expected !== actual) issues.push(`${layer.name} â†’ ${trait.name}: target ${expected}, generated ${actual}.`);
       }
     }
     return { rows, issues };
@@ -2162,6 +2284,7 @@
   }
 
   function selectPreviewTab(tab = 'collection') {
+    if (showPreviewStaleWarning(true)) return;
     const selected = tab === 'rarity' ? 'rarity' : 'collection';
     document.querySelectorAll('[data-preview-tab]').forEach(button => {
       const active = button.dataset.previewTab === selected;
@@ -2180,7 +2303,7 @@
   }
 
   async function buildCollection() {
-    el.compilerStatus.innerHTML = `<div class="compiler-box"><strong>Forging collection…</strong><ul><li>Allocating exact trait amounts</li><li>Applying manual token recipes</li><li>Resolving shared trait rules</li><li>Checking duplicates</li></ul></div>`;
+    el.compilerStatus.innerHTML = `<div class="compiler-box"><strong>Forging collectionâ€¦</strong><ul><li>Allocating exact trait amounts</li><li>Applying manual token recipes</li><li>Resolving shared trait rules</li><li>Checking duplicates</li></ul></div>`;
     el.previewGrid.innerHTML = '';
     el.previewControls.classList.add('hidden');
     el.collectionPreviewToolbar?.classList.add('hidden');
@@ -2195,6 +2318,9 @@
       const result = compileCollection();
       state.compiledTokens = result.tokens;
       state.compilerReport = result.report;
+      state.compiledInputSignature = buildInputSignature();
+      state.previewStaleAlerted = false;
+      state.previewRenderPending = false;
       renderCompilerReport();
       await renderPreviewGrid();
       el.previewControls.classList.remove('hidden');
@@ -2205,7 +2331,7 @@
     } catch (error) {
       state.compiledTokens = [];
       state.compilerReport = null;
-      el.compilerStatus.innerHTML = `<div class="compiler-box error"><strong>We couldn’t build the collection yet.</strong><ul><li>${escapeHtml(error.message)}</li></ul></div>`;
+      el.compilerStatus.innerHTML = `<div class="compiler-box error"><strong>We couldnâ€™t build the collection yet.</strong><ul><li>${escapeHtml(error.message)}</li></ul></div>`;
       showStatus(error.message, 'error');
     }
   }
@@ -2216,13 +2342,13 @@
     const distributionIssues = r.distributionIssues || [];
     const hardProblems = r.ruleViolations + r.exactIssues.length + distributionIssues.length;
     const messages = [
-      `${r.supply.toLocaleString()} token recipes created${r.oneOfOneCount ? ` · ${r.generativeSupply.toLocaleString()} generative + ${r.oneOfOneCount.toLocaleString()} full 1/1` : ''}`,
+      `${r.supply.toLocaleString()} token recipes created${r.oneOfOneCount ? ` Â· ${r.generativeSupply.toLocaleString()} generative + ${r.oneOfOneCount.toLocaleString()} full 1/1` : ''}`,
       `${r.manualTokens.toLocaleString()} token(s) use imported/manual layer choices and consume their configured rarity targets`,
       `${r.rules} shared rule(s) checked`,
       r.ruleViolations ? `${r.ruleViolations} rule conflict(s) remain` : 'All active trait rules are satisfied',
       r.exactIssues.length ? `${r.exactIssues.length} exact-count issue(s) remain` : 'All exact trait counts are satisfied',
-      distributionIssues.length ? `${distributionIssues.length} rarity-distribution mismatch(es) remain` : 'Rarity audit passed — compiled trait totals match their targets',
-      r.duplicates ? `${r.duplicates} duplicate combination(s) found — regenerate or adjust artwork/rarities if uniqueness is required` : 'No duplicate combinations found',
+      distributionIssues.length ? `${distributionIssues.length} rarity-distribution mismatch(es) remain` : 'Rarity audit passed â€” compiled trait totals match their targets',
+      r.duplicates ? `${r.duplicates} duplicate combination(s) found â€” regenerate or adjust artwork/rarities if uniqueness is required` : 'No duplicate combinations found',
     ];
 
     const conflictUi = r.ruleConflictGroups?.length ? `
@@ -2236,7 +2362,7 @@
         </div>
         ${r.ruleConflictGroups.map((group, index) => {
           const examples = group.affectedTokenIds.slice(0, 8).map(id => `#${id}`).join(', ');
-          const locked = group.lockedTokenIds.length ? `Locked token${group.lockedTokenIds.length === 1 ? '' : 's'} involved: ${group.lockedTokenIds.slice(0, 8).map(id => `#${id}`).join(', ')}${group.lockedTokenIds.length > 8 ? '…' : ''}` : '';
+          const locked = group.lockedTokenIds.length ? `Locked token${group.lockedTokenIds.length === 1 ? '' : 's'} involved: ${group.lockedTokenIds.slice(0, 8).map(id => `#${id}`).join(', ')}${group.lockedTokenIds.length > 8 ? 'â€¦' : ''}` : '';
           const diagnosis = group.capacityNotes.length
             ? group.capacityNotes.join(' ')
             : group.lockedTokenIds.length
@@ -2249,14 +2375,14 @@
                 <strong>${escapeHtml(ruleSentence(group.rule))}</strong>
               </div>
               <p>${escapeHtml(diagnosis)}</p>
-              <div class="rule-fix-meta"><span>Affected examples: ${escapeHtml(examples || '—')}</span>${locked ? `<span class="locked-warning">${escapeHtml(locked)}</span>` : ''}</div>
+              <div class="rule-fix-meta"><span>Affected examples: ${escapeHtml(examples || 'â€”')}</span>${locked ? `<span class="locked-warning">${escapeHtml(locked)}</span>` : ''}</div>
               <div class="rule-fix-actions">
                 <button type="button" class="ghost-btn" data-fix-action="adjust-counts">Adjust Rarities / Counts</button>
                 <button type="button" class="ghost-btn" data-fix-action="edit-rule" data-rule-id="${escapeHtml(group.rule.id)}">Edit This Rule</button>
                 ${group.lockedTokenIds.length ? `<button type="button" class="ghost-btn" data-fix-action="edit-token" data-token-id="${group.lockedTokenIds[0]}">Edit Locked Token #${group.lockedTokenIds[0]}</button>` : ''}
-                <button type="button" class="primary-btn" data-fix-action="relax" data-rule-id="${escapeHtml(group.rule.id)}">Auto Fix — Prioritize Rule</button>
+                <button type="button" class="primary-btn" data-fix-action="relax" data-rule-id="${escapeHtml(group.rule.id)}">Auto Fix â€” Prioritize Rule</button>
               </div>
-              <small class="rule-fix-note">“Prioritize Rule” may slightly change non-exact rarity percentages for unlocked traits, but it will never alter exact-count traits or manually locked token choices.</small>
+              <small class="rule-fix-note">â€œPrioritize Ruleâ€ may slightly change non-exact rarity percentages for unlocked traits, but it will never alter exact-count traits or manually locked token choices.</small>
             </article>`;
         }).join('')}
       </div>` : '';
@@ -2293,7 +2419,7 @@
         <summary><strong>${escapeHtml(layerRows[0].layerName)}</strong><span>${layerRows.length} trait${layerRows.length === 1 ? '' : 's'}</span></summary>
         <div class="rarity-audit-table">
           <div class="rarity-audit-row header"><span>Trait</span><span>Curated</span><span>Target</span><span>Actual</span><span>Target %</span><span>Actual %</span><span></span></div>
-          ${layerRows.map(row => `<div class="rarity-audit-row ${row.ok ? 'good' : 'bad'}"><span>${escapeHtml(row.traitName)}</span><span>${row.curated}</span><span>${row.expected}</span><span>${row.actual}</span><span>${formatPercent(row.targetPercent)}%</span><span>${formatPercent(row.actualPercent)}%</span><strong>${row.ok ? '✓' : '!'}</strong></div>`).join('')}
+          ${layerRows.map(row => `<div class="rarity-audit-row ${row.ok ? 'good' : 'bad'}"><span>${escapeHtml(row.traitName)}</span><span>${row.curated}</span><span>${row.expected}</span><span>${row.actual}</span><span>${formatPercent(row.targetPercent)}%</span><span>${formatPercent(row.actualPercent)}%</span><strong>${row.ok ? 'âœ“' : '!'}</strong></div>`).join('')}
         </div>
       </details>`).join('')}`;
 
@@ -2407,7 +2533,7 @@
     if (vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0) {
       if (expectedWidth && expectedHeight &&
           (Math.round(vb[2]) !== Math.round(expectedWidth) || Math.round(vb[3]) !== Math.round(expectedHeight))) {
-        throw new Error(`${trait.name || trait.file.name} SVG viewBox is ${vb[2]}×${vb[3]}; expected ${expectedWidth}×${expectedHeight}.`);
+        throw new Error(`${trait.name || trait.file.name} SVG viewBox is ${vb[2]}Ã—${vb[3]}; expected ${expectedWidth}Ã—${expectedHeight}.`);
       }
       offsetX = vb[0];
       offsetY = vb[1];
@@ -2416,7 +2542,7 @@
       const height = Number.parseFloat(root.getAttribute('height') || '0');
       if (width > 0 && height > 0 && expectedWidth && expectedHeight &&
           (Math.round(width) !== Math.round(expectedWidth) || Math.round(height) !== Math.round(expectedHeight))) {
-        throw new Error(`${trait.name || trait.file.name} SVG is ${width}×${height}; expected ${expectedWidth}×${expectedHeight}.`);
+        throw new Error(`${trait.name || trait.file.name} SVG is ${width}Ã—${height}; expected ${expectedWidth}Ã—${expectedHeight}.`);
       }
     }
 
@@ -2549,20 +2675,20 @@
     el.oneOfOneList.innerHTML = state.oneOfOnes.map(item => `
       <div class="oneofone-item oneofone-item-rich" data-oneofone-id="${escapeHtml(item.id)}">
         <div class="oneofone-art-column">
-          <img src="${item.url}" alt="${escapeHtml(item.name)}"/>
+          <img loading="lazy" decoding="async" src="${item.url}" alt="${escapeHtml(item.name)}"/>
           <label class="field compact-field"><span>Artwork label</span><input class="oneofone-name" value="${escapeHtml(item.name)}" maxlength="80" aria-label="1 of 1 artwork label"/></label>
-          <div class="oneofone-item-footer"><span>${item.width || '?'}×${item.height || '?'}</span><button class="trait-thumb-remove" type="button" data-remove-oneofone="${escapeHtml(item.id)}">Remove</button></div>
+          <div class="oneofone-item-footer"><span>${item.width || '?'}Ã—${item.height || '?'}</span><button class="trait-thumb-remove" type="button" data-remove-oneofone="${escapeHtml(item.id)}">Remove</button></div>
         </div>
         <div class="oneofone-meta-column">
           <div class="oneofone-meta-heading"><strong>Custom token metadata</strong><small>Optional. Customize this standalone token without affecting the rest of the collection.</small></div>
-          <label class="inline-check"><input class="oneofone-default-attribute" type="checkbox" ${item.includeDefaultAttribute !== false ? 'checked' : ''}/> Include default “1/1 = ${escapeHtml(item.name)}” attribute</label>
+          <label class="inline-check"><input class="oneofone-default-attribute" type="checkbox" ${item.includeDefaultAttribute !== false ? 'checked' : ''}/> Include default â€œ1/1 = ${escapeHtml(item.name)}â€ attribute</label>
           <label class="field compact-field"><span>Token name override</span><input class="oneofone-token-name" value="${escapeHtml(item.tokenName || '')}" maxlength="120" placeholder="e.g. The First Relic"/></label>
           <label class="field compact-field"><span>Description override</span><textarea class="oneofone-description" rows="2" maxlength="1000" placeholder="Optional custom description">${escapeHtml(item.description || '')}</textarea></label>
           <div class="oneofone-metadata-list">
             ${(item.metadata || []).map((row, index) => `<div class="oneofone-metadata-row" data-meta-index="${index}">
               <input class="oneofone-meta-type" value="${escapeHtml(row.traitType || '')}" maxlength="80" placeholder="Trait type"/>
               <input class="oneofone-meta-value" value="${escapeHtml(row.value || '')}" maxlength="120" placeholder="Value"/>
-              <button type="button" class="icon-btn" data-remove-oneofone-meta="${index}" title="Remove metadata field">×</button>
+              <button type="button" class="icon-btn" data-remove-oneofone-meta="${index}" title="Remove metadata field">Ã—</button>
             </div>`).join('')}
           </div>
           <button class="ghost-btn small-btn" type="button" data-add-oneofone-meta="${escapeHtml(item.id)}">Add metadata field</button>
@@ -2579,7 +2705,7 @@
     for (const file of valid) {
       const meta = await imageMeta(file);
       if (state.layers.length && meta.width && meta.height && (meta.width !== state.imageWidth || meta.height !== state.imageHeight)) {
-        throw new Error(`${file.name} is ${meta.width}×${meta.height}; full 1/1 artwork must match the ${state.imageWidth}×${state.imageHeight} collection canvas.`);
+        throw new Error(`${file.name} is ${meta.width}Ã—${meta.height}; full 1/1 artwork must match the ${state.imageWidth}Ã—${state.imageHeight} collection canvas.`);
       }
       if (!state.layers.length && meta.width && meta.height) { state.imageWidth = meta.width; state.imageHeight = meta.height; }
       state.oneOfOnes.push({
@@ -2694,7 +2820,7 @@
     state.previewPage = Math.min(Math.max(1, Number(state.previewPage || 1)), totalPages);
     const start = total ? ((state.previewPage - 1) * pageSize) + 1 : 0;
     const end = total ? Math.min(total, state.previewPage * pageSize) : 0;
-    if (el.previewRange) el.previewRange.textContent = total ? `Tokens ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}` : 'No compiled tokens';
+    if (el.previewRange) el.previewRange.textContent = total ? `Tokens ${start.toLocaleString()}â€“${end.toLocaleString()} of ${total.toLocaleString()}` : 'No compiled tokens';
     if (el.previewPageLabel) el.previewPageLabel.textContent = `Page ${state.previewPage.toLocaleString()} of ${totalPages.toLocaleString()}`;
     if (el.previewPrevBtn) el.previewPrevBtn.disabled = state.previewPage <= 1;
     if (el.previewNextBtn) el.previewNextBtn.disabled = state.previewPage >= totalPages;
@@ -2714,14 +2840,14 @@
     const picks = tokens.slice(offset, offset + pageSize);
     el.previewGrid.innerHTML = picks.map(token => {
       const traitNames = token.oneOfOneId
-        ? [`1/1 · ${getOneOfOne(token.oneOfOneId)?.name || 'Standalone'}`]
-        : state.layers.map(layer => `${layer.name}: ${getTrait(token.traits[layer.id])?.name || '—'}`);
+        ? [`1/1 Â· ${getOneOfOne(token.oneOfOneId)?.name || 'Standalone'}`]
+        : state.layers.map(layer => `${layer.name}: ${getTrait(token.traits[layer.id])?.name || 'â€”'}`);
       return `
-      <article class="preview-card" data-token-id="${token.tokenId}" title="${escapeHtml(traitNames.join(' · '))}">
+      <article class="preview-card" data-token-id="${token.tokenId}" title="${escapeHtml(traitNames.join(' Â· '))}">
         <div class="preview-canvas-wrap"><div class="svg-preview-host preview-svg-host" role="img" aria-label="Rendered token #${token.tokenId}"></div></div>
         <div class="preview-card-body">
           <strong>#${token.tokenId}</strong>
-          <div class="preview-traits">${token.oneOfOneId ? `<span>1/1 · ${escapeHtml(getOneOfOne(token.oneOfOneId)?.name || 'Standalone')}</span>` : state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || '—')}</span>`).join('')}</div>
+          <div class="preview-traits">${token.oneOfOneId ? `<span>1/1 Â· ${escapeHtml(getOneOfOne(token.oneOfOneId)?.name || 'Standalone')}</span>` : state.layers.map(layer => `<span>${escapeHtml(getTrait(token.traits[layer.id])?.name || 'â€”')}</span>`).join('')}</div>
         </div>
       </article>`;
     }).join('');
@@ -2929,7 +3055,6 @@
     state.hideNoneMetadata = !!saved.hideNoneMetadata;
     if (el.hideNoneMetadata) el.hideNoneMetadata.checked = state.hideNoneMetadata;
     if (el.oneOfOneToggle) el.oneOfOneToggle.checked = state.oneOfOnes.length > 0;
-    renderOneOfOnes();
     state.rulesEnabled = !!saved.rulesEnabled;
     state.rules = (saved.rules || []).map(rule => ({ id: rule.id, type: rule.type, sources: [...(rule.sources || [])], targets: [...(rule.targets || [])] }));
     state.ruleType = saved.ruleType || 'only_with';
@@ -2950,24 +3075,30 @@
     el.collectionSize.value = Number(ui.collectionSize || Math.max(1, state.compiledTokens.length) || 1);
     el.seedInput.value = ui.seed || 'RELIC-001';
 
-    renderArtwork();
-    setBuildMode(saved.buildMode || 'auto');
-    setRulesEnabled(!!saved.rulesEnabled);
-    renderTraitSetup();
-    renderManualBuilder();
-    renderRulePickers();
-    renderRulesList();
+    const targetStep = Math.max(1, Math.min(5, Number(ui.step || 1)));
+
+    // Restore the data immediately, but hydrate only the visible Studio step.
+    // Expensive trait/rule/preview DOM is built later when that step is opened.
+    setBuildMode(saved.buildMode || 'auto', false);
+    setRulesEnabled(!!saved.rulesEnabled, false);
     updateStep1State();
-    if (state.compilerReport) renderCompilerReport();
+
+    state.compiledInputSignature = state.compilerReport ? buildInputSignature() : null;
+    state.previewStaleAlerted = false;
+    state.previewRenderPending = state.compiledTokens.length > 0;
+
     if (state.compiledTokens.length) {
-      await renderPreviewGrid();
       el.previewControls?.classList.remove('hidden');
       el.collectionPreviewToolbar?.classList.remove('hidden');
+    } else {
+      el.previewControls?.classList.add('hidden');
+      el.collectionPreviewToolbar?.classList.add('hidden');
     }
-    gotoStep(Math.max(1, Math.min(5, Number(ui.step || 1))));
+
+    gotoStep(targetStep);
     updateLaunchSummary();
     if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V11.0.0 compiler before forging.`, 'warn');
-    else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
+    else showStatus(`Project â€œ${el.collectionName.value || 'Untitled Collection'}â€ restored.`, 'success');
   }
 
   function updateLaunchSummary() {
@@ -2989,7 +3120,7 @@
         <div class="launch-summary-row"><span>Wallet limit</span><strong>${Number(maxPerWallet) === 0 ? 'Unlimited' : escapeHtml(maxPerWallet)}</strong></div>
         <div class="launch-summary-row"><span>Mint access</span><strong>${$('#whitelistEnabled')?.checked ? `Whitelist${$('#publicMintEnabled')?.checked ? ' + public' : ' only'}` : 'Public'}</strong></div>
         <div class="launch-summary-row"><span>Royalty</span><strong>${escapeHtml(royalty)}%</strong></div>
-        <div class="launch-summary-row"><span>Studio compiler</span><strong>${report && !report.ruleViolations && !report.exactIssues.length ? 'Valid ✓' : 'Needs review'}</strong></div>
+        <div class="launch-summary-row"><span>Studio compiler</span><strong>${report && !report.ruleViolations && !report.exactIssues.length ? 'Valid âœ“' : 'Needs review'}</strong></div>
       </div>`;
   }
 
@@ -3095,7 +3226,7 @@
     if (sizeError) {
       state.categoryPendingFiles = [];
       e.target.value = '';
-      if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = 'Files rejected — over onchain trait limit';
+      if (el.categoryTraitFileCount) el.categoryTraitFileCount.textContent = 'Files rejected â€” over onchain trait limit';
       showStatus(sizeError, 'error');
       return;
     }
@@ -3266,7 +3397,10 @@
   $$('.back-btn').forEach(btn => btn.addEventListener('click', () => gotoStep(Number(btn.dataset.back))));
 
   // Build mode + trait controls
-  $$('.build-card').forEach(card => card.addEventListener('click', () => setBuildMode(card.dataset.buildMode)));
+  $$('.build-card').forEach(card => card.addEventListener('click', () => {
+    setBuildMode(card.dataset.buildMode);
+    resetCompiledForArtworkChange();
+  }));
   el.traitSetup.addEventListener('input', e => {
     if (!e.target.classList.contains('percent-input') && !e.target.classList.contains('exact-count')) return;
     const config = e.target.closest('[data-trait-id]');
@@ -3419,8 +3553,8 @@
   });
 
   // Rules
-  el.noRulesBtn.addEventListener('click', () => setRulesEnabled(false));
-  el.yesRulesBtn.addEventListener('click', () => setRulesEnabled(true));
+  el.noRulesBtn.addEventListener('click', () => { setRulesEnabled(false); resetCompiledForArtworkChange(); });
+  el.yesRulesBtn.addEventListener('click', () => { setRulesEnabled(true); resetCompiledForArtworkChange(); });
   el.sourceLayerSelect.addEventListener('change', () => renderTraitPicker('source'));
   el.targetLayerSelect.addEventListener('change', () => renderTraitPicker('target'));
   [el.sourceTraitPicker, el.targetTraitPicker].forEach(picker => picker.addEventListener('click', e => {
@@ -3458,6 +3592,7 @@
     const btn = e.target.closest('.rule-remove');
     if (!btn) return;
     state.rules = state.rules.filter(rule => rule.id !== btn.dataset.ruleId);
+    resetCompiledForArtworkChange();
     renderRulesList();
   });
 
@@ -3494,8 +3629,20 @@
   document.querySelectorAll('[data-preview-tab]').forEach(button => {
     button.addEventListener('click', () => selectPreviewTab(button.dataset.previewTab));
   });
+
+  const invalidatePreviewFromEditedInput = event => {
+    const target = event.target;
+    if (!target?.closest) return;
+    if (!target.closest('.step-panel[data-panel="1"], .step-panel[data-panel="2"], .step-panel[data-panel="3"], .seed-control-stack')) return;
+    queueMicrotask(() => {
+      if (state.compiledInputSignature && previewIsStale()) resetCompiledForArtworkChange();
+    });
+  };
+  document.addEventListener('input', invalidatePreviewFromEditedInput, true);
+  document.addEventListener('change', invalidatePreviewFromEditedInput, true);
   $('#randomSeedBtn')?.addEventListener('click', () => {
     el.seedInput.value = randomSeed16();
+    resetCompiledForArtworkChange();
     showStatus('Generated a new 16-character seed. Click Regenerate to rebuild the collection with it.', 'success');
   });
   $('#compileBtn').addEventListener('click', buildCollection);
