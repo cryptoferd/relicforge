@@ -410,7 +410,7 @@
     if (trait.isNone) {
       return '<div class="thumb-box thumb-box-none"><span>None</span></div>';
     }
-    return `<div class="thumb-box"><img src="${trait.url}" alt="${escapeHtml(trait.name)}" /></div>`;
+    return `<div class="thumb-box"><img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}" /></div>`;
   }
 
   function syncNoneTrait(layer) {
@@ -739,14 +739,14 @@
           </div>
         </div>
         <div class="trait-thumbs">
-          ${layer.traits.slice(0, 24).map(trait => `
+          ${layer.traits.map(trait => `
             <div class="trait-thumb" data-trait-id="${escapeHtml(trait.id)}">
               ${traitPreviewMarkup(trait)}
               <input class="trait-name-input" data-trait-id="${escapeHtml(trait.id)}" type="text" value="${escapeHtml(trait.name)}" maxlength="80" aria-label="Rename trait ${escapeHtml(trait.name)}" ${trait.isNone ? 'disabled title="None is a system trait"' : ''} />
               ${trait.isNone ? '' : `<button class="trait-thumb-remove" type="button" data-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}" title="Remove trait">Remove</button>`}
             </div>
           `).join('')}
-          ${layer.traits.length > 24 ? `<div class="trait-thumb"><div class="thumb-box">+${layer.traits.length - 24}</div><span>more traits</span></div>` : ''}
+          ${false && layer.traits.length > 24 ? `<div class="trait-thumb"><div class="thumb-box">+${layer.traits.length - 24}</div><span>more traits</span></div>` : ''}
         </div>
         <div class="layer-upload-row">
           <label class="ghost-btn small-btn file-button" for="layer-traits-${escapeHtml(layer.id)}">Add Trait Artwork</label>

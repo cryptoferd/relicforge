@@ -60,6 +60,11 @@
     'function totalMinted() view returns(uint32)',
     'function masterMintEnabled() view returns(bool)',
     'function futureRevealMode() view returns(uint8)',
+    'function deferredPendingCount() view returns(uint32)',
+    'function nextRequestSequence() view returns(uint64)',
+    'function nextProcessSequence() view returns(uint64)',
+    'function nextEpochStartToken() view returns(uint64)',
+    'function revealRequests(uint64 sequence) view returns(uint8 kind,uint64 startTokenId,uint64 endTokenId,uint64 cursor,uint32 assignmentNonce,bool fulfilled,uint256 seed)',
     'function phaseCount() view returns(uint32)',
     'function phases(uint32) view returns(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 minted,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled)',
     'function phaseIsOpen(uint32 phaseId) view returns(bool)',
@@ -2444,10 +2449,12 @@ ${await file.text()}`;
       const [
         name, symbol, description, controller, dataAddress, payoutReceiver, royaltyReceiver, royaltyBps,
         maxSupply, totalMinted, masterMintEnabled, futureRevealMode, phaseCount,
+        deferredPendingCount, nextRequestSequence, nextProcessSequence, nextEpochStartToken,
         holderRenderEnabled, defaultRenderMode, flattenedRenderBaseURI
       ] = await Promise.all([
         v1.name(), v1.symbol(), v1.description(), v1.controller(), v1.dataContract(), v1.payoutReceiver(), v1.royaltyReceiver(), v1.royaltyBps(),
         v1.maxSupply(), v1.totalMinted(), v1.masterMintEnabled(), v1.futureRevealMode(), v1.phaseCount(),
+        v1.deferredPendingCount().catch(() => 0n), v1.nextRequestSequence().catch(() => 1n), v1.nextProcessSequence().catch(() => 1n), v1.nextEpochStartToken().catch(() => 1n),
         v1.holderRenderModeEnabled().catch(() => false), v1.defaultRenderMode().catch(() => 0n), v1.flattenedRenderBaseURI().catch(() => '')
       ]);
 
@@ -2490,6 +2497,26 @@ ${await file.text()}`;
       const publicPhase = preferred(publicPhases);
       const whitelistPhase = preferred(whitelistPhases);
 
+      const deferredPending = Number(deferredPendingCount);
+      const nextRequest = Number(nextRequestSequence);
+      const nextProcess = Number(nextProcessSequence);
+      const nextEpochStart = Number(nextEpochStartToken);
+      const revealQueuePending = Math.max(0, nextRequest - nextProcess);
+      let nextReveal = null;
+      if (revealQueuePending > 0) {
+        try {
+          const raw = await v1.revealRequests(nextProcessSequence);
+          nextReveal = {
+            sequence: nextProcess,
+            kind: Number(raw.kind ?? raw[0] ?? 0n),
+            startTokenId: Number(raw.startTokenId ?? raw[1] ?? 0n),
+            endTokenId: Number(raw.endTokenId ?? raw[2] ?? 0n),
+            cursor: Number(raw.cursor ?? raw[3] ?? 0n),
+            fulfilled: Boolean(raw.fulfilled ?? raw[5] ?? false),
+          };
+        } catch (_) {}
+      }
+      const deferredRequestable = deferredPending > 0 && nextEpochStart <= Number(totalMinted);
       let contentSealed = false;
       let provenance = window.ethers.ZeroHash;
       try {
@@ -2512,6 +2539,11 @@ ${await file.text()}`;
         totalMinted: Number(totalMinted),
         masterMintEnabled: Boolean(masterMintEnabled),
         futureRevealMode: Number(futureRevealMode),
+        deferredPendingCount: deferredPending,
+        deferredRequestable,
+        revealQueuePending,
+        nextReveal,
+        nextEpochStartToken: nextEpochStart,
         phaseCount: totalPhases,
         phases,
         phasesTruncated: totalPhases > scanCount,
@@ -2811,6 +2843,17 @@ ${await file.text()}`;
         return;
       }
 
+      if (action === 'processreveal') {
+        if (!snap.nextReveal?.fulfilled) throw new Error('No fulfilled reveal request is ready to process. Refresh the dashboard after randomness fulfillment.');
+        const steps = Math.max(1, Math.min(500, Math.floor(Number($('dashboardV1RevealSteps')?.value || 50))));
+        launchedStatus(`Processing ready reveal batch with up to ${steps} step${steps === 1 ? '' : 's'}...`);
+        const tx = await contract.processReveal(steps);
+        launchedStatus(`Reveal processing submitted - ${tx.hash.slice(0, 12)}...`);
+        await tx.wait();
+        launchedStatus('Ready reveal processing confirmed.');
+        await loadLaunchedProjects();
+        return;
+      }
       if (!snap.controllerActive) throw new Error('V1 controller has been renounced; creator onchain controls are permanently disabled.');
 
       if (action === 'mastermint') {
@@ -2827,6 +2870,13 @@ ${await file.text()}`;
         launchedStatus(`Creator Mint submitted · ${tx.hash.slice(0, 12)}…`);
         await tx.wait();
         launchedStatus('V1 Creator Mint confirmed.');
+      } else if (action === 'deferredreveal') {
+        if (!snap.deferredRequestable) throw new Error('There are no unrequested deferred tokens ready for a new reveal epoch.');
+        launchedStatus('Requesting deferred reveal epoch...');
+        const tx = await contract.requestRevealEpoch();
+        launchedStatus(`Deferred reveal request submitted - ${tx.hash.slice(0, 12)}...`);
+        await tx.wait();
+        launchedStatus('Deferred reveal epoch requested. Wait for randomness fulfillment, then refresh and process the ready reveal.');
       }
 
       await loadLaunchedProjects();
@@ -2923,6 +2973,23 @@ ${await file.text()}`;
         </div>
       </div>
 
+      <div class="launched-section">
+        <h4>Reveal Controls</h4>
+        <p class="forge-footnote">${snap.futureRevealMode === 1 ? 'Forge Reveal requests randomness automatically after each mint. Once Chainlink fulfills the next request, process the ready batch to assign recipes and reveal those tokens.' : 'Deferred Reveal keeps minted tokens hidden until you request a reveal epoch. After Chainlink fulfills the request, process the ready batch to assign recipes and reveal those tokens.'}</p>
+        <div class="launched-stats">
+          <div><span>Mode</span><strong>${snap.futureRevealMode === 1 ? 'FORGE REVEAL' : 'DEFERRED REVEAL'}</strong></div>
+          <div><span>Deferred pending</span><strong>${Number(snap.deferredPendingCount || 0).toLocaleString()}</strong></div>
+          <div><span>Reveal queue</span><strong>${Number(snap.revealQueuePending || 0).toLocaleString()}</strong></div>
+          <div><span>Next request</span><strong>${snap.nextReveal ? (snap.nextReveal.fulfilled ? 'READY TO PROCESS' : 'WAITING FOR RANDOMNESS') : 'NONE'}</strong></div>
+        </div>
+        ${snap.nextReveal ? `<div class="forge-inline-status">Request #${snap.nextReveal.sequence} covers token #${snap.nextReveal.startTokenId} through #${snap.nextReveal.endTokenId}. ${snap.nextReveal.fulfilled ? 'Randomness is fulfilled and the batch can be processed now.' : 'Randomness has been requested but is not fulfilled yet.'}</div>` : ''}
+        <div class="launched-actions">
+          <button class="primary-btn" data-v1-dashboard-action="deferredreveal" ${canControl && snap.deferredRequestable ? '' : 'disabled'} type="button">Request Deferred Reveal</button>
+          <label class="field"><span>Process steps</span><input id="dashboardV1RevealSteps" min="1" max="500" type="number" value="50" ${isOwner && snap.revealQueuePending > 0 ? '' : 'disabled'}/><small>Use another transaction if a large batch needs more steps.</small></label>
+          <button class="ghost-btn" data-v1-dashboard-action="processreveal" ${isOwner && snap.nextReveal?.fulfilled ? '' : 'disabled'} type="button">Process Ready Reveal</button>
+        </div>
+        <small class="forge-footnote">Request Deferred Reveal is enabled only when minted deferred tokens have not yet been assigned to an epoch. Process Ready Reveal becomes available after the next queued request receives randomness. Processing is permissionless onchain, so it remains possible even after creator control is renounced.</small>
+      </div>
       <div class="launched-section">
         <h4>Mint Phases</h4>
         ${dashboardV1PhaseRows(snap, canControl)}
