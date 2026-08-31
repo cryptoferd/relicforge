@@ -146,7 +146,7 @@
 
   function shortAddr(value) {
     const text = String(value || '');
-    return text && text.length > 12 ? `${text.slice(0, 6)}â€¦${text.slice(-4)}` : (text || 'â€”');
+    return text && text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
   }
 
   const cloudReadProviders = new Map();
@@ -332,12 +332,12 @@
     try {
       const config = await persistMintPageConfig();
       if (window.RelicForgeCloud?.enabled?.()) {
-        if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing current mint page settings globallyâ€¦';
+        if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing current mint page settings globally…';
         await publishMintPageCloud(config.contract);
       }
       window.open(`./mint.html?contract=${encodeURIComponent(config.contract)}&chain=${config.chainId}`, '_blank', 'noopener');
       if ($('mintPageStatus')) $('mintPageStatus').textContent = window.RelicForgeCloud?.enabled?.()
-        ? 'âœ“ Mint page published globally and opened.'
+        ? '✓ Mint page published globally and opened.'
         : 'Mint page opened from local settings. Cloud publishing is not configured.';
     } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Mint page: ${error.message}`; }
   }
@@ -521,15 +521,15 @@
     if (!wl) { target.innerHTML = ''; return; }
     target.innerHTML = [
       ['Eligible wallets', wl.entries.length.toLocaleString()],
-      ['Merkle root', `<code>${esc(wl.root.slice(0, 10))}â€¦${esc(wl.root.slice(-8))}</code>`],
-      ['Source', wl.sourceType === 1 ? `${esc(wl.sourceChainLabel || `Chain ${wl.sourceChainId}`)} Â· block ${Number(wl.snapshotBlock).toLocaleString()}` : 'Custom whitelist'],
+      ['Merkle root', `<code>${esc(wl.root.slice(0, 10))}…${esc(wl.root.slice(-8))}</code>`],
+      ['Source', wl.sourceType === 1 ? `${esc(wl.sourceChainLabel || `Chain ${wl.sourceChainId}`)} · block ${Number(wl.snapshotBlock).toLocaleString()}` : 'Custom whitelist'],
       ['Allowance', wl.uniformAllowance ? `${wl.uniformAllowance} per wallet` : 'Per-wallet allowances'],
     ].map(([label, value]) => `<div class="forge-row"><span>${label}</span><strong>${value}</strong></div>`).join('');
   }
 
   function setWhitelistResult(result) {
     forgeState.whitelist = result;
-    if ($('whitelistStatus')) $('whitelistStatus').textContent = `âœ“ ${result.entries.length.toLocaleString()} eligible wallet${result.entries.length === 1 ? '' : 's'} Â· root ${result.root.slice(0, 10)}â€¦`;
+    if ($('whitelistStatus')) $('whitelistStatus').textContent = `✓ ${result.entries.length.toLocaleString()} eligible wallet${result.entries.length === 1 ? '' : 's'} · root ${result.root.slice(0, 10)}…`;
     renderWhitelistSummary();
     $('downloadWhitelistBtn')?.classList.remove('hidden');
   }
@@ -641,7 +641,7 @@
       }
       cursor += count;
       attempted += count;
-      onProgress?.(owners.length, totalSupply, `current owners Â· scanned ${attempted.toLocaleString()} token IDs`);
+      onProgress?.(owners.length, totalSupply, `current owners · scanned ${attempted.toLocaleString()} token IDs`);
     }
     if (owners.length !== totalSupply) {
       throw new Error(`Direct current-state scan found ${owners.length.toLocaleString()} of ${totalSupply.toLocaleString()} live tokens. Historical/indexer fallback required for this token-ID layout.`);
@@ -692,7 +692,7 @@
       const allowance = whitelistDefaultAllowance();
       const chain = whitelistSourceChainConfig();
       const provider = whitelistSourceProvider(false);
-      $('whitelistStatus').textContent = `Connecting to ${chain.label}â€¦`;
+      $('whitelistStatus').textContent = `Connecting to ${chain.label}…`;
       const snapshotBlock = await provider.getBlockNumber();
       const code = await provider.getCode(source);
       if (!code || code === '0x') throw new Error(`No contract exists at this address on ${chain.label}. Check the Source network selection.`);
@@ -710,11 +710,11 @@
       if (is1155) {
         const historyProvider = whitelistSourceProvider(true);
         const deploymentBlock = 0;
-        $('whitelistStatus').textContent = `ERC-1155 requires transfer-history reconstruction. Scanning ${chain.label} through the historical RPCâ€¦`;
+        $('whitelistStatus').textContent = `ERC-1155 requires transfer-history reconstruction. Scanning ${chain.label} through the historical RPC…`;
         const singleTopic = window.ethers.id('TransferSingle(address,address,address,uint256,uint256)');
         const batchTopic = window.ethers.id('TransferBatch(address,address,address,uint256[],uint256[])');
         const logs = await getLogsChunked(historyProvider, { address: source, topics: [[singleTopic, batchTopic]] }, deploymentBlock, snapshotBlock, (cursor, end, count) => {
-          $('whitelistStatus').textContent = `Scanning ERC-1155 Â· block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} Â· ${count.toLocaleString()} transfer events`;
+          $('whitelistStatus').textContent = `Scanning ERC-1155 · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfer events`;
         });
         const totals = new Map();
         const coder = window.ethers.AbiCoder.defaultAbiCoder();
@@ -737,17 +737,17 @@
         addresses = [...totals.entries()].filter(([, balance]) => balance > 0n).map(([address]) => window.ethers.getAddress(address));
       } else {
         try {
-          $('whitelistStatus').textContent = `Reading current ERC-721 ownership at ${chain.label} block ${snapshotBlock.toLocaleString()}â€¦`;
+          $('whitelistStatus').textContent = `Reading current ERC-721 ownership at ${chain.label} block ${snapshotBlock.toLocaleString()}…`;
           const currentOwners = await snapshotERC721CurrentState(provider, source, snapshotBlock, (done, total, phase) => {
-            $('whitelistStatus').textContent = `${phase} Â· ${Number(done).toLocaleString()} / ${Number(total).toLocaleString()} at block ${snapshotBlock.toLocaleString()}`;
+            $('whitelistStatus').textContent = `${phase} · ${Number(done).toLocaleString()} / ${Number(total).toLocaleString()} at block ${snapshotBlock.toLocaleString()}`;
           });
           addresses = [...new Set(currentOwners.map(a => a.toLowerCase()))].map(a => window.ethers.getAddress(a));
         } catch (directError) {
           const historyProvider = whitelistSourceProvider(true);
-          $('whitelistStatus').textContent = `Current-state enumeration unavailable (${directError.message}). Falling back to transfer historyâ€¦`;
+          $('whitelistStatus').textContent = `Current-state enumeration unavailable (${directError.message}). Falling back to transfer history…`;
           const topic = window.ethers.id('Transfer(address,address,uint256)');
           const logs = await getLogsChunked(historyProvider, { address: source, topics: [topic] }, 0, snapshotBlock, (cursor, end, count) => {
-            $('whitelistStatus').textContent = `Historical ERC-721 fallback Â· block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} Â· ${count.toLocaleString()} transfers`;
+            $('whitelistStatus').textContent = `Historical ERC-721 fallback · block ${Math.min(cursor, end).toLocaleString()} / ${end.toLocaleString()} · ${count.toLocaleString()} transfers`;
           });
           const owners = new Map();
           for (const logEntry of logs) {
@@ -789,7 +789,7 @@ ${await file.text()}`;
   }
 
   function fmtBytes(n) {
-    if (!Number.isFinite(n)) return 'â€”';
+    if (!Number.isFinite(n)) return '—';
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / 1024 / 1024).toFixed(2)} MB`;
@@ -930,10 +930,10 @@ ${await file.text()}`;
     document.querySelectorAll('[data-reveal-card]').forEach(card => card.classList.toggle('selected', Number(card.dataset.revealCard) === reveal));
     $('creatorPlaceholderWrap')?.classList.toggle('hidden', reveal !== 1);
     bridge().updateLaunchSummary?.();
-    if (forgeState.compiled && forgeState.compiled.core.revealMode !== reveal) invalidateCompile('Reveal mode changed â€” recompile for onchain.');
+    if (forgeState.compiled && forgeState.compiled.core.revealMode !== reveal) invalidateCompile('Reveal mode changed — recompile for onchain.');
   }
 
-  function invalidateCompile(message = 'Collection changed â€” recompile for onchain.') {
+  function invalidateCompile(message = 'Collection changed — recompile for onchain.') {
     forgeState.compiled = null;
     if ($('forgeCollectionBtn')) $('forgeCollectionBtn').disabled = true;
     if ($('forgeCompileStatus')) $('forgeCompileStatus').textContent = message;
@@ -966,7 +966,7 @@ ${await file.text()}`;
       const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
       if (vb.length === 4 && Number.isFinite(vb[2]) && Number.isFinite(vb[3])) {
         if (Math.round(vb[2]) !== expectedWidth || Math.round(vb[3]) !== expectedHeight) {
-          throw new Error(`Creator placeholder SVG is ${vb[2]}Ã—${vb[3]}; expected ${expectedWidth}Ã—${expectedHeight}.`);
+          throw new Error(`Creator placeholder SVG is ${vb[2]}×${vb[3]}; expected ${expectedWidth}×${expectedHeight}.`);
         }
       }
       const fragment = root.innerHTML.replace(/<!--([\s\S]*?)-->/g, '').replace(/>\s+</g, '><').replace(/\s{2,}/g, ' ').trim() || '<g/>';
@@ -976,9 +976,9 @@ ${await file.text()}`;
     if (ext === 'gif' || String(file.type || '').toLowerCase() === 'image/gif') {
       const bitmap = await createImageBitmap(file);
       if (bitmap.width !== expectedWidth || bitmap.height !== expectedHeight) {
-        const dims = `${bitmap.width}Ã—${bitmap.height}`;
+        const dims = `${bitmap.width}×${bitmap.height}`;
         bitmap.close();
-        throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}Ã—${expectedHeight}.`);
+        throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}×${expectedHeight}.`);
       }
       bitmap.close();
       const raw = new Uint8Array(await file.arrayBuffer());
@@ -991,9 +991,9 @@ ${await file.text()}`;
 
     const bitmap = await createImageBitmap(file);
     if (bitmap.width !== expectedWidth || bitmap.height !== expectedHeight) {
-      const dims = `${bitmap.width}Ã—${bitmap.height}`;
+      const dims = `${bitmap.width}×${bitmap.height}`;
       bitmap.close();
-      throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}Ã—${expectedHeight}.`);
+      throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}×${expectedHeight}.`);
     }
     const canvas = document.createElement('canvas');
     canvas.width = bitmap.width; canvas.height = bitmap.height;
@@ -1138,7 +1138,7 @@ ${await file.text()}`;
       if (studio.layers.length + (studio.oneOfOnes?.length ? 1 : 0) > 64) throw new Error('Relic Forge V1 supports at most 64 layers including the optional 1/1 layer.');
       if (studio.imageWidth > 65535 || studio.imageHeight > 65535) throw new Error('Canvas dimensions exceed the v1 uint16 renderer limit.');
 
-      setCompileProgress(2, 'Reading final Studio collectionâ€¦');
+      setCompileProgress(2, 'Reading final Studio collection…');
       const layerDefs = studio.layers.map((layer, layerIndex) => {
         cleanMetadataString(layer.name, `Layer ${layerIndex + 1} name`);
         if (!layer.traits.length) throw new Error(`${layer.name} has no trait artwork.`);
@@ -1181,7 +1181,7 @@ ${await file.text()}`;
       let done = 0;
       for (const layer of layerDefs) {
         for (const traitDef of layer.traits) {
-          setCompileProgress(5 + 55 * (done / Math.max(1, totalTraits)), `Optimizing ${layer.name} / ${traitDef.name}â€¦`);
+          setCompileProgress(5 + 55 * (done / Math.max(1, totalTraits)), `Optimizing ${layer.name} / ${traitDef.name}…`);
           const source = traitDef.trait;
           const asset = await compileTraitAsset(source);
           compiledTraits.push({
@@ -1202,9 +1202,9 @@ ${await file.text()}`;
 
       setCompileProgress(64, 'Packing artwork into immutable bytecode shards...');
       const artShards = packTraitBytes(compiledTraits);
-      setCompileProgress(73, 'Packing exact recipe DNAâ€¦');
+      setCompileProgress(73, 'Packing exact recipe DNA…');
       const dna = buildDna(studio, layerDefs);
-      setCompileProgress(81, 'Compiling reveal placeholderâ€¦');
+      setCompileProgress(81, 'Compiling reveal placeholder…');
       const placeholder = forgeState.placeholderFile
         ? await compilePlaceholderFile(forgeState.placeholderFile, studio.imageWidth, studio.imageHeight)
         : { fragment: defaultForgePlaceholderFragment(studio.imageWidth, studio.imageHeight), encoding: 'relicforge-default' };
@@ -1234,7 +1234,7 @@ ${await file.text()}`;
         }
       }
 
-      setCompileProgress(88, 'Generating provenance commitmentâ€¦');
+      setCompileProgress(88, 'Generating provenance commitment…');
       const core = {
         schema: 'relic-forge/onchain-compile@0.1',
         name: cleanMetadataString($('launchName').value, 'Collection name'),
@@ -1279,7 +1279,7 @@ ${await file.text()}`;
       forgeState.compiled = null;
       setCompileProgress(0, `Compile failed: ${error.message}`);
       $('forgeCollectionBtn').disabled = true;
-      $('forgeValidationList').innerHTML = `<div class="forge-check bad">âœ• ${esc(error.message).replace(/\n/g, '<br>')}</div>`;
+      $('forgeValidationList').innerHTML = `<div class="forge-check bad">✕ ${esc(error.message).replace(/\n/g, '<br>')}</div>`;
     }
   }
 
@@ -1299,17 +1299,17 @@ ${await file.text()}`;
     if (c.totalCompiledBytes > 512 * 1024) warnings.push('Project exceeds the 512 KB recommended economic zone.');
     if (c.traits.some(t => t.length > 16000)) warnings.push('One or more traits exceeds 16 KB compiled.');
     $('forgeValidationList').innerHTML = [
-      `<div class="forge-check good">âœ“ ${c.layerDefs.length} layer(s), ${c.traits.length} trait(s)</div>`,
-      `<div class="forge-check good">âœ“ ${c.recipeCount} exact recipes compiled from Step 4</div>`,
-      `<div class="forge-check good">âœ“ ${c.traits.filter(t => t.deduped).length} exact duplicate art asset(s) deduplicated</div>`,
-      `<div class="forge-check good">âœ“ ${c.traits.filter(t => t.encodingCode === 1).length} PNG trait(s) stored as compressed raster because that was smaller than SVG</div>`,
-      `<div class="forge-check good">âœ“ ${c.traits.filter(t => t.encodingCode === 4).length} animated GIF trait(s) preserved as raw animation</div>`,
-      `<div class="forge-check good">âœ“ ${c.artShards.length + c.dnaShards.length + 1} data shard(s) including placeholder</div>`,
-      `<div class="forge-check good">âœ“ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Deferred Reveal'} configured</div>`,
-      ...warnings.map(w => `<div class="forge-check warn">âš  ${esc(w)}</div>`),
+      `<div class="forge-check good">✓ ${c.layerDefs.length} layer(s), ${c.traits.length} trait(s)</div>`,
+      `<div class="forge-check good">✓ ${c.recipeCount} exact recipes compiled from Step 4</div>`,
+      `<div class="forge-check good">✓ ${c.traits.filter(t => t.deduped).length} exact duplicate art asset(s) deduplicated</div>`,
+      `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 1).length} PNG trait(s) stored as compressed raster because that was smaller than SVG</div>`,
+      `<div class="forge-check good">✓ ${c.traits.filter(t => t.encodingCode === 4).length} animated GIF trait(s) preserved as raw animation</div>`,
+      `<div class="forge-check good">✓ ${c.artShards.length + c.dnaShards.length + 1} data shard(s) including placeholder</div>`,
+      `<div class="forge-check good">✓ ${c.core.revealMode === 0 ? 'Forge Reveal' : 'Deferred Reveal'} configured</div>`,
+      ...warnings.map(w => `<div class="forge-check warn">⚠ ${esc(w)}</div>`),
     ].join('');
     $('forgeProvenance').innerHTML = `Collection provenance <code>${esc(c.provenance)}</code>`;
-    $('forgeCompiledSummary').innerHTML = `<strong>${esc(c.core.name)}</strong> Â· ${c.recipeCount.toLocaleString()} NFTs Â· ${c.layerDefs.length} layers Â· ${c.traits.length} traits Â· ${fmtBytes(c.totalCompiledBytes)} compiled Â· ${c.artShards.length} art shard(s) + ${c.dnaShards.length} DNA shard(s).`;
+    $('forgeCompiledSummary').innerHTML = `<strong>${esc(c.core.name)}</strong> · ${c.recipeCount.toLocaleString()} NFTs · ${c.layerDefs.length} layers · ${c.traits.length} traits · ${fmtBytes(c.totalCompiledBytes)} compiled · ${c.artShards.length} art shard(s) + ${c.dnaShards.length} DNA shard(s).`;
   }
 
   const publicGasProviders = new Map();
@@ -1373,14 +1373,14 @@ ${await file.text()}`;
 
   async function refreshCostEstimate() {
     if (!forgeState.compiled) {
-      $('forgeEstimatedCost').textContent = 'â€”';
+      $('forgeEstimatedCost').textContent = '—';
       $('forgeEstimatedGas').textContent = 'Compile first';
       $('forgeCostBreakdown').innerHTML = '';
       return;
     }
     const b = roughGasBreakdown(forgeState.compiled);
     let totalText = `~${b.total.toLocaleString()} gas`;
-    let feeText = 'Live public Sepolia gas unavailable Â· enter custom gwei if needed';
+    let feeText = 'Live public Sepolia gas unavailable · enter custom gwei if needed';
     let liveGwei = null;
     let gasSource = '';
     try {
@@ -1391,13 +1391,13 @@ ${await file.text()}`;
         if (forgeState.gasPrice) liveGwei = Number(window.ethers.formatUnits(forgeState.gasPrice, 'gwei'));
       }
     } catch (_) {}
-    if ($('forgeCurrentGwei')) $('forgeCurrentGwei').textContent = liveGwei == null ? 'Current: unavailable' : `Current: ${liveGwei.toFixed(3)} gwei${gasSource ? ` Â· ${gasSource}` : ''}`;
+    if ($('forgeCurrentGwei')) $('forgeCurrentGwei').textContent = liveGwei == null ? 'Current: unavailable' : `Current: ${liveGwei.toFixed(3)} gwei${gasSource ? ` · ${gasSource}` : ''}`;
 
     let selectedGwei = liveGwei;
     if (currentGweiMode() === 'custom') {
       const raw = Number($('forgeCustomGwei')?.value || 0);
       selectedGwei = Number.isFinite(raw) && raw > 0 ? raw : null;
-      if (selectedGwei == null) feeText = `~${b.total.toLocaleString()} gas Â· enter custom gwei`;
+      if (selectedGwei == null) feeText = `~${b.total.toLocaleString()} gas · enter custom gwei`;
     }
 
     if (selectedGwei != null && window.ethers) {
@@ -1474,19 +1474,19 @@ ${await file.text()}`;
       forgeState.wallet = await forgeState.signer.getAddress();
       window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
       const forgeWalletStatus = $('forgeWalletStatus');
-      if (forgeWalletStatus) forgeWalletStatus.textContent = `${forgeState.wallet.slice(0, 6)}â€¦${forgeState.wallet.slice(-4)} Â· Sepolia`;
+      if (forgeWalletStatus) forgeWalletStatus.textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
       if (window.RelicForgeCloud?.enabled?.()) {
         try {
           await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
-          if (forgeWalletStatus) forgeWalletStatus.textContent += ' Â· Cloud';
+          if (forgeWalletStatus) forgeWalletStatus.textContent += ' · Cloud';
         } catch (cloudError) {
-          if (forgeWalletStatus) forgeWalletStatus.textContent += ' Â· Cloud sign-in pending';
+          if (forgeWalletStatus) forgeWalletStatus.textContent += ' · Cloud sign-in pending';
         }
       }
       if ($('connectForgeWalletBtn')) $('connectForgeWalletBtn').textContent = 'Wallet Connected';
       if ($('royaltyWallet') && !$('royaltyWallet').value.trim()) $('royaltyWallet').value = forgeState.wallet;
       if ($('payoutWallet') && !$('payoutWallet').value.trim()) $('payoutWallet').value = forgeState.wallet;
-      if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${forgeState.wallet.slice(0, 6)}â€¦${forgeState.wallet.slice(-4)}`;
+      if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)}`;
       $('launchedChangeWalletBtn')?.classList.remove('hidden');
       $('launchedDisconnectBtn')?.classList.remove('hidden');
       renderCanonicalV1();
@@ -1513,10 +1513,10 @@ ${await file.text()}`;
 
   async function changeForgeWallet() {
     window.RelicForgeCloud?.clearSession?.();
-    resetWalletSessionUi('Choose another wallet accountâ€¦');
+    resetWalletSessionUi('Choose another wallet account…');
     window.dispatchEvent(new CustomEvent('relicforge:wallet-disconnected'));
     const address = await connectWallet({ forceChooser: true });
-    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Connected ${shortAddr(address)}. Refreshing launched projectsâ€¦`;
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Connected ${shortAddr(address)}. Refreshing launched projects…`;
     return address;
   }
 
@@ -1539,7 +1539,7 @@ ${await file.text()}`;
   }
 
   function shortV1(value) {
-    return value && value.length > 18 ? `${value.slice(0,10)}â€¦${value.slice(-8)}` : (value || 'â€”');
+    return value && value.length > 18 ? `${value.slice(0,10)}…${value.slice(-8)}` : (value || '—');
   }
 
   function renderCanonicalV1() {
@@ -1556,7 +1556,7 @@ ${await file.text()}`;
         if (node) { node.textContent = shortV1(value); node.title = value; }
       });
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
-        `âœ“ Canonical V1 loaded Â· ${String(cfg.sourceCommit || '').slice(0,8)} Â· no creator infrastructure deployment.`;
+        `✓ Canonical V1 loaded · ${String(cfg.sourceCommit || '').slice(0,8)} · no creator infrastructure deployment.`;
       return cfg;
     } catch (error) {
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent = `V1 CONFIG ERROR: ${error.message}`;
@@ -1577,13 +1577,13 @@ ${await file.text()}`;
       const [cents, upfront, healthy, active] = await factory.quoteCollectionFeeTerms(supply, mode);
       const rate = Number(cents);
       const name = mode === V1_FEE_MODE_SPONSORED ? 'Sponsored' : 'Minter Supported';
-      if ($('platformFeePolicyLabel')) $('platformFeePolicyLabel').textContent = `${name}${active ? ' Â· active' : ' Â· $0 policy'}`;
+      if ($('platformFeePolicyLabel')) $('platformFeePolicyLabel').textContent = `${name}${active ? ' · active' : ' · $0 policy'}`;
       if ($('platformFeeRate')) $('platformFeeRate').textContent =
-        mode === V1_FEE_MODE_SPONSORED ? `$${(rate/100).toFixed(2)} Ã— ${supply.toLocaleString()} max supply` : `$${(rate/100).toFixed(2)} / NFT`;
+        mode === V1_FEE_MODE_SPONSORED ? `$${(rate/100).toFixed(2)} × ${supply.toLocaleString()} max supply` : `$${(rate/100).toFixed(2)} / NFT`;
       if ($('platformFeeUpfront')) $('platformFeeUpfront').textContent =
         mode === V1_FEE_MODE_SPONSORED ? `${Number(window.ethers.formatEther(upfront)).toFixed(6)} ETH` : '0 ETH';
       if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent =
-        healthy ? `Live canonical quote Â· ${name}.` : (mode === V1_FEE_MODE_SPONSORED ? 'Sponsored launch unavailable until the ETH/USD oracle is healthy.' : 'Oracle unavailable; existing Minter Supported mints fail open to $0 platform fee.');
+        healthy ? `Live canonical quote · ${name}.` : (mode === V1_FEE_MODE_SPONSORED ? 'Sponsored launch unavailable until the ETH/USD oracle is healthy.' : 'Oracle unavailable; existing Minter Supported mints fail open to $0 platform fee.');
     } catch (error) {
       if ($('platformFeeQuoteStatus')) $('platformFeeQuoteStatus').textContent = `Fee quote unavailable: ${error.message}`;
     }
@@ -1618,11 +1618,11 @@ ${await file.text()}`;
   }
   async function compileContracts() {
     if (forgeState.contractArtifacts) return forgeState.contractArtifacts;
-    log('forgeInfraStatus', 'Loading contracts/RelicForgeTest.solâ€¦', true);
+    log('forgeInfraStatus', 'Loading contracts/RelicForgeTest.sol…', true);
     const sourceResponse = await fetch('./contracts/RelicForgeTest.sol', { cache: 'no-store' });
     if (!sourceResponse.ok) throw new Error(`Could not load Solidity source (${sourceResponse.status}).`);
     const source = await sourceResponse.text();
-    log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Workerâ€¦');
+    log('forgeInfraStatus', 'Loading official Solidity 0.8.30 compiler in a Web Worker…');
     const result = await new Promise((resolve, reject) => {
       const worker = new Worker('./js/solc-worker.js?v=11.1.6');
       const timer = setTimeout(() => { worker.terminate(); reject(new Error('Solidity compiler timed out.')); }, 120000);
@@ -1654,20 +1654,20 @@ ${await file.text()}`;
     if (collectionSize > eip170Limit) {
       throw new Error(`RelicCollectionV2 runtime is ${collectionSize} bytes (${collectionUsage}% of EIP-170), ${Math.abs(collectionMargin)} bytes over the ${eip170Limit}-byte limit. The shared implementation must deploy successfully before the clone factory can be deployed.`);
     }
-    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${collectionSize} / ${eip170Limit} bytes (${collectionUsage}%, ${collectionMargin} bytes free)\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime${collectionMargin < 1024 ? '\nWARNING: Implementation is deployable but has less than 1 KB of EIP-170 headroom.' : ''}\nâœ“ Ready for Sepolia test deployment.`);
+    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${collectionSize} / ${eip170Limit} bytes (${collectionUsage}%, ${collectionMargin} bytes free)\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime${collectionMargin < 1024 ? '\nWARNING: Implementation is deployable but has less than 1 KB of EIP-170 headroom.' : ''}\n✓ Ready for Sepolia test deployment.`);
     return forgeState.contractArtifacts;
   }
 
   async function deployOne(name, args = []) {
     const artifact = forgeState.contractArtifacts[name];
     const factory = new window.ethers.ContractFactory(artifact.abi, artifact.bytecode, forgeState.signer);
-    log('forgeInfraStatus', `Deploying ${name}â€¦`);
+    log('forgeInfraStatus', `Deploying ${name}…`);
     const contract = await factory.deploy(...args);
     const tx = contract.deploymentTransaction();
     log('forgeInfraStatus', `  tx ${tx.hash}`);
     await contract.waitForDeployment();
     const address = await contract.getAddress();
-    log('forgeInfraStatus', `  âœ“ ${address}`);
+    log('forgeInfraStatus', `  ✓ ${address}`);
     return address;
   }
 
@@ -1675,7 +1675,7 @@ ${await file.text()}`;
     try {
       if (!forgeState.signer) await connectWallet();
       await compileContracts();
-      log('forgeInfraStatus', 'Deploying shared Sepolia TEST infrastructureâ€¦', true);
+      log('forgeInfraStatus', 'Deploying shared Sepolia TEST infrastructure…', true);
       const implementation = await deployOne('RelicCollectionV2');
       const randomness = await deployOne('RelicRandomnessMock');
       const factory = await deployOne('RelicForgeFactory', [implementation, randomness, true]);
@@ -1684,7 +1684,7 @@ ${await file.text()}`;
       rememberFactory(factory);
       $('factoryAddress').value = factory;
       $('randomnessAddress').value = randomness;
-      log('forgeInfraStatus', 'âœ“ Infrastructure saved in this browser. Future Sepolia collections can reuse this factory.');
+      log('forgeInfraStatus', '✓ Infrastructure saved in this browser. Future Sepolia collections can reuse this factory.');
     } catch (error) {
       log('forgeInfraStatus', `ERROR: ${error.message}`);
     }
@@ -1704,13 +1704,13 @@ ${await file.text()}`;
   }
 
   function renderDeployProgress(steps) {
-    $('forgeProgressList').innerHTML = steps.map(step => `<div class="forge-deploy-step"><span>${esc(step.label)}</span><strong class="${step.status === 'done' ? 'good' : ''}">${step.status === 'done' ? 'âœ“' : step.status === 'active' ? 'â—‰' : 'â—‹'}</strong></div>`).join('');
+    $('forgeProgressList').innerHTML = steps.map(step => `<div class="forge-deploy-step"><span>${esc(step.label)}</span><strong class="${step.status === 'done' ? 'good' : ''}">${step.status === 'done' ? '✓' : step.status === 'active' ? 'â—‰' : 'â—‹'}</strong></div>`).join('');
   }
 
   async function sendStep(label, call, steps, index) {
     steps[index].status = 'active'; renderDeployProgress(steps);
     const tx = await call();
-    steps[index].label = `${label} Â· ${tx.hash.slice(0, 10)}â€¦`; renderDeployProgress(steps);
+    steps[index].label = `${label} · ${tx.hash.slice(0, 10)}…`; renderDeployProgress(steps);
     await tx.wait();
     steps[index].status = 'done'; steps[index].label = label; renderDeployProgress(steps);
   }
@@ -2040,14 +2040,14 @@ ${await file.text()}`;
       if ($('publishMintPageBtn')) $('publishMintPageBtn').disabled = !rc47bMintPageReady || !window.RelicForgeCloud?.enabled?.();
       if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = !rc47bMintPageReady;
       if ($('mintPageStatus')) $('mintPageStatus').textContent = rc47bMintPageReady
-        ? 'Canonical V1 mint-page adapter ready. Registering this forged collection with RelicForge Cloudâ€¦'
+        ? 'Canonical V1 mint-page adapter ready. Registering this forged collection with RelicForge Cloud…'
         : 'V1 collection forged. Open the Creator Dashboard to recover/register this collection if the mint-page adapter is unavailable.';
 
       if (rc47bMintPageReady && window.RelicForgeCloud?.enabled?.() && (forgeState.publicPhaseId || forgeState.whitelistPhaseId)) {
         try {
           await publishMintPageCloud(forgeState.collectionAddress);
           if ($('mintPageStatus')) $('mintPageStatus').textContent =
-            'âœ“ Canonical V1 mint page registered with RelicForge Cloud. Upcoming Mints settings were published if enabled.';
+            '✓ Canonical V1 mint page registered with RelicForge Cloud. Upcoming Mints settings were published if enabled.';
         } catch (registrationError) {
           if ($('mintPageStatus')) $('mintPageStatus').textContent =
             `V1 collection forged, but Cloud registration did not complete: ${registrationError.message}. The Creator Dashboard can recover this collection from the canonical factory without redeploying it.`;
@@ -2263,8 +2263,8 @@ ${await file.text()}`;
       };
       forgeState.viewerTotalMinted = Number(totalMinted);
       if (resetPage) forgeState.viewerPage = 1;
-      setViewerMetric('viewerMetricName', name || 'â€”');
-      setViewerMetric('viewerMetricSymbol', symbol || 'â€”');
+      setViewerMetric('viewerMetricName', name || '—');
+      setViewerMetric('viewerMetricSymbol', symbol || '—');
       setViewerMetric('viewerMetricMinted', String(Number(totalMinted)));
       setViewerMetric('viewerMetricSupply', String(Number(maxSupply)));
       setViewerMetric('viewerMetricReveal', Number(revealMode) === 0 ? 'Forge' : 'Creator');
@@ -2308,8 +2308,8 @@ ${await file.text()}`;
     if (forgeState.viewerPage < 1) forgeState.viewerPage = 1;
     const start = (forgeState.viewerPage - 1) * pageSize + 1;
     const end = Math.min(total, start + pageSize - 1);
-    $('viewerStatus').textContent = `Loading tokens ${start}-${end} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}â€¦`;
-    grid.innerHTML = '<div class="forge-market-empty">Loading token metadata from Sepoliaâ€¦</div>';
+    $('viewerStatus').textContent = `Loading tokens ${start}-${end} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}…`;
+    grid.innerHTML = '<div class="forge-market-empty">Loading token metadata from Sepolia…</div>';
     const collection = await viewerContract();
     const tokenIds = []; for (let i=start; i<=end; i++) tokenIds.push(i);
     const cards = await Promise.all(tokenIds.map(async (tokenId) => {
@@ -2344,7 +2344,7 @@ ${await file.text()}`;
     const pager = $('viewerPagination');
     const pagerStatus = $('viewerPagerStatus');
     if (pager) pager.classList.remove('hidden');
-    if (pagerStatus) { pagerStatus.classList.remove('hidden'); pagerStatus.textContent = `Showing tokens ${start}-${end} of ${total} Â· Page ${forgeState.viewerPage} of ${pageCount}`; }
+    if (pagerStatus) { pagerStatus.classList.remove('hidden'); pagerStatus.textContent = `Showing tokens ${start}-${end} of ${total} · Page ${forgeState.viewerPage} of ${pageCount}`; }
     if ($('viewerPrevBtn')) $('viewerPrevBtn').disabled = forgeState.viewerPage <= 1;
     if ($('viewerNextBtn')) $('viewerNextBtn').disabled = forgeState.viewerPage >= pageCount;
     $('viewerStatus').textContent = `Loaded ${end - start + 1} token${end - start + 1 === 1 ? '' : 's'} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}.`;
@@ -2587,8 +2587,8 @@ ${await file.text()}`;
   async function loadLaunchedProjects() {
     if (!forgeState.signer) await connectWallet();
     const wallet = forgeState.wallet;
-    if ($('launchedDashboardWallet')) $('launchedDashboardWallet').textContent = `${wallet.slice(0, 6)}â€¦${wallet.slice(-4)} Â· Sepolia`;
-    if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${wallet.slice(0, 6)}â€¦${wallet.slice(-4)}`;
+    if ($('launchedDashboardWallet')) $('launchedDashboardWallet').textContent = `${wallet.slice(0, 6)}…${wallet.slice(-4)} · Sepolia`;
+    if ($('launchedConnectBtn')) $('launchedConnectBtn').textContent = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
     const extra = $('launchedFactoryInput')?.value.trim();
     if (extra) {
       if (!window.ethers.isAddress(extra)) throw new Error('Additional Factory address is invalid.');
@@ -2603,7 +2603,7 @@ ${await file.text()}`;
         cloudCollections.filter(item => Number(item.chain_id) === 11155111).forEach(item => addresses.add(String(item.contract_address).toLowerCase()));
       } catch (_) {}
     }
-    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Searching ${factories.length} known Factor${factories.length === 1 ? 'y' : 'ies'} for ${shortAddr(wallet)}â€¦`;
+    if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = `Searching ${factories.length} known Factor${factories.length === 1 ? 'y' : 'ies'} for ${shortAddr(wallet)}…`;
     for (const factoryAddress of factories) {
       try {
         const rp = readProvider(11155111) || forgeState.provider;
@@ -2649,8 +2649,8 @@ ${await file.text()}`;
       list.innerHTML = snapshots.length ? snapshots.map(item => `
         <button class="launched-collection-item${forgeState.launchedSelected?.toLowerCase() === item.address.toLowerCase() ? ' selected' : ''}" data-launched-address="${esc(item.address)}" type="button">
           <strong>${esc(item.name || 'Unnamed collection')}</strong>
-          <span>${esc(item.symbol || '')} Â· ${item.totalMinted.toLocaleString()} / ${item.maxSupply.toLocaleString()} minted</span>
-          <small>${esc(shortAddr(item.address))}${item.isV1 ? (item.controllerActive ? ' Â· V1' : ' Â· V1 Â· CONTROL RENOUNCED') : (item.sealed ? ' Â· SEALED' : '')}</small>
+          <span>${esc(item.symbol || '')} · ${item.totalMinted.toLocaleString()} / ${item.maxSupply.toLocaleString()} minted</span>
+          <small>${esc(shortAddr(item.address))}${item.isV1 ? (item.controllerActive ? ' · V1' : ' · V1 · CONTROL RENOUNCED') : (item.sealed ? ' · SEALED' : '')}</small>
         </button>`).join('') : '<div class="forge-market-empty">No launched collections found for this wallet with the known Sepolia factories.</div>';
       list.querySelectorAll('[data-launched-address]').forEach(button => button.addEventListener('click', () => openLaunchedCollection(button.dataset.launchedAddress)));
     }
@@ -2675,7 +2675,7 @@ ${await file.text()}`;
     const rows = ['<option value="">None</option>'];
     for (const phase of phases || []) {
       const state = phase.open ? 'OPEN' : (phase.enabled ? 'Enabled' : 'Disabled');
-      rows.push(`<option value="${phase.id}" ${phase.id === selectedId ? 'selected' : ''}>Phase ${phase.id} Â· ${state} Â· ${esc(window.ethers.formatEther(phase.price))} ETH</option>`);
+      rows.push(`<option value="${phase.id}" ${phase.id === selectedId ? 'selected' : ''}>Phase ${phase.id} · ${state} · ${esc(window.ethers.formatEther(phase.price))} ETH</option>`);
     }
     return rows.join('');
   }
@@ -2703,7 +2703,7 @@ ${await file.text()}`;
       const limit = phase.maxPerWallet ? `${phase.maxPerWallet} / wallet` : 'Unlimited / wallet';
       const supply = phase.phaseSupply ? `${phase.minted}/${phase.phaseSupply}` : `${phase.minted} minted`;
       return `<article class="rc47c-phase-card">
-        <div class="rc47c-phase-card-head"><div><strong>Phase ${phase.id} Â· ${access}</strong><small>${window.ethers.formatEther(phase.price)} ETH Â· ${limit} Â· ${supply}</small></div><span class="rc47c-phase-state">${state}</span></div>
+        <div class="rc47c-phase-card-head"><div><strong>Phase ${phase.id} · ${access}</strong><small>${window.ethers.formatEther(phase.price)} ETH · ${limit} · ${supply}</small></div><span class="rc47c-phase-state">${state}</span></div>
         <div class="rc47c-phase-time-grid">
           <label class="field"><span>Start</span><input id="dashboardV1PhaseStart${phase.id}" type="datetime-local" value="${esc(dashboardPhaseLocal(phase.startTime))}" ${canControl ? '' : 'disabled'}/><small>${esc(dashboardPhaseTimeLabel(phase.startTime, 'Immediate after Master Mint'))}</small></label>
           <label class="field"><span>End</span><input id="dashboardV1PhaseEnd${phase.id}" type="datetime-local" value="${esc(dashboardPhaseLocal(phase.endTime))}" ${canControl ? '' : 'disabled'}/><small>${esc(dashboardPhaseTimeLabel(phase.endTime, 'No automatic end'))}</small></label>
@@ -2730,9 +2730,9 @@ ${await file.text()}`;
     const endTime = parse(`dashboardV1PhaseEnd${phase.id}`, 'Phase end');
     if (endTime && endTime <= startTime) throw new Error('Phase end must be later than its start.');
     const contract = new window.ethers.Contract(snap.address, V1_COLLECTION_ABI, forgeState.signer);
-    launchedStatus(`Updating Phase ${phase.id} schedule onchainâ€¦`);
+    launchedStatus(`Updating Phase ${phase.id} schedule onchain…`);
     const tx = await contract.updatePhase(phase.id, phase.price, startTime, endTime, phase.phaseSupply, phase.maxPerWallet, phase.merkleRoot, phase.accessType, phase.priority);
-    launchedStatus(`Phase ${phase.id} update submitted Â· ${tx.hash.slice(0,12)}â€¦`);
+    launchedStatus(`Phase ${phase.id} update submitted · ${tx.hash.slice(0,12)}…`);
     await tx.wait();
 
     const refreshed = await collectionDashboardSnapshot(snap.address, forgeState.signer);
@@ -2825,7 +2825,7 @@ ${await file.text()}`;
       if (!isOwner) throw new Error('Connected wallet is not the collection creator.');
 
       if (action === 'publish') {
-        launchedStatus('Publishing recovered V1 mint page to RelicForge Cloudâ€¦');
+        launchedStatus('Publishing recovered V1 mint page to RelicForge Cloud…');
         const config = await publishRecoveredV1MintPage(snap);
         launchedStatus(config.showcaseEnabled ? 'V1 mint page published and Upcoming Mints enabled.' : 'V1 mint page published and collection registered with RelicForge Cloud.');
         await loadLaunchedProjects();
@@ -2858,16 +2858,16 @@ ${await file.text()}`;
 
       if (action === 'mastermint') {
         const next = !snap.masterMintEnabled;
-        launchedStatus(`${next ? 'Enabling' : 'Disabling'} V1 master mintâ€¦`);
+        launchedStatus(`${next ? 'Enabling' : 'Disabling'} V1 master mint…`);
         const tx = await contract.setMasterMintEnabled(next);
-        launchedStatus(`Transaction submitted Â· ${tx.hash.slice(0, 12)}â€¦`);
+        launchedStatus(`Transaction submitted · ${tx.hash.slice(0, 12)}…`);
         await tx.wait();
         launchedStatus(`V1 master mint ${next ? 'enabled' : 'disabled'}.`);
       } else if (action === 'creatormint') {
         const quantity = Math.max(1, Math.min(50, Math.floor(Number($('dashboardV1CreatorMintQty')?.value || 1))));
-        launchedStatus(`Creator minting ${quantity} V1 NFT${quantity === 1 ? '' : 's'}â€¦`);
+        launchedStatus(`Creator minting ${quantity} V1 NFT${quantity === 1 ? '' : 's'}…`);
         const tx = await contract.creatorMint(forgeState.wallet, quantity);
-        launchedStatus(`Creator Mint submitted Â· ${tx.hash.slice(0, 12)}â€¦`);
+        launchedStatus(`Creator Mint submitted · ${tx.hash.slice(0, 12)}…`);
         await tx.wait();
         launchedStatus('V1 Creator Mint confirmed.');
       } else if (action === 'deferredreveal') {
@@ -2943,8 +2943,8 @@ ${await file.text()}`;
 
         <div class="mint-page-builder-grid dashboard-mint-page-builder">
           <div class="mint-page-media-settings">
-            <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved Â· choose a file to replace it' : '2 MB max Â· image file'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
-            <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved Â· choose a file to replace it' : '2 MB max Â· image file'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
+            <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
+            <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file" ${!isOwner ? 'disabled' : ''}/></label>
             <div class="launched-actions">
               <button class="primary-btn" data-v1-dashboard-action="publish" ${!isOwner ? 'disabled' : ''} type="button">${publishedV1 ? 'Update / Publish Mint Page' : 'Register & Publish Mint Page'}</button>
               <button class="ghost-btn" data-v1-dashboard-action="mintpage" ${publishedV1 ? '' : 'disabled'} type="button">Open Mint Page</button>
@@ -3022,8 +3022,8 @@ ${await file.text()}`;
       try {
         forgeState.dashboardMintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
         if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile
-          ? `${forgeState.dashboardMintPageImageFile.name} Â· ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB`
-          : (dashboardMintImage ? 'Current image saved Â· choose a file to replace it' : '2 MB max Â· image file');
+          ? `${forgeState.dashboardMintPageImageFile.name} · ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB`
+          : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file');
         const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
         setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
       } catch (error) {
@@ -3037,8 +3037,8 @@ ${await file.text()}`;
       try {
         forgeState.dashboardMintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
         if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile
-          ? `${forgeState.dashboardMintPageBannerFile.name} Â· ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB`
-          : (dashboardMintBanner ? 'Current banner saved Â· choose a file to replace it' : '2 MB max Â· image file');
+          ? `${forgeState.dashboardMintPageBannerFile.name} · ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB`
+          : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file');
         const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
         setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
       } catch (error) {
@@ -3089,8 +3089,8 @@ ${await file.text()}`;
           <p class="forge-footnote">Update the collection image and banner for this launched collection. These page assets are offchain presentation settings and do not change the NFT artwork or metadata.</p>
           <div class="mint-page-builder-grid dashboard-mint-page-builder">
             <div class="mint-page-media-settings">
-              <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved Â· choose a file to replace it' : '2 MB max Â· any image format Â· animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file"/></label>
-              <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved Â· choose a file to replace it' : '2 MB max Â· any image format Â· animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file"/></label>
+              <label class="compact-upload" for="dashboardMintPageImageInput"><strong>Collection image</strong><span id="dashboardMintPageImageName">${dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageImageInput" type="file"/></label>
+              <label class="compact-upload" for="dashboardMintPageBannerInput"><strong>Collection banner</strong><span id="dashboardMintPageBannerName">${dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported'}</span><input accept="image/*,.svg" id="dashboardMintPageBannerInput" type="file"/></label>
               <div class="launched-actions">
                 <button class="primary-btn" data-dashboard-action="savemintpage" ${!isOwner ? 'disabled' : ''} type="button">Save Mint Page</button>
                 <button class="ghost-btn" data-dashboard-action="downloadmintpage" type="button">Download Updated Page</button>
@@ -3163,7 +3163,7 @@ ${await file.text()}`;
       $('dashboardMintPageImageInput')?.addEventListener('change', async event => {
         try {
           forgeState.dashboardMintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
-          if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile ? `${forgeState.dashboardMintPageImageFile.name} Â· ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintImage ? 'Current image saved Â· choose a file to replace it' : '2 MB max Â· any image format Â· animated GIF supported');
+          if ($('dashboardMintPageImageName')) $('dashboardMintPageImageName').textContent = forgeState.dashboardMintPageImageFile ? `${forgeState.dashboardMintPageImageFile.name} · ${(forgeState.dashboardMintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintImage ? 'Current image saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported');
           const preview = forgeState.dashboardMintPageImageFile ? await fileToDataUrl(forgeState.dashboardMintPageImageFile) : dashboardMintImage;
           setPreviewImage('dashboardMintPagePreviewImage', preview, 'RF');
         } catch (error) {
@@ -3174,7 +3174,7 @@ ${await file.text()}`;
       $('dashboardMintPageBannerInput')?.addEventListener('change', async event => {
         try {
           forgeState.dashboardMintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
-          if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile ? `${forgeState.dashboardMintPageBannerFile.name} Â· ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintBanner ? 'Current banner saved Â· choose a file to replace it' : '2 MB max Â· any image format Â· animated GIF supported');
+          if ($('dashboardMintPageBannerName')) $('dashboardMintPageBannerName').textContent = forgeState.dashboardMintPageBannerFile ? `${forgeState.dashboardMintPageBannerFile.name} · ${(forgeState.dashboardMintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : (dashboardMintBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · any image format · animated GIF supported');
           const preview = forgeState.dashboardMintPageBannerFile ? await fileToDataUrl(forgeState.dashboardMintPageBannerFile) : dashboardMintBanner;
           setPreviewImage('dashboardMintPagePreviewBanner', preview, 'BANNER');
         } catch (error) {
@@ -3213,7 +3213,7 @@ ${await file.text()}`;
           updatedAt: new Date().toISOString(),
         });
         if (window.RelicForgeCloud?.enabled?.()) {
-          launchedStatus('Publishing mint page appearance to RelicForge Cloudâ€¦');
+          launchedStatus('Publishing mint page appearance to RelicForge Cloud…');
           await publishMintPageCloud(snap.address, true);
         }
         forgeState.dashboardMintPageImageFile = null;
@@ -3255,15 +3255,15 @@ ${await file.text()}`;
         const enabled = !!$('dashboardHolderRenderEnabled')?.checked;
         const defaultMode = Number($('dashboardDefaultRenderMode')?.value || 0);
         if (defaultMode === 1 && !baseURI) throw new Error('Offchain Render default requires a renderer base URI.');
-        launchedStatus('Updating onchain render settingsâ€¦');
+        launchedStatus('Updating onchain render settings…');
         const tx = await contract.setRenderConfig(baseURI, enabled, defaultMode);
         await tx.wait();
         launchedStatus('Render settings updated.');
       } else if (action === 'creatormint') {
         const quantity = Math.max(1, Math.floor(Number($('dashboardCreatorMintQty')?.value || 1)));
-        launchedStatus(`Creator minting ${quantity} NFT${quantity === 1 ? '' : 's'}â€¦`);
+        launchedStatus(`Creator minting ${quantity} NFT${quantity === 1 ? '' : 's'}…`);
         const tx = await contract.creatorMint(quantity);
-        launchedStatus(`Creator Mint submitted Â· ${tx.hash.slice(0, 12)}â€¦`);
+        launchedStatus(`Creator Mint submitted · ${tx.hash.slice(0, 12)}…`);
         await tx.wait();
         launchedStatus('Creator Mint confirmed.');
       } else if (action === 'savesettings') {
@@ -3286,20 +3286,20 @@ ${await file.text()}`;
         }
         if (!calls.length) { launchedStatus('No onchain settings changed.'); return; }
         for (let i = 0; i < calls.length; i++) {
-          launchedStatus(`Updating ${calls[i][0]} Â· ${i + 1}/${calls.length}â€¦`);
+          launchedStatus(`Updating ${calls[i][0]} · ${i + 1}/${calls.length}…`);
           const tx = await calls[i][1]();
           await tx.wait();
         }
         launchedStatus('Onchain settings updated.');
       } else if (action === 'reveal') {
-        launchedStatus('Requesting Creator Revealâ€¦');
+        launchedStatus('Requesting Creator Reveal…');
         const tx = await contract.requestCreatorReveal();
         await tx.wait();
         launchedStatus('Creator Reveal request confirmed.');
       } else if (action === 'seal') {
         const ok = window.confirm('Seal this collection permanently? Mint price, wallet limit, mint access, and royalty settings will become immutable. This cannot be undone.');
         if (!ok) return;
-        launchedStatus('Sealing collectionâ€¦');
+        launchedStatus('Sealing collection…');
         const tx = await contract.sealCollection();
         await tx.wait();
         launchedStatus('Collection sealed permanently.');
@@ -3422,8 +3422,8 @@ ${await file.text()}`;
     if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
     forgeState.mintPageImageFile = saved.mintPageImageFile || null;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
-    if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max Â· any image format Â· animated GIF supported';
-    if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : '2 MB max Â· any image format Â· animated GIF supported';
+    if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max · any image format · animated GIF supported';
+    if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? forgeState.mintPageBannerFile.name : '2 MB max · any image format · animated GIF supported';
     if (saved.collectionAddress && window.ethers?.isAddress(saved.collectionAddress)) {
       forgeState.collectionAddress = saved.collectionAddress;
       forgeState.dataAddress = saved.dataAddress && window.ethers?.isAddress(saved.dataAddress) ? saved.dataAddress : null;
@@ -3446,7 +3446,7 @@ ${await file.text()}`;
           ? buildMerkleWhitelistV1(entries, forgeState.collectionAddress, forgeState.whitelistPhaseId)
           : buildMerkleWhitelist(entries);
         forgeState.whitelist = { ...saved.whitelist, ...tree, entries };
-        if ($('whitelistStatus')) $('whitelistStatus').textContent = `âœ“ Restored ${entries.length.toLocaleString()} eligible wallets Â· root ${tree.root.slice(0, 10)}â€¦`;
+        if ($('whitelistStatus')) $('whitelistStatus').textContent = `✓ Restored ${entries.length.toLocaleString()} eligible wallets · root ${tree.root.slice(0, 10)}…`;
         renderWhitelistSummary();
         $('downloadWhitelistBtn')?.classList.remove('hidden');
       } catch (_) {}
@@ -3497,7 +3497,7 @@ ${await file.text()}`;
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
       $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
-      invalidateCompile('Placeholder changed â€” recompile for onchain.');
+      invalidateCompile('Placeholder changed — recompile for onchain.');
     });
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
     $('refreshForgeCostBtn')?.addEventListener('click', refreshCostEstimate);
@@ -3513,13 +3513,13 @@ ${await file.text()}`;
     $('forgeProcessRevealBtn')?.addEventListener('click', processReadyReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
     $('previewMintPageBtn')?.addEventListener('click', () => updateMintPagePreview().catch(() => {}));
-    $('publishMintPageBtn')?.addEventListener('click', async () => { try { if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing mint page + whitelist proofs to RelicForge Cloudâ€¦'; await publishMintPageCloud(); if ($('mintPageStatus')) $('mintPageStatus').textContent = 'âœ“ Published. Mint aesthetics and whitelist proofs are now available cross-device.'; } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Publish: ${error.message}`; } });
+    $('publishMintPageBtn')?.addEventListener('click', async () => { try { if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing mint page + whitelist proofs to RelicForge Cloud…'; await publishMintPageCloud(); if ($('mintPageStatus')) $('mintPageStatus').textContent = '✓ Published. Mint aesthetics and whitelist proofs are now available cross-device.'; } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Publish: ${error.message}`; } });
     $('openMintPageBtn')?.addEventListener('click', openMintPage);
     $('downloadMintPageBtn')?.addEventListener('click', downloadStandaloneMintPage);
     $('mintPageImageInput')?.addEventListener('change', event => {
       try {
         forgeState.mintPageImageFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection image');
-        if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? `${forgeState.mintPageImageFile.name} Â· ${(forgeState.mintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max Â· any image format Â· animated GIF supported';
+        if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? `${forgeState.mintPageImageFile.name} · ${(forgeState.mintPageImageFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max · any image format · animated GIF supported';
         updateMintPagePreview().catch(() => {});
       } catch (error) {
         event.target.value = ''; forgeState.mintPageImageFile = null;
@@ -3529,7 +3529,7 @@ ${await file.text()}`;
     $('mintPageBannerInput')?.addEventListener('change', event => {
       try {
         forgeState.mintPageBannerFile = validateMintPageMedia(event.target.files?.[0] || null, 'Collection banner');
-        if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? `${forgeState.mintPageBannerFile.name} Â· ${(forgeState.mintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max Â· any image format Â· animated GIF supported';
+        if ($('mintPageBannerName')) $('mintPageBannerName').textContent = forgeState.mintPageBannerFile ? `${forgeState.mintPageBannerFile.name} · ${(forgeState.mintPageBannerFile.size / 1024 / 1024).toFixed(2)} MB` : '2 MB max · any image format · animated GIF supported';
         updateMintPagePreview().catch(() => {});
       } catch (error) {
         event.target.value = ''; forgeState.mintPageBannerFile = null;
@@ -3551,7 +3551,7 @@ ${await file.text()}`;
     $('publicMintEnabled')?.addEventListener('change', updateWhitelistUi);
     document.querySelectorAll('input[name="whitelistSourceMode"]').forEach(input => input.addEventListener('change', () => {
       forgeState.whitelist = null;
-      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist source changed â€” rebuild the whitelist.';
+      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist source changed — rebuild the whitelist.';
       renderWhitelistSummary();
       $('downloadWhitelistBtn')?.classList.add('hidden');
       updateWhitelistUi();
@@ -3563,21 +3563,21 @@ ${await file.text()}`;
       const file = event.target.files?.[0];
       if ($('whitelistFileName')) $('whitelistFileName').textContent = file ? file.name : 'CSV, TXT, or JSON';
       forgeState.whitelist = null;
-      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist file changed â€” rebuild the whitelist.';
+      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist file changed — rebuild the whitelist.';
       renderWhitelistSummary();
       $('downloadWhitelistBtn')?.classList.add('hidden');
     });
     ['whitelistDefaultAllowance', 'whitelistSourceChain', 'whitelistCollectionAddress', 'whitelistCustomText'].forEach(id => $(id)?.addEventListener('input', () => {
       if (!forgeState.whitelist) return;
       forgeState.whitelist = null;
-      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist settings changed â€” rebuild the whitelist.';
+      if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Whitelist settings changed — rebuild the whitelist.';
       renderWhitelistSummary();
       $('downloadWhitelistBtn')?.classList.add('hidden');
     }));
     document.querySelectorAll('input[name="gweiMode"]').forEach(input => input.addEventListener('change', updateGweiUi));
     $('forgeCustomGwei')?.addEventListener('input', () => refreshCostEstimate().catch(() => {}));
     ['launchName', 'launchSymbol', 'launchDescription', 'mintPrice', 'maxPerWallet', 'royalty', 'royaltyWallet'].forEach(id => $(id)?.addEventListener('input', () => {
-      if (forgeState.compiled && ['launchName', 'launchSymbol', 'launchDescription'].includes(id)) invalidateCompile('Collection metadata changed â€” recompile for onchain.');
+      if (forgeState.compiled && ['launchName', 'launchSymbol', 'launchDescription'].includes(id)) invalidateCompile('Collection metadata changed — recompile for onchain.');
     }));
     ['launchName', 'launchDescription'].forEach(id => $(id)?.addEventListener('input', () => updateMintPagePreview().catch(() => {})));
     renderCanonicalV1();
@@ -3612,7 +3612,7 @@ ${await file.text()}`;
       const next = accounts?.[0] || null;
       resetWalletSessionUi(next ? 'Wallet account changed.' : 'Wallet disconnected.');
       if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = next
-        ? 'Wallet account changed in your extension. Click Connect Wallet to sign in and load this accountâ€™s launched projects.'
+        ? 'Wallet account changed in your extension. Click Connect Wallet to sign in and load this account’s launched projects.'
         : 'Wallet disconnected. Connect a creator wallet to rediscover launched collections.';
     };
     if (window.RelicForgeWallets?.ready) {
