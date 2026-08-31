@@ -136,7 +136,7 @@
     }
     const btn = $('projectWalletBtn');
     if (btn) {
-      btn.textContent = wallet ? `${shortAddress(wallet)}  â–¾` : 'Connect Wallet';
+      btn.textContent = wallet ? `${shortAddress(wallet)}  ▾` : 'Connect Wallet';
       btn.classList.toggle('wallet-connected', !!wallet);
       btn.title = wallet ? `Project wallet: ${wallet}. Click for wallet options.` : 'Connect an EVM wallet to save projects';
       btn.setAttribute('aria-expanded', 'false');

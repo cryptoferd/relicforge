@@ -1704,7 +1704,7 @@ ${await file.text()}`;
   }
 
   function renderDeployProgress(steps) {
-    $('forgeProgressList').innerHTML = steps.map(step => `<div class="forge-deploy-step"><span>${esc(step.label)}</span><strong class="${step.status === 'done' ? 'good' : ''}">${step.status === 'done' ? '✓' : step.status === 'active' ? 'â—‰' : 'â—‹'}</strong></div>`).join('');
+    $('forgeProgressList').innerHTML = steps.map(step => `<div class="forge-deploy-step"><span>${esc(step.label)}</span><strong class="${step.status === 'done' ? 'good' : ''}">${step.status === 'done' ? '✓' : step.status === 'active' ? '◉' : '○'}</strong></div>`).join('');
   }
 
   async function sendStep(label, call, steps, index) {

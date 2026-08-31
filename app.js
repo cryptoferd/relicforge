@@ -819,7 +819,7 @@
             </div>
           </div>
           <div class="layer-actions">
-            <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">â ¿</span>
+            <span class="drag-handle layer-drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" role="button" aria-label="Drag ${escapeHtml(layer.name)} to change layer order" title="Drag to change layer order">⠿</span>
             <button class="icon-btn move-layer" data-dir="up" title="Move layer backward" ${index === 0 ? 'disabled' : ''}>↑</button>
             <button class="icon-btn move-layer" data-dir="down" title="Move layer forward" ${index === state.layers.length - 1 ? 'disabled' : ''}>↓</button>
             <button class="icon-btn delete-layer-btn" data-delete-layer="${escapeHtml(layer.id)}" title="Delete layer">×</button>
@@ -989,7 +989,7 @@
             ` : ''}
           </div>
         </div>
-        ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">â ¿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
+        ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
         <div class="trait-config-grid ${sortMode ? 'sortable-grid' : ''}">
           ${layer.traits.map(trait => `
             <div class="trait-config ${sortMode ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
@@ -997,7 +997,7 @@
               <div>
                 <div class="trait-config-topline">
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
-                  ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">â ¿</span>` : ''}
+                  ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
                 </div>
                 <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : (autoMode && layer.rarityMode === 'tier' ? 'tier-mode' : '')}">
                   ${showExact
