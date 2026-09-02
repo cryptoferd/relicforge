@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "asOf": "2026-09-02",
-  "phase": "2D_R9",
-  "policyStatus": "robinhood_dice_production_integration_local_certified",
+  "phase": "2D_R10",
+  "policyStatus": "robinhood_dice_factory_interface_freeze_local_certified",
   "productionEnabled": false,
   "meaning": "Advancement priority only. Collector mint transactions must not call the randomness provider; no provider is production certified by this file.",
   "globalRules": [
@@ -83,7 +83,7 @@
       "primaryAdvancementProvider": "dice_entropy_v10",
       "secondaryResearchCandidate": null,
       "productionEnabled": false,
-      "status": "phase2d_r9_production_integration_local_certified",
+      "status": "phase2d_r10_factory_interface_freeze_local_certified",
       "note": "Dice becomes the Robinhood advancement candidate, not production-enabled. A Dice outage can delay settlement but must never revert an already successful collector mint reservation or create a reroll.",
       "mintAcceptancePolicy": "collector_transaction_never_calls_dice",
       "stalledRequestPolicy": "same_sequence_pending_no_automatic_refund_no_reroll",
@@ -108,6 +108,8 @@
     "r7LiveResultReviewed": "2026-09-02",
     "r8LiveResultReviewed": "2026-09-02",
     "r9PackagePrepared": "2026-09-02",
-    "r9LocalValidationReviewed": "2026-09-02"
+    "r9LocalValidationReviewed": "2026-09-02",
+    "r10PackagePrepared": "2026-09-02",
+    "r10LocalValidationReviewed": "2026-09-02"
   }
 }

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "phase": "2D_R10",
+  "asOf": "2026-09-02",
+  "status": "local_certified",
+  "productionEnabled": false,
+  "baseline": {
+    "repository": "cryptoferd/relicforge",
+    "branch": "forge-reveal-v2",
+    "commit": "15ef5f8c320b332e2931e79ccc08cfcf0b9ca3a6",
+    "tree": "87684fca8edfe310eded557208d866a18eef0400"
+  },
+  "localCertification": {
+    "status": "passed",
+    "reviewed": "2026-09-02",
+    "foundryVersion": "1.7.1",
+    "solcVersion": "0.8.30",
+    "r10OwnedFormattingPassed": true,
+    "forgeBuildPassed": true,
+    "focusedTests": { "passed": 10, "failed": 0 },
+    "phase2dTests": { "passed": 109, "failed": 0 },
+    "experimentalTests": { "passed": 179, "failed": 0 },
+    "fullRegression": { "passed": 303, "failed": 0 },
+    "gitDiffCheckPassed": true
+  },
+  "robinhood": {
+    "chain": "Robinhood Chain",
+    "targetMainnetChainId": 4663,
+    "providerFamily": "dice_entropy_v10",
+    "productionEnabled": false,
+    "factoryBindingFingerprintPreimage": "RELIC_FORGE_RANDOMNESS_V2|ROBINHOOD_4663|DICE_V10|STORAGE_ONLY|EXACT_NATIVE_QUOTE|EXACT_WORD_REPLAY",
+    "randomnessInterfaceVersion": 2
+  },
+  "genericInterface": {
+    "quote": "quoteRequestPrice(uint32)",
+    "request": "requestRandomness(uint256,uint32)",
+    "replay": "replayFulfillment(uint256)"
+  },
+  "contributionInterface": {
+    "signature": "contributionForRequest(address,uint256,uint256)",
+    "productionImplementationCertified": false,
+    "sourceAddressImmutablePerAdapterDeployment": true
+  },
+  "lockedPolicies": {
+    "collectorTransactionCallsProvider": false,
+    "canonicalConsumersOnly": true,
+    "exactNativeQuoteAndPayment": true,
+    "upstreamCallbackStorageOnly": true,
+    "permissionlessExactWordReplay": true,
+    "automaticProviderRefund": false,
+    "automaticCrossProviderFallbackAfterRequest": false,
+    "replacementRandomnessAfterRequest": false,
+    "blockLocalFallback": false,
+    "hopperPaysBeforeReserve": true,
+    "reserveCoversExactShortfallOnly": true
+  },
+  "factoryV2Boundary": {
+    "providerSpecificRequestLogicAllowedInCollection": false,
+    "preRequestGovernedAdapterRotationMayBeDesignedLater": true,
+    "postRequestProviderReplacementAllowed": false,
+    "requestIdentityMustRemainPinnedAfterCreation": true
+  },
+  "openGates": [
+    "mainnet_dice_oracle_address_and_runtime_bytecode_reverification",
+    "mainnet_provider_discovery_and_configuration_reverification",
+    "production_grade_independent_user_contribution_source",
+    "mainnet_fee_commitment_sequence_and_default_gas_validation",
+    "mainnet_or_fork_storage_only_callback_preflight",
+    "single_provider_keeper_monitoring_and_incident_runbook",
+    "production_acceptable_security_review",
+    "production_adapter_audit",
+    "explicit_activation_decision"
+  ]
+}
