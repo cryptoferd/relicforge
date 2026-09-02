@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "asOf": "2026-09-01",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -19,6 +19,7 @@
     "production_safe_cost_cap_or_reservation",
     "per_request_actual_cost_attribution_if_shared_liquidity",
     "independent_user_contribution_policy_when_required",
+    "atomic_provider_funding_or_certified_reconciliation_path",
     "unknown_pairs_fail_closed"
   ],
   "pairs": [
@@ -109,11 +110,61 @@
       "productionEnabled": false
     },
     {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "provider": "supra_dvrf_v3",
+      "status": "phase2d_r4_local_harness_candidate",
+      "productionEnabled": false,
+      "router": "0x23726e27Ec79d421cf58C815D37748AfCaFeC9e4",
+      "deposit": "0xb63b8391e666d21958b8b3459840594A12055D2d",
+      "servicePremiumBps": 3000,
+      "requestedRandomWords": 1,
+      "requestedConfirmations": 3,
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "client_wallet_prepaid_shared_subscription_plus_collection_reservation_escrow_harness",
+      "retryModel": "automatic_failed_callback_retry_every_6h_up_to_48h_documented_for_insufficient_gas",
+      "requestIntegrity": "v3_onchain_request_parameter_hash_validation",
+      "knownGaps": [
+        "documented_depositFundClient_is_client_self_funding_and_cannot_atomically_route_collection_payment_to_another_client_wallet",
+        "exact_onchain_per_request_actual_cost_attribution_to_collection_unresolved",
+        "reservation_reconciliation_or_refund_path_unresolved",
+        "shared_subscription_replenishment_requires_wallet_or_automation_operational_step",
+        "live_fork_or_test_request",
+        "callback_gas_price_and_limit_reverification",
+        "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
+        "production_adapter_audit",
+        "subscription_wallet_governance_and_automation"
+      ]
+    },
+    {
       "chain": "Base",
       "chainId": 8453,
       "provider": "supra_dvrf_v3",
-      "status": "research_required",
-      "productionEnabled": false
+      "status": "phase2d_r4_local_harness_candidate",
+      "productionEnabled": false,
+      "router": "0x73970504Df8290E9A508676a0fbd1B7f4Bcb7f5a",
+      "deposit": "0x52Ad5Ba5c041D6cF952c476c595844c647a692Eb",
+      "servicePremiumBps": 3000,
+      "requestedRandomWords": 1,
+      "requestedConfirmations": 3,
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "client_wallet_prepaid_shared_subscription_plus_collection_reservation_escrow_harness",
+      "retryModel": "automatic_failed_callback_retry_every_6h_up_to_48h_documented_for_insufficient_gas",
+      "requestIntegrity": "v3_onchain_request_parameter_hash_validation",
+      "knownGaps": [
+        "documented_depositFundClient_is_client_self_funding_and_cannot_atomically_route_collection_payment_to_another_client_wallet",
+        "exact_onchain_per_request_actual_cost_attribution_to_collection_unresolved",
+        "reservation_reconciliation_or_refund_path_unresolved",
+        "shared_subscription_replenishment_requires_wallet_or_automation_operational_step",
+        "live_fork_or_test_request",
+        "l1_data_fee_and_callback_cost_benchmark",
+        "callback_gas_price_and_limit_reverification",
+        "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
+        "production_adapter_audit",
+        "subscription_wallet_governance_and_automation"
+      ]
     },
     {
       "chain": "Robinhood Chain",
@@ -122,6 +173,7 @@
       "status": "unsupported_fail_closed",
       "productionEnabled": false,
       "pythEntropySnapshot": "not_present_in_current_official_entropy_deployment_snapshot",
+      "supraDVRFV3Snapshot": "not_present_in_current_official_network_table",
       "prohibitedFallbacks": [
         "block.prevrandao",
         "block.difficulty",
@@ -133,6 +185,8 @@
   ],
   "sourceSnapshots": {
     "pythCrosschainCommit": "4dd956ede61a7ad6b19317e6001a3b95c308dcf2",
-    "relicForgeBaseline": "5a10aaa35d32dab1348b8ed1415e31f5fa824452"
+    "supraDocsReviewed": "2026-09-01",
+    "supraDVRFV3PremiumBps": 3000,
+    "relicForgeBaseline": "357ee0cb63939fb877b8722bca5e426519a74de2"
   }
 }
