@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 5,
   "asOf": "2026-09-02",
-  "phase": "2D_R7",
-  "policyStatus": "robinhood_dice_live_liveness_certified_zero_default_gas_gate_open",
+  "phase": "2D_R8",
+  "policyStatus": "robinhood_dice_storage_only_live_callback_exact_word_replay_certified",
   "productionEnabled": false,
   "meaning": "Advancement priority only. Collector mint transactions must not call the randomness provider; no provider is production certified by this file.",
   "globalRules": [
@@ -34,10 +34,10 @@
     },
     "dice_entropy_v10": {
       "disposition": "primary_robinhood_production_advancement_candidate",
-      "reason": "Robinhood Dice request/keeper/callback liveness and exact per-request fee are live-proven on testnet. The observed provider defaultGasLimit is zero, so provider-side callback retry is not assumed; R8 storage-only callback hardening is required while collector mint acceptance remains asynchronous.",
+      "reason": "Native Robinhood deployment and exact per-request native fee are live-proven. R8 advances a storage-only upstream callback with permissionless local exact-word replay; live zero-default mode does not assume provider-side callback retry.",
       "productionEnabled": false,
       "remaining": [
-        "r8_storage_only_live_callback_and_exact_word_replay",
+
         "independent_contribution_source",
         "deployment_reverification",
         "third_party_or_equivalent_security_gate",
@@ -83,12 +83,12 @@
       "primaryAdvancementProvider": "dice_entropy_v10",
       "secondaryResearchCandidate": null,
       "productionEnabled": false,
-      "status": "phase2d_r7_live_liveness_certified_zero_default_gas_gate_open",
+      "status": "phase2d_r8_storage_only_live_callback_exact_word_replay_certified",
       "note": "Dice becomes the Robinhood advancement candidate, not production-enabled. A Dice outage can delay settlement but must never revert an already successful collector mint reservation or create a reroll.",
       "mintAcceptancePolicy": "collector_transaction_never_calls_dice",
       "stalledRequestPolicy": "same_sequence_pending_no_automatic_refund_no_reroll",
       "remainingBeforeActivation": [
-        "r8_storage_only_live_callback_and_permissionless_exact_word_replay",
+
         "mainnet_address_bytecode_and_provider_config_reverification",
         "production_grade_independent_user_contribution_source",
         "single_provider_liveness_monitoring_and_incident_runbook",
@@ -105,6 +105,7 @@
     "robinhoodChainDocsReviewed": "2026-09-01",
     "diceProtocolRepoCommit": "466b93ae2879e2e36ecb80cd33c0ee3a1ae6a799",
     "diceProtocolDocsReviewed": "2026-09-01",
-    "r7LiveResultReviewed": "2026-09-02"
+    "r7LiveResultReviewed": "2026-09-02",
+    "r8LiveResultReviewed": "2026-09-02"
   }
 }

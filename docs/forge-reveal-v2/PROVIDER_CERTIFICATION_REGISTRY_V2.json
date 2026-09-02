@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 7,
+  "schemaVersion": 9,
   "asOf": "2026-09-02",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -177,7 +177,7 @@
       "chain": "Robinhood Chain",
       "chainId": 4663,
       "provider": "dice_entropy_v10",
-      "status": "phase2d_r7_live_liveness_certified_zero_default_gas_gate_open",
+      "status": "phase2d_r8_live_storage_only_callback_exact_word_replay_certified",
       "productionEnabled": false,
       "oracle": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
       "testnetChainId": 46630,
@@ -191,10 +191,10 @@
       "refundDelaySnapshotL1Blocks": 6,
       "mintPathIsolation": "collector_transaction_never_calls_randomness_provider",
       "stalledRequestPolicy": "keep_same_dice_sequence_live_no_automatic_refund_no_reroll",
-      "recoveryModel": "bounded_mode_supports_same_commitment_retry; live_zero_default_mode_clears_provider_retry_state; R8_storage_only_callback_required",
+      "recoveryModel": "R8_storage_only_upstream_word_persistence_then_permissionless_exact_word_replay; zero_default_provider_side_retry_not_assumed",
       "contributionModel": "external_fresh_independent_contribution_source_required",
       "knownGaps": [
-        "r8_storage_only_live_callback_and_exact_word_replay",
+        "zero_default_mode_has_no_provider_side_retry_if_storage_only_callback_itself_fails",
         "mainnet_bytecode_and_verified_source_reverification_at_activation",
         "production_grade_independent_user_contribution_source",
         "single_provider_censorship_and_keeper_liveness_operational_policy",
@@ -204,6 +204,7 @@
       ],
       "r6Disposition": "primary_robinhood_production_advancement_candidate_pending_live_and_audit_gates",
       "r7Disposition": "live_liveness_certified_zero_default_gas_storage_only_hardening_required",
+      "r8Disposition": "live_storage_only_callback_and_exact_word_replay_certified_zero_default_mode_residual_operational_gate",
       "prohibitedFallbacks": [
         "block.prevrandao",
         "block.difficulty",
@@ -223,7 +224,8 @@
     "robinhoodChainDocsReviewed": "2026-09-01",
     "diceProtocolRepoCommit": "466b93ae2879e2e36ecb80cd33c0ee3a1ae6a799",
     "diceProtocolDocsReviewed": "2026-09-01",
-    "r7LiveResultReviewed": "2026-09-02"
+    "r7LiveResultReviewed": "2026-09-02",
+    "r8LiveResultReviewed": "2026-09-02"
   },
   "r5Decision": {
     "status": "phase2d_r5_provider_selection_policy_candidate",
