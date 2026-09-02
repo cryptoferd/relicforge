@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "asOf": "2026-09-01",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -176,29 +176,52 @@
     {
       "chain": "Robinhood Chain",
       "chainId": 4663,
-      "provider": "none_certified",
-      "status": "unsupported_fail_closed",
+      "provider": "dice_entropy_v10",
+      "status": "phase2d_r6_local_harness_candidate",
       "productionEnabled": false,
-      "pythEntropySnapshot": "not_present_in_current_official_entropy_deployment_snapshot",
-      "supraDVRFV3Snapshot": "not_present_in_current_official_network_table",
+      "oracle": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+      "testnetChainId": 46630,
+      "testnetOracle": "0xE4F1cc334a3d5FFf8b588573921CA9e2FFE22E5c",
+      "providerAddress": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+      "requestVariant": "requestV2(address,bytes32,uint32)",
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "exact_live_getFeeV2_native_payment_per_request",
+      "documentedFeeSnapshotWei": 25000000000000,
+      "refundDelaySnapshotL1Blocks": 6,
+      "mintPathIsolation": "collector_transaction_never_calls_randomness_provider",
+      "stalledRequestPolicy": "keep_same_dice_sequence_live_no_automatic_refund_no_reroll",
+      "recoveryModel": "dice_CALLBACK_FAILED_same_commitments_retry_plus_local_exact_word_replay",
+      "contributionModel": "external_fresh_independent_contribution_source_required",
+      "knownGaps": [
+        "live_robinhood_testnet_request_and_keeper_callback",
+        "mainnet_bytecode_and_verified_source_reverification_at_activation",
+        "production_grade_independent_user_contribution_source",
+        "single_provider_censorship_and_keeper_liveness_operational_policy",
+        "no_published_independent_third_party_v10_audit_in_reviewed_sources",
+        "production_adapter_audit",
+        "fee_provider_commitment_and_address_rotation_monitoring"
+      ],
+      "r6Disposition": "primary_robinhood_production_advancement_candidate_pending_live_and_audit_gates",
       "prohibitedFallbacks": [
         "block.prevrandao",
         "block.difficulty",
         "block.timestamp",
         "blockhash",
         "sequencer_local_entropy"
-      ],
-      "r5Disposition": "no_provider_available_fail_closed"
+      ]
     }
   ],
   "sourceSnapshots": {
     "pythCrosschainCommit": "4dd956ede61a7ad6b19317e6001a3b95c308dcf2",
     "supraDocsReviewed": "2026-09-01",
     "supraDVRFV3PremiumBps": 3000,
-    "relicForgeBaseline": "79cc49507ce68c72b539b88dfc14bd09f1c85892",
+    "relicForgeBaseline": "890cb7c78e9df91cdfc5f40c3826eea7c9694bea",
     "chainlinkVRFDocsReviewed": "2026-09-01",
     "pythEntropyDocsReviewed": "2026-09-01",
-    "robinhoodChainDocsReviewed": "2026-09-01"
+    "robinhoodChainDocsReviewed": "2026-09-01",
+    "diceProtocolRepoCommit": "466b93ae2879e2e36ecb80cd33c0ee3a1ae6a799",
+    "diceProtocolDocsReviewed": "2026-09-01"
   },
   "r5Decision": {
     "status": "phase2d_r5_provider_selection_policy_candidate",
@@ -235,5 +258,14 @@
         "productionEnabled": false
       }
     ]
+  },
+  "r6Decision": {
+    "status": "phase2d_r6_robinhood_dice_local_candidate",
+    "productionEnabled": false,
+    "collectorMintProviderIsolation": true,
+    "automaticDiceRefundEnabled": false,
+    "automaticProviderRerollEnabled": false,
+    "robinhoodPrimaryAdvancementProvider": "dice_entropy_v10",
+    "meaning": "mint acceptance remains independent of provider availability; live/audit/contribution gates remain before activation"
   }
 }
