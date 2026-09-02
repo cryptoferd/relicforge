@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-09-01",
+  "phase": "2D_R5",
+  "policyStatus": "local_decision_matrix_candidate",
+  "productionEnabled": false,
+  "meaning": "Advancement priority only. No provider or chain is production certified by this file.",
+  "globalRules": [
+    "unknown_chains_fail_closed",
+    "no_block_local_randomness_fallback",
+    "no_automatic_cross_provider_fallback_after_request_creation",
+    "exact_stored_word_replay_only",
+    "canonical_consumers_only",
+    "production_activation_requires_live_chain_validation_and_production_adapter_audit"
+  ],
+  "providerDisposition": {
+    "chainlink_vrf_v2_5_direct_native": {
+      "disposition": "primary_production_advancement_candidate",
+      "reason": "R1 thin callback passed; current official Ethereum/Base deployments exist; request funding is atomic per request using the wrapper live native quote; no shared subscription attribution gap or independent user-contribution source is required."
+    },
+    "pyth_entropy_v2": {
+      "disposition": "secondary_base_research_candidate",
+      "reason": "R3 thin callback and exact getFeeV2 payment passed and fit Phase 2C accounting, but the full-custom security posture still requires a production-grade independent user contribution source and current official Entropy deployment evidence is Base-focused in the R3 snapshot."
+    },
+    "chainlink_vrf_v2_5_subscription_native": {
+      "disposition": "not_selected_for_production_advancement",
+      "reason": "R2 callback architecture passed but exact per-request provider payment is only known after callback charging, leaving shared-liquidity attribution/reconciliation unresolved."
+    },
+    "supra_dvrf_v3": {
+      "disposition": "not_selected_for_production_advancement",
+      "reason": "R4 callback/retry architecture passed, but the client-wallet prepaid subscription remains separate from collection reservation escrow, exact collection attribution/reconciliation is unresolved, and the reviewed public audit index did not identify a V3-specific Solidity audit."
+    }
+  },
+  "chains": [
+    {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+      "secondaryResearchCandidate": null,
+      "productionEnabled": false,
+      "remainingBeforeActivation": [
+        "live_testnet_or_fork_request",
+        "deployment_time_address_and_config_reverification",
+        "production_adapter_audit",
+        "governed_provider_registry_and_rotation",
+        "operational_failure_and_monitoring_runbook"
+      ]
+    },
+    {
+      "chain": "Base",
+      "chainId": 8453,
+      "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+      "secondaryResearchCandidate": "pyth_entropy_v2",
+      "productionEnabled": false,
+      "remainingBeforeActivation": [
+        "live_testnet_or_fork_request",
+        "l1_data_fee_and_callback_cost_benchmark",
+        "deployment_time_address_and_config_reverification",
+        "production_adapter_audit",
+        "governed_provider_registry_and_rotation",
+        "operational_failure_and_monitoring_runbook"
+      ],
+      "secondaryCandidateNote": "Pyth is not an automatic runtime fallback. It is a separate research/contingency candidate that would need its own production gates closed before any governed provider switch."
+    },
+    {
+      "chain": "Robinhood Chain",
+      "chainId": 4663,
+      "primaryAdvancementProvider": null,
+      "secondaryResearchCandidate": null,
+      "productionEnabled": false,
+      "status": "unsupported_fail_closed",
+      "note": "Robinhood Chain is EVM-compatible and Chainlink Data Streams/Data Feeds support exists, but the current Chainlink VRF v2.5 supported-network page does not list Robinhood; Pyth Entropy and Supra dVRF V3 current network snapshots reviewed for R5 also do not provide a certified Robinhood route. Do not infer VRF support from another oracle product."
+    }
+  ],
+  "sourceSnapshots": {
+    "relicForgeBaseline": "79cc49507ce68c72b539b88dfc14bd09f1c85892",
+    "chainlinkVRFSupportedNetworksReviewed": "2026-09-01",
+    "pythEntropyChainlistReviewed": "2026-09-01",
+    "supraDVRFNetworksReviewed": "2026-09-01",
+    "robinhoodChainDocsReviewed": "2026-09-01"
+  }
+}

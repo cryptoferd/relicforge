@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "asOf": "2026-09-01",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -38,7 +38,8 @@
         "address_reverification_at_deployment",
         "production_adapter_audit",
         "governed_registry_and_rotation"
-      ]
+      ],
+      "r5Disposition": "primary_production_advancement_candidate"
     },
     {
       "chain": "Base",
@@ -56,7 +57,8 @@
         "address_reverification_at_deployment",
         "production_adapter_audit",
         "governed_registry_and_rotation"
-      ]
+      ],
+      "r5Disposition": "primary_production_advancement_candidate"
     },
     {
       "chain": "Ethereum",
@@ -75,7 +77,8 @@
         "exact_actual_cost_reconciliation_or_stronger_isolation",
         "governance_and_automation_ownership",
         "production_adapter_audit"
-      ]
+      ],
+      "r5Disposition": "not_selected_shared_liquidity_actual_cost_attribution_gate"
     },
     {
       "chain": "Base",
@@ -100,14 +103,16 @@
         "provider_front_running_and_censorship_operational_policy",
         "contribution_source_governance_and_liveness",
         "production_adapter_audit"
-      ]
+      ],
+      "r5Disposition": "secondary_base_research_candidate_pending_independent_contribution_source"
     },
     {
       "chain": "Ethereum",
       "chainId": 1,
       "provider": "pyth_entropy_v2",
       "status": "not_in_current_official_entropy_deployment_snapshot",
-      "productionEnabled": false
+      "productionEnabled": false,
+      "r5Disposition": "not_selected_not_in_current_entropy_deployment_snapshot"
     },
     {
       "chain": "Ethereum",
@@ -135,7 +140,8 @@
         "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
         "production_adapter_audit",
         "subscription_wallet_governance_and_automation"
-      ]
+      ],
+      "r5Disposition": "not_selected_shared_subscription_reconciliation_and_audit_gates"
     },
     {
       "chain": "Base",
@@ -164,7 +170,8 @@
         "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
         "production_adapter_audit",
         "subscription_wallet_governance_and_automation"
-      ]
+      ],
+      "r5Disposition": "not_selected_shared_subscription_reconciliation_and_audit_gates"
     },
     {
       "chain": "Robinhood Chain",
@@ -180,13 +187,53 @@
         "block.timestamp",
         "blockhash",
         "sequencer_local_entropy"
-      ]
+      ],
+      "r5Disposition": "no_provider_available_fail_closed"
     }
   ],
   "sourceSnapshots": {
     "pythCrosschainCommit": "4dd956ede61a7ad6b19317e6001a3b95c308dcf2",
     "supraDocsReviewed": "2026-09-01",
     "supraDVRFV3PremiumBps": 3000,
-    "relicForgeBaseline": "357ee0cb63939fb877b8722bca5e426519a74de2"
+    "relicForgeBaseline": "79cc49507ce68c72b539b88dfc14bd09f1c85892",
+    "chainlinkVRFDocsReviewed": "2026-09-01",
+    "pythEntropyDocsReviewed": "2026-09-01",
+    "robinhoodChainDocsReviewed": "2026-09-01"
+  },
+  "r5Decision": {
+    "status": "phase2d_r5_provider_selection_policy_candidate",
+    "productionEnabled": false,
+    "meaning": "advancement_priority_only_not_production_activation",
+    "globalRules": [
+      "no_automatic_cross_provider_fallback_after_request_creation",
+      "no_block_local_randomness_fallback",
+      "exact_stored_word_replay_only",
+      "unknown_chain_provider_pairs_fail_closed"
+    ],
+    "chains": [
+      {
+        "chain": "Ethereum",
+        "chainId": 1,
+        "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+        "secondaryResearchCandidate": null,
+        "productionEnabled": false
+      },
+      {
+        "chain": "Base",
+        "chainId": 8453,
+        "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+        "secondaryResearchCandidate": "pyth_entropy_v2",
+        "productionEnabled": false,
+        "secondaryCandidateIsAutomaticFallback": false
+      },
+      {
+        "chain": "Robinhood Chain",
+        "chainId": 4663,
+        "primaryAdvancementProvider": null,
+        "secondaryResearchCandidate": null,
+        "status": "unsupported_fail_closed",
+        "productionEnabled": false
+      }
+    ]
   }
 }
