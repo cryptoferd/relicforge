@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "asOf": "2026-09-02",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -177,7 +177,7 @@
       "chain": "Robinhood Chain",
       "chainId": 4663,
       "provider": "dice_entropy_v10",
-      "status": "phase2d_r8_live_storage_only_callback_exact_word_replay_certified",
+      "status": "phase2d_r9_production_integration_local_certified",
       "productionEnabled": false,
       "oracle": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
       "testnetChainId": 46630,
@@ -205,6 +205,7 @@
       "r6Disposition": "primary_robinhood_production_advancement_candidate_pending_live_and_audit_gates",
       "r7Disposition": "live_liveness_certified_zero_default_gas_storage_only_hardening_required",
       "r8Disposition": "live_storage_only_callback_and_exact_word_replay_certified_zero_default_mode_residual_operational_gate",
+      "r9Disposition": "production_integration_local_certified_pending_mainnet_contribution_audit_operational_gates",
       "prohibitedFallbacks": [
         "block.prevrandao",
         "block.difficulty",
@@ -225,7 +226,15 @@
     "diceProtocolRepoCommit": "466b93ae2879e2e36ecb80cd33c0ee3a1ae6a799",
     "diceProtocolDocsReviewed": "2026-09-01",
     "r7LiveResultReviewed": "2026-09-02",
-    "r8LiveResultReviewed": "2026-09-02"
+    "r8LiveResultReviewed": "2026-09-02",
+    "r9PackagePrepared": "2026-09-02",
+    "r9LocalValidationReviewed": "2026-09-02",
+    "r9LocalValidation": {
+      "focused": { "passed": 10, "failed": 0 },
+      "phase2d": { "passed": 99, "failed": 0 },
+      "experimental": { "passed": 169, "failed": 0 },
+      "fullRegression": { "passed": 293, "failed": 0 }
+    }
   },
   "r5Decision": {
     "status": "phase2d_r5_provider_selection_policy_candidate",

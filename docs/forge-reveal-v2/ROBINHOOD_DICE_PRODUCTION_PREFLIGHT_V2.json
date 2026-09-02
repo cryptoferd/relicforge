@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "phase": "2D_R9",
+  "asOf": "2026-09-02",
+  "productionEnabled": false,
+  "baseline": {
+    "repository": "cryptoferd/relicforge",
+    "branch": "forge-reveal-v2",
+    "commit": "ec03553fd3aff1f82b66a9ca1780a567eea6784f"
+  },
+  "localCertification": {
+    "status": "passed",
+    "reviewed": "2026-09-02",
+    "foundryVersion": "1.7.1",
+    "solcVersion": "0.8.30",
+    "r9OwnedFormattingPassed": true,
+    "repoWideFormattingExcludedForPreExistingBaselineDrift": true,
+    "focusedTests": { "passed": 10, "failed": 0 },
+    "phase2dTests": { "passed": 99, "failed": 0 },
+    "experimentalTests": { "passed": 169, "failed": 0 },
+    "fullRegression": { "passed": 293, "failed": 0 },
+    "gitDiffCheckPassed": true
+  },
+  "robinhoodMainnet": {
+    "chainId": 4663,
+    "diceOracleRegistrySnapshot": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+    "providerAddress": null,
+    "activationAllowed": false,
+    "requiredReverification": [
+      "rpc_chain_id",
+      "dice_oracle_address",
+      "dice_oracle_runtime_bytecode",
+      "verified_source_or_equivalent_source_match",
+      "provider_address",
+      "provider_current_commitment",
+      "provider_sequence_number",
+      "provider_end_sequence_number",
+      "provider_default_gas_limit",
+      "getFeeV2_exact_live_fee",
+      "requestV2_abi_and_callback_semantics",
+      "storage_only_callback_local_gas_envelope",
+      "canonical_collection_registry_wiring",
+      "forge_reserve_registration",
+      "max_randomness_cost_policy",
+      "independent_contribution_source_certification",
+      "monitoring_and_incident_runbook",
+      "production_adapter_security_review"
+    ]
+  },
+  "robinhoodTestnetEvidence": {
+    "chainId": 46630,
+    "rpc": "https://rpc.testnet.chain.robinhood.com",
+    "diceOracle": "0xE4F1cc334a3d5FFf8b588573921CA9e2FFE22E5c",
+    "provider": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+    "feeSnapshotWei": 25000000000000,
+    "observedDefaultGasLimit": 0,
+    "r8Sequence": 840,
+    "r8ExactWord": "0x96eb0d68e93e9539108a961f1e85bff08774ee7e8107d6aaf78dc47b72e3de14",
+    "r8Result": "storage_only_callback_and_exact_word_replay_live_certified"
+  },
+  "lockedPolicies": {
+    "collectorCallsProvider": false,
+    "automaticRefundAfterAcceptedBatch": false,
+    "automaticCrossProviderFallbackAfterRequest": false,
+    "replacementRandomnessAfterRequest": false,
+    "blockLocalFallback": false,
+    "exactStoredWordReplayOnly": true,
+    "permissionlessDelivery": true,
+    "permissionlessSettlement": true
+  },
+  "openGates": [
+    "production_grade_independent_user_contribution_source",
+    "mainnet_provider_discovery_and_reverification",
+    "mainnet_bytecode_and_callback_semantics_reverification",
+    "zero_default_mode_residual_callback_failure_risk",
+    "production_acceptable_security_review",
+    "production_adapter_audit",
+    "keeper_provider_fee_and_config_monitoring_runbook"
+  ]
+}
