@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "asOf": "2026-09-02",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
@@ -177,7 +177,7 @@
       "chain": "Robinhood Chain",
       "chainId": 4663,
       "provider": "dice_entropy_v10",
-      "status": "phase2d_r10_factory_interface_freeze_local_certified",
+      "status": "phase2d_r11_collector_contribution_mainnet_read_only_preflight_local_certified",
       "productionEnabled": false,
       "oracle": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
       "testnetChainId": 46630,
@@ -192,11 +192,11 @@
       "mintPathIsolation": "collector_transaction_never_calls_randomness_provider",
       "stalledRequestPolicy": "keep_same_dice_sequence_live_no_automatic_refund_no_reroll",
       "recoveryModel": "R8_storage_only_upstream_word_persistence_then_permissionless_exact_word_replay; zero_default_provider_side_retry_not_assumed",
-      "contributionModel": "external_fresh_independent_contribution_source_required",
+      "contributionModel": "collector_team_entropy_frozen_per_batch_r11_local_certified_pending_production_security_review",
       "knownGaps": [
         "zero_default_mode_has_no_provider_side_retry_if_storage_only_callback_itself_fails",
         "mainnet_bytecode_and_verified_source_reverification_at_activation",
-        "production_grade_independent_user_contribution_source",
+        "collector_contribution_source_r11_local_certified_pending_production_security_review",
         "single_provider_censorship_and_keeper_liveness_operational_policy",
         "no_published_independent_third_party_v10_audit_in_reviewed_sources",
         "production_adapter_audit",
@@ -207,6 +207,7 @@
       "r8Disposition": "live_storage_only_callback_and_exact_word_replay_certified_zero_default_mode_residual_operational_gate",
       "r9Disposition": "production_integration_local_certified_pending_mainnet_contribution_audit_operational_gates",
       "r10Disposition": "factory_interface_freeze_local_certified_production_still_fail_closed_pending_mainnet_contribution_audit_operational_gates",
+      "r11Disposition": "collector_contribution_local_certified_mainnet_read_only_preflight_passed_production_still_fail_closed_pending_live_mainnet_request_audit_operational_gates",
       "prohibitedFallbacks": [
         "block.prevrandao",
         "block.difficulty",
@@ -232,6 +233,18 @@
     "r9LocalValidationReviewed": "2026-09-02",
     "r10PackagePrepared": "2026-09-02",
     "r10LocalValidationReviewed": "2026-09-02",
+    "r11PackagePrepared": "2026-09-02",
+    "r11LocalValidationReviewed": "2026-09-02",
+    "r11LocalValidation": {
+      "focusedContribution": { "passed": 10, "failed": 0 },
+      "mainnetReadOnlyFork": { "passed": 5, "failed": 0 },
+      "phase2d": { "passed": 119, "failed": 0 },
+      "experimental": { "passed": 194, "failed": 0 },
+      "fullRegression": { "passed": 318, "failed": 0 },
+      "gitDiffCheckPassed": true,
+      "mainnetTransactionSent": false,
+      "privateKeyUsed": false
+    },
     "r10LocalValidation": {
       "focused": { "passed": 10, "failed": 0 },
       "phase2d": { "passed": 109, "failed": 0 },

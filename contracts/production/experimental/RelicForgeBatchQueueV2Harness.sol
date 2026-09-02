@@ -202,6 +202,7 @@ contract RelicForgeBatchQueueV2Harness is IRelicRandomnessConsumerV1, IRelicForg
     function requestForgeMint(address recipient, uint32 quantity)
         external
         payable
+        virtual
         nonReentrant
         returns (uint64 firstReservationId, uint64 lastReservationId)
     {
@@ -231,6 +232,7 @@ contract RelicForgeBatchQueueV2Harness is IRelicRandomnessConsumerV1, IRelicForg
     function creatorMint(address recipient, uint32 quantity)
         external
         payable
+        virtual
         onlyCreator
         nonReentrant
         returns (uint64 firstReservationId, uint64 lastReservationId)

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "asOf": "2026-09-02",
-  "phase": "2D_R10",
-  "policyStatus": "robinhood_dice_factory_interface_freeze_local_certified",
+  "phase": "2D_R11",
+  "policyStatus": "robinhood_dice_collector_contribution_mainnet_read_only_preflight_local_certified",
   "productionEnabled": false,
   "meaning": "Advancement priority only. Collector mint transactions must not call the randomness provider; no provider is production certified by this file.",
   "globalRules": [
@@ -38,7 +38,7 @@
       "productionEnabled": false,
       "remaining": [
 
-        "independent_contribution_source",
+        "collector_contribution_source_r11_local_certified_pending_production_security_review",
         "deployment_reverification",
         "third_party_or_equivalent_security_gate",
         "production_adapter_audit",
@@ -83,14 +83,14 @@
       "primaryAdvancementProvider": "dice_entropy_v10",
       "secondaryResearchCandidate": null,
       "productionEnabled": false,
-      "status": "phase2d_r10_factory_interface_freeze_local_certified",
+      "status": "phase2d_r11_collector_contribution_mainnet_read_only_preflight_local_certified",
       "note": "Dice becomes the Robinhood advancement candidate, not production-enabled. A Dice outage can delay settlement but must never revert an already successful collector mint reservation or create a reroll.",
       "mintAcceptancePolicy": "collector_transaction_never_calls_dice",
       "stalledRequestPolicy": "same_sequence_pending_no_automatic_refund_no_reroll",
       "remainingBeforeActivation": [
 
         "mainnet_address_bytecode_and_provider_config_reverification",
-        "production_grade_independent_user_contribution_source",
+        "collector_contribution_source_r11_local_certified_pending_production_security_review",
         "single_provider_liveness_monitoring_and_incident_runbook",
         "production_acceptable_security_audit_gate",
         "production_adapter_audit"
@@ -110,6 +110,8 @@
     "r9PackagePrepared": "2026-09-02",
     "r9LocalValidationReviewed": "2026-09-02",
     "r10PackagePrepared": "2026-09-02",
-    "r10LocalValidationReviewed": "2026-09-02"
+    "r10LocalValidationReviewed": "2026-09-02",
+    "r11PackagePrepared": "2026-09-02",
+    "r11LocalValidationReviewed": "2026-09-02"
   }
 }
