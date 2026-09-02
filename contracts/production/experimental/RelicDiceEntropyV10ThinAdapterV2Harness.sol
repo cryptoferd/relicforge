@@ -83,15 +83,45 @@ contract RelicDiceEntropyV10ThinAdapterV2Harness is RelicThinRandomnessAdapterBa
 
     function providerReady() public view returns (bool) {
         IRelicDiceEntropyV10.ProviderInfo memory info = dice.getProviderInfoV2(diceProvider);
-        uint64 refundDelay = dice.getRefundDelayBlocks();
-        return info.sequenceNumber != 0 && info.sequenceNumber < info.endSequenceNumber
-            && info.currentCommitment != bytes32(0) && info.defaultGasLimit != 0
-            && info.defaultGasLimit <= MAX_EFFECTIVE_DICE_CALLBACK_GAS && refundDelay != 0
-            && refundDelay <= MAX_ACCEPTABLE_REFUND_DELAY_BLOCKS;
+        // Current Dice v10 source treats provider defaultGasLimit == 0 as a special remaining-gas
+        // callback mode: the requested 300k provider cap is not stored, and provider retry state
+        // is cleared before the callback attempt. R7-v5 may exercise that mode with the fixed
+        // one-shot liveness probe, but the production-advancement adapter intentionally stays
+        // fail-closed until that callback/retry mode is separately accepted or the live provider
+        // is configured with a nonzero bounded default.
+        if (
+            info.sequenceNumber == 0 || info.sequenceNumber >= info.endSequenceNumber
+                || info.currentCommitment == bytes32(0) || info.defaultGasLimit == 0
+                || info.defaultGasLimit > MAX_EFFECTIVE_DICE_CALLBACK_GAS
+        ) return false;
+
+        // Compatibility rule: if this optional newer selector exists, retain the conservative
+        // R6 sanity bound. If the deployed Dice request path omits it, readiness is determined
+        // only from the request/provider state because Relic never calls refundRequest().
+        (bool refundDelaySupported, uint64 refundDelay) = _tryProviderRefundDelayBlocks();
+        if (refundDelaySupported && (refundDelay == 0 || refundDelay > MAX_ACCEPTABLE_REFUND_DELAY_BLOCKS)) {
+            return false;
+        }
+        return true;
     }
 
+    /// @notice Preserves the R6 direct diagnostic ABI. It can revert when the upstream Dice
+    ///         deployment does not expose the optional selector; callers should prefer try*.
     function providerRefundDelayBlocks() external view returns (uint64) {
         return dice.getRefundDelayBlocks();
+    }
+
+    /// @notice Safe diagnostic for the optional refund-delay selector.
+    function tryProviderRefundDelayBlocks() external view returns (bool supported, uint64 delayBlocks) {
+        return _tryProviderRefundDelayBlocks();
+    }
+
+    function _tryProviderRefundDelayBlocks() internal view returns (bool supported, uint64 delayBlocks) {
+        (bool ok, bytes memory data) =
+            address(dice).staticcall(abi.encodeWithSelector(IRelicDiceEntropyV10.getRefundDelayBlocks.selector));
+        if (!ok || data.length < 32) return (false, 0);
+        delayBlocks = abi.decode(data, (uint64));
+        supported = true;
     }
 
     /// @notice R6 policy: automatic provider refunds are forbidden while a collector batch depends on the request.

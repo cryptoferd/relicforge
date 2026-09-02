@@ -11,7 +11,8 @@ interface IRelicDiceEntropyConsumerV2 {
 /// @title RelicDiceEntropyV10Mock
 /// @notice ABI-shaped Dice Protocol v10 mock for Phase 2D R6 Robinhood certification tests.
 /// @dev EXPERIMENTAL ONLY. Models exact flat fee, full custom user contribution, provider readiness,
-///      retryable callback failure, optional requester-only refund after a delay, and late reveal if no refund occurs.
+///      retryable bounded callbacks, Dice's zero-default-gas remaining-gas mode, optional requester-only
+///      refund after a delay, and late reveal if no refund occurs.
 contract RelicDiceEntropyV10Mock is IRelicDiceEntropyV10 {
     uint32 internal constant TEN_THOUSAND = 10_000;
 
@@ -20,7 +21,7 @@ contract RelicDiceEntropyV10Mock is IRelicDiceEntropyV10 {
         address provider;
         bytes32 userRandomNumber;
         uint32 requestedGasLimit;
-        uint32 effectiveGasLimit;
+        uint32 effectiveGasLimit; // 0 models Dice's remaining-gas callback mode when provider defaultGasLimit == 0
         uint128 feePaid;
         uint64 requestBlock;
         bytes32 providerRevelation;
@@ -51,7 +52,7 @@ contract RelicDiceEntropyV10Mock is IRelicDiceEntropyV10 {
     event DiceRequestRefunded(uint64 indexed sequenceNumber, address indexed requester, uint128 amount);
 
     constructor(address provider_, uint128 fee_, uint32 defaultGasLimit_, uint64 refundDelayBlocks_) {
-        if (provider_ == address(0) || defaultGasLimit_ == 0 || refundDelayBlocks_ == 0) revert RF_BadConfig();
+        if (provider_ == address(0) || refundDelayBlocks_ == 0) revert RF_BadConfig();
         configuredProvider = provider_;
         protocolFeeInWei = fee_;
         refundDelayBlocks = refundDelayBlocks_;
@@ -123,8 +124,15 @@ contract RelicDiceEntropyV10Mock is IRelicDiceEntropyV10 {
         if (msg.value != fee) revert RFV2_WrongRandomnessPayment();
 
         assignedSequenceNumber = _providerInfo.sequenceNumber++;
-        uint32 rounded = _roundTo10k(gasLimit);
-        uint32 effective = rounded < _providerInfo.defaultGasLimit ? _providerInfo.defaultGasLimit : rounded;
+        uint32 effective;
+        if (_providerInfo.defaultGasLimit == 0) {
+            // Current Dice v10 source stores gasLimit10k == 0 in this mode regardless of the
+            // requested gasLimit. revealWithCallback then uses the remaining-gas branch.
+            effective = 0;
+        } else {
+            uint32 rounded = _roundTo10k(gasLimit);
+            effective = rounded < _providerInfo.defaultGasLimit ? _providerInfo.defaultGasLimit : rounded;
+        }
         requests[assignedSequenceNumber] = Request({
             requester: msg.sender,
             provider: provider,
@@ -169,10 +177,22 @@ contract RelicDiceEntropyV10Mock is IRelicDiceEntropyV10 {
             revert RF_BadRequest();
         }
 
-        (succeeded,) = req.requester.call{gas: req.effectiveGasLimit}(
-            abi.encodeCall(IRelicDiceEntropyConsumerV2._entropyCallback, (sequenceNumber, provider, randomNumber))
-        );
-        req.callbackStatus = succeeded ? 2 : 1;
+        bytes memory callbackData =
+            abi.encodeCall(IRelicDiceEntropyConsumerV2._entropyCallback, (sequenceNumber, provider, randomNumber));
+
+        if (req.effectiveGasLimit != 0 && req.callbackStatus == 0) {
+            // First bounded callback attempt. A failure retains the request so the same
+            // committed result can be retried.
+            (succeeded,) = req.requester.call{gas: req.effectiveGasLimit}(callbackData);
+            req.callbackStatus = succeeded ? 2 : 1;
+        } else {
+            // Match the live/current Dice source semantics for either zero-default-gas mode
+            // or a retry after the first bounded callback failed: provider retry state is
+            // cleared before a remaining-gas callback attempt.
+            req.exists = false;
+            (succeeded,) = req.requester.call{gas: gasleft() * 15 / 16}(callbackData);
+            req.callbackStatus = succeeded ? 2 : 1;
+        }
         emit DiceCallbackAttempted(sequenceNumber, randomNumber, succeeded);
     }
 

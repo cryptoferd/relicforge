@@ -1,0 +1,28 @@
+PHASE 2D R7 ROBINHOOD/DICE LIVE CERTIFICATION — REVIEWED EVIDENCE
+UTC start: 2026-09-02T10:29:53.4682842Z
+Baseline branch: forge-reveal-v2
+Baseline HEAD during live test: e120fa7c20e02b7748290062ed4a10e08dfe68ea
+Robinhood Chain Testnet chain ID: 46630
+RPC used: https://rpc.testnet.chain.robinhood.com
+Dice testnet oracle: 0xE4F1cc334a3d5FFf8b588573921CA9e2FFE22E5c
+Dice provider: 0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6
+Observed Dice runtime code bytes: 10049
+Observed protocol fee: 25000000000000 wei
+Observed getFeeV2(provider,300000): 25000000000000 wei
+Observed getRefundDelayBlocks(): selector unavailable/reverted with empty data; diagnostic only
+Observed provider defaultGasLimit at request: 0
+Observed callback mode: Dice remaining-gas mode
+Probe address: 0xb549b9dfe1c4b1c5c2e2950f42302fb559dbfaf2
+Probe deployment tx: 0x7280615146b649603310d56088011e50a80d8dded571cd9ee9c7260ee8bc79de
+Dice request tx: 0x7586c9f15aac81de2b124bec1124f1d367367891f09b1be156eec21e417ef0d6
+Dice sequence number: 839
+Requested callback gas argument: 300000
+Request block: 11619002
+Fulfillment block: 11619002
+Final random word: 0xb2ac9fa8b188aff5a66c8a033ffc20062b6b8d761d14945cb8889d5ef652c389
+Accepted callback count: 1
+Refund action performed: NO
+Replacement randomness request performed: NO
+Reroll performed: NO
+Result: REAL_DICE_CALLBACK_OBSERVED / LIVE LIVENESS CERTIFIED
+Remaining gate: live provider defaultGasLimit == 0 means provider-side callback retry state is not available after a failed remaining-gas callback attempt; R8 storage-only hardening required.
