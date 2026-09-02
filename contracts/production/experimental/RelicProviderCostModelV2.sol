@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
-
 import "../RFCoreV1.sol";
 
-/// @title RelicProviderCostModelV2
-/// @notice Deterministic Phase 2D comparison model for provider callback and lifecycle economics.
-/// @dev EXPERIMENTAL ONLY. Production request payment MUST use each provider's live quote.
 contract RelicProviderCostModelV2 {
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
@@ -19,10 +15,8 @@ contract RelicProviderCostModelV2 {
         uint16 premiumBps
     ) public pure returns (uint256) {
         if (numWords == 0) revert RF_BadConfig();
-
         uint256 billableGas = uint256(callbackGasLimit) + coordinatorNativeOverheadGas + wrapperOverheadGas
             + uint256(perWordOverheadGas) * numWords;
-
         return _applyPremium(billableGas * gasPriceWei, premiumBps);
     }
 
@@ -35,7 +29,7 @@ contract RelicProviderCostModelV2 {
         uint32 perWordOverheadGas,
         uint16 premiumBps
     ) external pure returns (uint256) {
-        uint256 randomnessCost = chainlinkDirectNativeCost(
+        return chainlinkDirectNativeCost(
             gasPriceWei,
             thinCallbackGasLimit,
             coordinatorNativeOverheadGas,
@@ -43,8 +37,7 @@ contract RelicProviderCostModelV2 {
             perWordOverheadGas,
             1,
             premiumBps
-        );
-        return randomnessCost + uint256(settlementGas) * gasPriceWei;
+        ) + uint256(settlementGas) * gasPriceWei;
     }
 
     function chainlinkSubscriptionActualCost(
@@ -54,6 +47,17 @@ contract RelicProviderCostModelV2 {
         uint16 premiumBps
     ) external pure returns (uint256) {
         return _applyPremium((uint256(verificationGasUsed) + callbackGasUsed) * gasPriceWei, premiumBps);
+    }
+
+    function subscriptionReservationOutcome(
+        uint256 sharedBalanceBefore,
+        uint256 reservationWei,
+        uint256 actualChargeWei
+    ) external pure returns (uint256 sharedBalanceAfter, int256 requestDeltaWei) {
+        uint256 funded = sharedBalanceBefore + reservationWei;
+        if (actualChargeWei > funded) revert RF_BadConfig();
+        sharedBalanceAfter = funded - actualChargeWei;
+        requestDeltaWei = int256(reservationWei) - int256(actualChargeWei);
     }
 
     function supraSubscriptionCost(

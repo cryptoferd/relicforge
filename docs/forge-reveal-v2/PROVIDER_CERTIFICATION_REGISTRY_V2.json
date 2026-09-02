@@ -1,140 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "asOf": "2026-09-01",
   "defaultPolicy": "fail_closed",
   "productionEnabled": false,
   "certificationGates": [
-    "verified_async_randomness",
-    "no_block_local_fallback",
-    "exact_request_identity",
-    "persist_word_before_delivery",
-    "exact_word_replay",
-    "no_reroll_after_word",
-    "live_quote_and_price_cap",
-    "known_callback_gas_semantics",
-    "documented_liveness_path",
-    "documented_trust_assumptions",
-    "production_acceptable_audit_status",
-    "chain_addresses_reverified",
-    "canonical_consumers_only",
+    "verified_async_randomness", "no_block_local_fallback", "exact_request_identity",
+    "persist_word_before_delivery", "exact_word_replay", "no_reroll_after_word",
+    "known_callback_gas_semantics", "documented_liveness_path", "documented_trust_assumptions",
+    "production_acceptable_audit_status", "chain_addresses_reverified", "canonical_consumers_only",
+    "production_safe_cost_cap_or_reservation", "per_request_actual_cost_attribution_if_shared_liquidity",
     "unknown_pairs_fail_closed"
   ],
   "pairs": [
-    {
-      "chain": "Ethereum",
-      "chainId": 1,
-      "provider": "chainlink_vrf_v2_5_direct_native",
-      "status": "phase2d_r1_local_harness_passed",
-      "productionEnabled": false,
-      "coordinator": "0xD7f86b4b8Cae7D942340FF628F82735b7a20893a",
-      "wrapper": "0x02aae1A04f9828517b3007f83f6181900CaD910c",
-      "thinCallbackGas": 300000,
-      "consumerWordDeliveryGas": 150000,
-      "maxCoordinatorCallbackGas": 2500000,
-      "nativePremiumPercent": 24,
-      "coordinatorNativeOverheadGas": 90000,
-      "wrapperOverheadGas": 13400,
-      "perWordOverheadGas": 435,
-      "remaining": [
-        "live_testnet_or_fork_request",
-        "address_reverification_at_deployment",
-        "production_adapter_audit",
-        "governed_registry_and_rotation"
-      ]
-    },
-    {
-      "chain": "Base",
-      "chainId": 8453,
-      "provider": "chainlink_vrf_v2_5_direct_native",
-      "status": "phase2d_r1_local_harness_passed",
-      "productionEnabled": false,
-      "coordinator": "0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634",
-      "wrapper": "0xb0407dbe851f8318bd31404A49e658143C982F23",
-      "thinCallbackGas": 300000,
-      "consumerWordDeliveryGas": 150000,
-      "maxCoordinatorCallbackGas": 2500000,
-      "nativePremiumPercent": 60,
-      "coordinatorNativeOverheadGas": 128500,
-      "wrapperOverheadGas": 13400,
-      "perWordOverheadGas": 435,
-      "remaining": [
-        "live_testnet_or_fork_request",
-        "l1_data_fee_benchmark",
-        "address_reverification_at_deployment",
-        "production_adapter_audit",
-        "governed_registry_and_rotation"
-      ]
-    },
-    {
-      "chain": "Ethereum",
-      "chainId": 1,
-      "provider": "chainlink_vrf_v2_5_subscription_native",
-      "status": "research_required",
-      "productionEnabled": false,
-      "remaining": [
-        "shared_subscription_isolation",
-        "per_collection_actual_cost_attribution",
-        "reserve_replenishment_policy",
-        "consumer_throttling",
-        "governance_and_automation_ownership"
-      ]
-    },
-    {
-      "chain": "Base",
-      "chainId": 8453,
-      "provider": "pyth_entropy_v2",
-      "status": "research_required",
-      "productionEnabled": false,
-      "remaining": [
-        "exact_request_variant",
-        "user_random_contribution_policy",
-        "persist_before_delivery_proof",
-        "exact_replay_semantics",
-        "trust_assumption_review",
-        "deployment_and_audit_verification"
-      ]
-    },
-    {
-      "chain": "Base",
-      "chainId": 8453,
-      "provider": "supra_dvrf_v3",
-      "status": "research_required",
-      "productionEnabled": false,
-      "remaining": [
-        "shared_subscription_isolation",
-        "exact_cost_attribution",
-        "persist_before_delivery_proof",
-        "exact_replay_semantics",
-        "deployment_and_audit_verification"
-      ]
-    },
-    {
-      "chain": "Robinhood Chain",
-      "chainId": 4663,
-      "provider": "none_certified",
-      "status": "unsupported_fail_closed",
-      "productionEnabled": false,
-      "prohibitedFallbacks": [
-        "block.prevrandao",
-        "block.difficulty",
-        "block.timestamp",
-        "blockhash",
-        "sequencer_local_entropy"
-      ],
-      "remaining": [
-        "production_acceptable_async_verified_provider",
-        "independent_security_review",
-        "full_phase2d_adapter_certification"
-      ]
-    }
-  ],
-  "sources": {
-    "chainlinkBilling": "https://docs.chain.link/vrf/v2-5/billing",
-    "chainlinkSecurity": "https://docs.chain.link/vrf/v2-5/security",
-    "chainlinkNetworks": "https://docs.chain.link/vrf/v2-5/supported-networks",
-    "pythEntropyV2": "https://docs.pyth.network/entropy/whats-new-entropyv2",
-    "pythProtocol": "https://docs.pyth.network/entropy/protocol-design",
-    "supraNetworks": "https://docs.supra.com/dvrf/learn-supra-dvrf/networks",
-    "robinhoodRandomness": "https://docs.robinhood.com/chain/differences-from-ethereum/"
-  }
+    {"chain":"Ethereum","chainId":1,"provider":"chainlink_vrf_v2_5_direct_native","status":"phase2d_r1_local_harness_passed","productionEnabled":false,"coordinator":"0xD7f86b4b8Cae7D942340FF628F82735b7a20893a","wrapper":"0x02aae1A04f9828517b3007f83f6181900CaD910c","thinCallbackGas":300000,"consumerWordDeliveryGas":150000,"remaining":["live_testnet_or_fork_request","address_reverification_at_deployment","production_adapter_audit","governed_registry_and_rotation"]},
+    {"chain":"Base","chainId":8453,"provider":"chainlink_vrf_v2_5_direct_native","status":"phase2d_r1_local_harness_passed","productionEnabled":false,"coordinator":"0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634","wrapper":"0xb0407dbe851f8318bd31404A49e658143C982F23","thinCallbackGas":300000,"consumerWordDeliveryGas":150000,"remaining":["live_testnet_or_fork_request","l1_data_fee_benchmark","address_reverification_at_deployment","production_adapter_audit","governed_registry_and_rotation"]},
+    {"chain":"Ethereum","chainId":1,"provider":"chainlink_vrf_v2_5_subscription_native","status":"phase2d_r2_local_harness_candidate","productionEnabled":false,"thinCallbackGas":300000,"fundingModel":"per_request_conservative_reservation_into_shared_native_subscription","actualPaymentAvailability":"post_callback_RandomWordsFulfilled_event","knownGap":"exact_onchain_per_request_actual_cost_attribution_unresolved","remaining":["live_testnet_or_fork_request","production_safe_reservation_derivation","config_rotation_protection","exact_actual_cost_reconciliation_or_stronger_isolation","governance_and_automation_ownership","production_adapter_audit"]},
+    {"chain":"Base","chainId":8453,"provider":"pyth_entropy_v2","status":"research_required","productionEnabled":false},
+    {"chain":"Base","chainId":8453,"provider":"supra_dvrf_v3","status":"research_required","productionEnabled":false},
+    {"chain":"Robinhood Chain","chainId":4663,"provider":"none_certified","status":"unsupported_fail_closed","productionEnabled":false,"prohibitedFallbacks":["block.prevrandao","block.difficulty","block.timestamp","blockhash","sequencer_local_entropy"]}
+  ]
 }

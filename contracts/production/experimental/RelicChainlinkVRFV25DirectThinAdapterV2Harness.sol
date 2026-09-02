@@ -12,7 +12,6 @@ interface IRelicCanonicalCollectionRegistryV2 {
 
 interface IRelicChainlinkVRFV25WrapperV2 {
     function calculateRequestPriceNative(uint32 callbackGasLimit, uint32 numWords) external view returns (uint256);
-
     function requestRandomWordsInNative(
         uint32 callbackGasLimit,
         uint16 requestConfirmations,
@@ -21,13 +20,9 @@ interface IRelicChainlinkVRFV25WrapperV2 {
     ) external payable returns (uint256 requestId);
 }
 
-/// @title RelicChainlinkVRFV25DirectThinAdapterV2Harness
-/// @notice Phase 2D Chainlink VRF v2.5 native direct-funding thin-callback adapter.
-/// @dev EXPERIMENTAL ONLY. Uses the current wrapper ABI without importing production dependencies.
 contract RelicChainlinkVRFV25DirectThinAdapterV2Harness is RelicThinRandomnessAdapterBaseV2 {
     bytes4 internal constant EXTRA_ARGS_V1_TAG = bytes4(keccak256("VRF ExtraArgsV1"));
     uint32 public constant NUM_WORDS = 1;
-
     IRelicChainlinkVRFV25WrapperV2 public immutable chainlinkWrapper;
     IRelicCanonicalCollectionRegistryV2 public immutable canonicalCollectionRegistry;
     uint16 public immutable requestConfirmations;
@@ -37,7 +32,6 @@ contract RelicChainlinkVRFV25DirectThinAdapterV2Harness is RelicThinRandomnessAd
             wrapper_ == address(0) || wrapper_.code.length == 0 || canonicalCollectionRegistry_ == address(0)
                 || canonicalCollectionRegistry_.code.length == 0 || requestConfirmations_ == 0
         ) revert RF_BadConfig();
-
         chainlinkWrapper = IRelicChainlinkVRFV25WrapperV2(wrapper_);
         canonicalCollectionRegistry = IRelicCanonicalCollectionRegistryV2(canonicalCollectionRegistry_);
         requestConfirmations = requestConfirmations_;
@@ -61,7 +55,7 @@ contract RelicChainlinkVRFV25DirectThinAdapterV2Harness is RelicThinRandomnessAd
         return chainlinkWrapper.calculateRequestPriceNative(upstreamCallbackGas, NUM_WORDS);
     }
 
-    function _requestUpstream(uint32 upstreamCallbackGas, uint256 requestPrice)
+    function _requestUpstream(uint256, uint32 upstreamCallbackGas, uint256 requestPrice)
         internal
         override
         returns (uint256 upstreamRequestId)
