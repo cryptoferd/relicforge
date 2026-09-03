@@ -1367,7 +1367,7 @@
       const sourceText = humanList(sources, 4);
       const targetText = humanList(targets, 4);
       if (state.ruleType === 'only_with') sentence = `${sourceText} can only appear when ${targetText} is also present.`;
-      if (state.ruleType === 'excludes') sentence = `${sourceText} cannot appear with ${targetText}.`;
+      if (state.ruleType === 'excludes') sentence = `${sourceText} and ${targetText} can never appear together.`;
       if (state.ruleType === 'always_with') sentence = `${sourceText} must always be paired with ${targetText}.`;
     }
     el.ruleSentence.textContent = sentence;
@@ -1383,6 +1383,71 @@
     return `${clipped.slice(0, -1).join(', ')}, and ${clipped.at(-1)}${suffix}`;
   }
 
+
+  function normalizedRuleTraitIds(traitIds) {
+    return [...new Set(traitIds || [])].sort((a, b) => String(a).localeCompare(String(b)));
+  }
+
+  function normalizeRule(rule) {
+    const normalized = {
+      ...rule,
+      sources: normalizedRuleTraitIds(rule?.sources),
+      targets: normalizedRuleTraitIds(rule?.targets),
+    };
+
+    if (normalized.type === 'excludes') {
+      const sourceKey = normalized.sources.join('\u001f');
+      const targetKey = normalized.targets.join('\u001f');
+      if (targetKey < sourceKey) {
+        const originalSources = normalized.sources;
+        normalized.sources = normalized.targets;
+        normalized.targets = originalSources;
+      }
+    }
+
+    return normalized;
+  }
+
+  function ruleSemanticKey(rule) {
+    const normalized = normalizeRule(rule);
+    return `${normalized.type}|${normalized.sources.join('\u001f')}|${normalized.targets.join('\u001f')}`;
+  }
+
+  function normalizeRuleList(rules) {
+    const seen = new Set();
+    const normalized = [];
+    for (const input of rules || []) {
+      const rule = normalizeRule(input);
+      const key = ruleSemanticKey(rule);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(rule);
+    }
+    return normalized;
+  }
+
+  function exclusionRepairOptions(token, rule, lockedMasks = null, tokenIndex = -1, allowExact = true) {
+    const normalized = normalizeRule(rule);
+    const options = [];
+
+    for (const forbiddenIds of [normalized.sources, normalized.targets]) {
+      for (const traitId of forbiddenIds) {
+        const trait = getTrait(traitId);
+        if (!trait || token.traits[trait.layerId] !== traitId) continue;
+        const locked = !!(lockedMasks && lockedMasks[trait.layerId]?.[tokenIndex]);
+        const exact = trait.distribution === 'exact';
+        if (locked || (!allowExact && exact)) continue;
+        options.push({ trait, forbiddenIds, exact });
+      }
+    }
+
+    options.sort((a, b) =>
+      Number(a.exact) - Number(b.exact)
+      || String(a.trait.layerId).localeCompare(String(b.trait.layerId))
+      || String(a.trait.id).localeCompare(String(b.trait.id))
+    );
+    return options;
+  }
 
   function groupTraitIdsByLayer(traitIds) {
     const groups = new Map();
@@ -1471,6 +1536,7 @@
   }
 
   function rulePreflightAnalysis(rule) {
+    rule = normalizeRule(rule);
     const supply = getSupply();
     const estimates = currentCountEstimates();
     const sourceGroups = groupTraitIdsByLayer(rule.sources);
@@ -1625,8 +1691,9 @@
   }
 
   function buildRuleExampleTokens(rule, desired = 3) {
+    rule = normalizeRule(rule);
     const estimates = currentCountEstimates();
-    const rng = createRng(`RULE-EXAMPLE-${rule.id}-${getSupply()}`);
+    const rng = createRng(`RULE-EXAMPLE-${ruleSemanticKey(rule)}-${getSupply()}`);
     const examples = [];
     const directImpossibleSources = new Set();
     const targetGroups = groupTraitIdsByLayer(rule.targets);
@@ -1702,12 +1769,24 @@
 
   function addRule() {
     if (!state.sourceSelected.size || !state.targetSelected.size) return;
-    const rule = {
+    const rule = normalizeRule({
       id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: state.ruleType,
       sources: [...state.sourceSelected],
       targets: [...state.targetSelected],
-    };
+    });
+
+    const semanticKey = ruleSemanticKey(rule);
+    if (state.rules.some(existing => ruleSemanticKey(existing) === semanticKey)) {
+      showStatus(
+        rule.type === 'excludes'
+          ? 'That exclusion already exists. Exclusion rules work both directions, so reversing the sides does not create a new rule.'
+          : 'That rule already exists.',
+        'warn'
+      );
+      return;
+    }
+
     state.rules.push(rule);
     resetCompiledForArtworkChange();
     state.sourceSelected.clear();
@@ -1722,7 +1801,7 @@
     const sources = rule.sources.map(traitLabel);
     const targets = rule.targets.map(traitLabel);
     if (rule.type === 'only_with') return `${humanList(sources)} can only appear when ${humanList(targets)} is also present.`;
-    if (rule.type === 'excludes') return `${humanList(sources)} cannot appear with ${humanList(targets)}.`;
+    if (rule.type === 'excludes') return `${humanList(sources)} and ${humanList(targets)} can never appear together.`;
     return `${humanList(sources)} must always be paired with ${humanList(targets)}.`;
   }
 
@@ -2059,12 +2138,20 @@
         if (!tokenHas(tokens[i], rule.sources)) continue;
 
         if (rule.type === 'excludes') {
-          const offendingTargets = rule.targets.filter(id => Object.values(tokens[i].traits).includes(id));
-          for (const targetId of offendingTargets) {
-            const target = getTrait(targetId);
-            if (!target) continue;
-            const fixed = bestSwapForLayer(tokens, lockedMasks, target.layerId, i, candidate => !rule.targets.includes(candidate.traits[target.layerId]));
-            if (fixed) changes++;
+          const options = exclusionRepairOptions(tokens[i], rule, lockedMasks, i, true);
+          for (const option of options) {
+            const layerId = option.trait.layerId;
+            const fixed = bestSwapForLayer(
+              tokens,
+              lockedMasks,
+              layerId,
+              i,
+              candidate => !option.forbiddenIds.includes(candidate.traits[layerId])
+            );
+            if (fixed) {
+              changes++;
+              break;
+            }
           }
         } else {
           for (const [targetLayerId, allowed] of targetsByLayer(rule)) {
@@ -2118,20 +2205,25 @@
         if (!tokenHas(tokens[i], rule.sources)) continue;
 
         if (rule.type === 'excludes') {
-          const offendingTargets = rule.targets.filter(id => Object.values(tokens[i].traits).includes(id));
-          for (const targetId of offendingTargets) {
-            const target = getTrait(targetId);
-            if (!target || lockedMasks[target.layerId][i]) continue;
+          let repaired = false;
+          const options = exclusionRepairOptions(tokens[i], rule, lockedMasks, i, true);
+          for (const option of options) {
+            const layerId = option.trait.layerId;
             const candidates = [];
             for (let attempt = 0; attempt < Math.min(tokens.length, 180); attempt++) {
               const j = Math.floor(rng() * tokens.length);
-              if (j === i || lockedMasks[target.layerId][j]) continue;
-              if (rule.targets.includes(tokens[j].traits[target.layerId])) continue;
+              if (j === i || lockedMasks[layerId][j]) continue;
+              if (option.forbiddenIds.includes(tokens[j].traits[layerId])) continue;
               candidates.push(j);
             }
             for (const j of candidates) {
-              if (trySwap(tokens, target.layerId, i, j, lockedMasks)) { changes++; break; }
+              if (trySwap(tokens, layerId, i, j, lockedMasks)) {
+                changes++;
+                repaired = true;
+                break;
+              }
             }
+            if (repaired) break;
           }
         } else {
           for (const [targetLayerId, allowed] of targetsByLayer(rule)) {
@@ -2227,6 +2319,7 @@
 
   function compileCollection() {
     if (!state.layers.length) throw new Error('Upload artwork first.');
+    state.rules = normalizeRuleList(state.rules);
     const totalSupply = getSupply();
     const supply = getGenerativeSupply();
     if (supply < 0) throw new Error('Full 1/1 artwork exceeds the collection supply.');
@@ -2263,7 +2356,7 @@
     return {
       tokens: allRecipes,
       report: {
-        compilerVersion: '11.0.0',
+        compilerVersion: '11.0.1',
         supply: totalSupply,
         generativeSupply: supply,
         oneOfOneCount: state.oneOfOnes.length,
@@ -2449,13 +2542,17 @@
         if (!ruleViolationCount(token, rule)) continue;
 
         if (rule.type === 'excludes') {
-          for (const targetId of rule.targets) {
-            const target = getTrait(targetId);
-            if (!target || token.traits[target.layerId] !== targetId || lockedMasks[target.layerId]?.[i] || target.distribution === 'exact') continue;
-            const layer = getLayer(target.layerId);
-            const replacement = layer?.traits.find(trait => !rule.targets.includes(trait.id) && trait.distribution !== 'exact' && !trait.isNone)
-              || layer?.traits.find(trait => !rule.targets.includes(trait.id) && trait.distribution !== 'exact');
-            if (replacement) { token.traits[target.layerId] = replacement.id; passChanges++; changed++; }
+          const options = exclusionRepairOptions(token, rule, lockedMasks, i, false);
+          for (const option of options) {
+            const layer = getLayer(option.trait.layerId);
+            const replacement = layer?.traits.find(trait => !option.forbiddenIds.includes(trait.id) && trait.distribution !== 'exact' && !trait.isNone)
+              || layer?.traits.find(trait => !option.forbiddenIds.includes(trait.id) && trait.distribution !== 'exact');
+            if (replacement) {
+              token.traits[option.trait.layerId] = replacement.id;
+              passChanges++;
+              changed++;
+              break;
+            }
           }
         } else {
           for (const [layerId, allowed] of targetsByLayer(rule)) {
@@ -3056,14 +3153,14 @@
     if (el.hideNoneMetadata) el.hideNoneMetadata.checked = state.hideNoneMetadata;
     if (el.oneOfOneToggle) el.oneOfOneToggle.checked = state.oneOfOnes.length > 0;
     state.rulesEnabled = !!saved.rulesEnabled;
-    state.rules = (saved.rules || []).map(rule => ({ id: rule.id, type: rule.type, sources: [...(rule.sources || [])], targets: [...(rule.targets || [])] }));
+    state.rules = normalizeRuleList((saved.rules || []).map(rule => ({ id: rule.id, type: rule.type, sources: [...(rule.sources || [])], targets: [...(rule.targets || [])] })));
     state.ruleType = saved.ruleType || 'only_with';
     state.sourceSelected = new Set(saved.sourceSelected || []);
     state.targetSelected = new Set(saved.targetSelected || []);
     state.manifestTokens = new Map((saved.manifestTokens || []).map(([tokenId, recipe]) => [Number(tokenId), { ...recipe }]));
     state.manifestSourceName = saved.manifestSourceName || '';
     const savedCompilerReport = saved.compilerReport || null;
-    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '11.0.0';
+    const compilerNeedsRebuild = !!savedCompilerReport && savedCompilerReport.compilerVersion !== '11.0.1';
     state.compiledTokens = compilerNeedsRebuild ? [] : (saved.compiledTokens || []).map(token => ({ tokenId: Number(token.tokenId), traits: { ...(token.traits || {}) }, oneOfOneId: token.oneOfOneId || null }));
     state.previewPage = 1;
     state.compilerReport = compilerNeedsRebuild ? null : savedCompilerReport;
@@ -3097,7 +3194,7 @@
 
     gotoStep(targetStep);
     updateLaunchSummary();
-    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V11.0.0 compiler before forging.`, 'warn');
+    if (compilerNeedsRebuild) showStatus(`Project restored. Rebuild the collection in Step 4 with the V11.0.1 compiler before forging.`, 'warn');
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
