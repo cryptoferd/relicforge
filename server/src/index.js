@@ -8,6 +8,7 @@ import collectionRoutes from './routes/collections.js';
 import publicRoutes from './routes/public.js';
 import founderRoutes from './routes/founder.js';
 import rc47bRoutes from './routes/rc47b.js';
+import reliquaryRoutes from './routes/reliquary.js';
 import { db } from './lib/db.js';
 import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
 
@@ -80,6 +81,7 @@ await app.register(founderRoutes);
 await app.register(collectionRoutes);
 await app.register(publicRoutes);
 await app.register(rc47bRoutes);
+await app.register(reliquaryRoutes);
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);

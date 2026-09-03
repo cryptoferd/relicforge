@@ -177,6 +177,16 @@
     setStatus(`Transaction submitted: ${short(tx.hash)}. Waiting for confirmation…`);
     const receipt = await tx.wait();
     window.dispatchEvent(new CustomEvent('relicforge:v1-mint-confirmed', { detail: { chainId:Number(app.config.chainId), contract:app.config.contract, wallet:app.wallet, transactionHash:receipt?.hash || tx.hash } }));
+    fetch(apiBase() + '/api/reliquary/mint-confirmed', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chainId: Number(app.config.chainId),
+        contract: app.config.contract,
+        wallet: app.wallet,
+        transactionHash: receipt?.hash || tx.hash,
+      }),
+    }).catch(() => {});
     setStatus(`Mint confirmed: ${short(tx.hash)}. Refreshing V1 phase state…`);
     await refreshStatic();
     await refreshWallet();

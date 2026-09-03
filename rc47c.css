@@ -195,3 +195,56 @@
   .rc47c-phase-time-grid { grid-template-columns:1fr; }
   .rc47c-upcoming-time { grid-template-columns:1fr 1fr; }
 }
+/* ---------- My Reliquary v1 shell cleanup ---------- */
+/* Keep one close control: while the drawer is open, hide the original hamburger
+   instead of morphing it into a second X behind the drawer. */
+.rf-shell-open .rf-shell-menu-btn,
+.rf-shell-open #studioMenuBtn.rf-shell-menu-btn {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.rf-shell-wallet-slot {
+  padding: 14px 0 0;
+}
+.rf-shell-wallet-slot .rf-shell-section-title {
+  margin-bottom: 8px;
+}
+.rf-shell-wallet-mount {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.rf-shell-wallet-mount > *,
+.rf-shell-wallet-native-actions,
+.rf-shell-wallet-native-actions > * {
+  width: 100%;
+}
+.rf-shell-generic-wallet {
+  min-height: 48px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #383838;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #0b0b0b;
+  color: #ddd;
+  text-align: left;
+  cursor: pointer;
+}
+.rf-shell-generic-wallet:hover { border-color: #666; }
+.rf-shell-wallet-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #555;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.035);
+}
+.rf-shell-generic-wallet.connected .rf-shell-wallet-dot { background: #aebbb1; }
+.rf-shell-generic-wallet span:last-child { min-width: 0; display: grid; gap: 3px; }
+.rf-shell-generic-wallet strong { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.rf-shell-generic-wallet small { color: #737373; font-size: 8px; }
+.rf-shell-wallet-slot + .rf-shell-nav { padding-top: 13px; }

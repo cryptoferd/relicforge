@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080808" />
+  <title>My Reliquary — Relic Forge</title>
+  <meta name="description" content="Your Relic Forge identity, onchain activity, creator history, and NFT showcase." />
+  <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
+  <link rel="stylesheet" href="./styles.css?v=reliquary1" />
+  <link rel="stylesheet" href="./rc47b.css?v=reliquary1" />
+  <link rel="stylesheet" href="./rc47c.css?v=reliquary1" />
+  <link rel="stylesheet" href="./rc47d.css?v=reliquary1" />
+  <link rel="stylesheet" href="./reliquary.css?v=reliquary1" />
+</head>
+<body class="rc47b-page reliquary-page">
+  <header class="rc47b-nav">
+    <a class="rc47b-brand" href="./index.html"><img src="./relic-forge-logo.svg" alt=""/><div><strong>RELIC FORGE</strong><span>My Reliquary</span></div></a>
+  </header>
+
+  <main class="rc47b-shell reliquary-shell">
+    <section class="reliquary-hero">
+      <div class="reliquary-identity">
+        <div class="reliquary-pfp" id="reliquaryPfp"><img src="./relic-forge-logo.svg" alt="" /></div>
+        <div class="reliquary-identity-copy">
+          <div class="rc47b-kicker">MY RELIQUARY</div>
+          <h1 id="reliquaryUsername">Connect your wallet</h1>
+          <div class="reliquary-wallet" id="reliquaryWallet">Your wallet is your permanent Reliquary identity.</div>
+          <p class="reliquary-bio" id="reliquaryBio">Claim a unique username, choose a Relic Forge NFT as your profile image, and build your onchain history.</p>
+          <div class="reliquary-actions">
+            <button class="rc47b-btn primary" id="reliquaryConnectBtn" type="button">Connect Wallet</button>
+            <button class="rc47b-btn hidden" id="reliquaryEditBtn" type="button">Edit Profile</button>
+            <button class="rc47b-btn hidden" id="reliquaryRefreshBtn" type="button">Refresh Onchain Stats</button>
+            <button class="rc47b-btn hidden" id="reliquaryShareBtn" type="button">Copy Profile Link</button>
+          </div>
+        </div>
+      </div>
+      <div class="reliquary-status" id="reliquaryStatus">Connect your wallet to open My Reliquary.</div>
+    </section>
+
+    <section class="reliquary-stat-section">
+      <div class="reliquary-section-head">
+        <div><span>ONCHAIN ACTIVITY</span><h2>Platform History</h2></div>
+        <small id="reliquaryCoverage">Stats are reconstructed from canonical Relic Forge collection activity.</small>
+      </div>
+      <div class="reliquary-stats" id="reliquaryStats">
+        <div class="reliquary-stat"><span>NFTs Minted</span><strong data-stat="totalMints">—</strong></div>
+        <div class="reliquary-stat"><span>Collections Minted</span><strong data-stat="collectionsMinted">—</strong></div>
+        <div class="reliquary-stat"><span>Mint Transactions</span><strong data-stat="mintTransactions">—</strong></div>
+        <div class="reliquary-stat"><span>Relics Held</span><strong data-stat="nftsHeld">—</strong></div>
+        <div class="reliquary-stat"><span>Chains Used</span><strong data-stat="chainsUsed">—</strong></div>
+        <div class="reliquary-stat"><span>First Mint</span><strong data-stat="firstMintAt">—</strong></div>
+        <div class="reliquary-stat"><span>Mint Value Spent</span><strong data-stat="nativeValueSpentWei">—</strong></div>
+        <div class="reliquary-stat"><span>Platform Fees Generated</span><strong data-stat="platformFeesGeneratedWei">—</strong></div>
+        <div class="reliquary-stat"><span>Sponsored Mints</span><strong data-stat="sponsoredMints">—</strong></div>
+        <div class="reliquary-stat"><span>Minter-Supported Mints</span><strong data-stat="minterSupportedMints">—</strong></div>
+        <div class="reliquary-stat"><span>Collections Created</span><strong data-stat="collectionsCreated">—</strong></div>
+        <div class="reliquary-stat"><span>Mints Across Your Collections</span><strong data-stat="creatorCollectionMints">—</strong></div>
+        <div class="reliquary-stat"><span>Longest Current Hold</span><strong data-stat="longestCurrentHoldDays">—</strong></div>
+        <div class="reliquary-stat"><span>Average Current Hold</span><strong data-stat="averageCurrentHoldDays">—</strong></div>
+      </div>
+    </section>
+
+    <section class="reliquary-showcase">
+      <div class="reliquary-section-head">
+        <div><span>THE RELIQUARY</span><h2>Minted Relics</h2></div>
+        <small>NFTs this wallet minted through registered canonical Relic Forge collections. Ownership is shown separately.</small>
+      </div>
+      <div class="reliquary-grid" id="reliquaryNftGrid"><div class="reliquary-empty">Connect a wallet or open a public Reliquary profile.</div></div>
+    </section>
+  </main>
+
+  <div class="reliquary-modal hidden" id="reliquaryModal" role="dialog" aria-modal="true" aria-labelledby="reliquaryModalTitle">
+    <div class="reliquary-modal-panel">
+      <div class="reliquary-modal-head">
+        <div><span>PROFILE SETTINGS</span><h2 id="reliquaryModalTitle">Shape your Reliquary</h2></div>
+        <button class="rf-shell-close" id="reliquaryModalClose" type="button" aria-label="Close profile settings">×</button>
+      </div>
+
+      <section class="reliquary-edit-section">
+        <div class="reliquary-edit-copy"><strong>Username</strong><small>Your username is public, unique, and permanently tied to this wallet. Once claimed, it cannot be changed.</small></div>
+        <div id="reliquaryUsernameClaim">
+          <div class="reliquary-username-row">
+            <input id="reliquaryUsernameInput" maxlength="24" placeholder="Choose a username" autocomplete="off" />
+            <button class="rc47b-btn primary" id="reliquaryClaimUsernameBtn" type="button">Claim Permanently</button>
+          </div>
+          <div class="reliquary-field-status" id="reliquaryUsernameStatus">3–24 characters · start with a letter · letters, numbers, underscore.</div>
+        </div>
+        <div class="reliquary-locked-username hidden" id="reliquaryUsernameLocked"></div>
+      </section>
+
+      <section class="reliquary-edit-section">
+        <div class="reliquary-edit-copy"><strong>Bio</strong><small>Tell collectors and creators a little about yourself. Plain text, up to 280 characters.</small></div>
+        <textarea id="reliquaryBioInput" maxlength="280" rows="5" placeholder="About you..."></textarea>
+        <div class="reliquary-bio-counter"><span id="reliquaryBioCount">0</span>/280</div>
+      </section>
+
+      <section class="reliquary-edit-section">
+        <div class="reliquary-edit-copy"><strong>Profile NFT</strong><small>Choose any canonical Relic Forge NFT currently owned by this wallet. If you later transfer it away, it will no longer be shown as a valid PFP.</small></div>
+        <div class="reliquary-pfp-grid" id="reliquaryPfpGrid"><div class="reliquary-empty">Refresh your onchain stats to load owned Relic Forge NFTs.</div></div>
+      </section>
+
+      <div class="reliquary-modal-actions">
+        <button class="rc47b-btn" id="reliquaryClearPfpBtn" type="button">Use Relic Forge Mark</button>
+        <button class="rc47b-btn primary" id="reliquarySaveProfileBtn" type="button">Save Profile</button>
+      </div>
+      <div class="reliquary-field-status" id="reliquaryEditStatus"></div>
+    </div>
+  </div>
+
+  <script src="./relicforge-config.js?v=11.1.6"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="./wallet.js?v=11.1.6" defer></script>
+  <script src="./cloud.js?v=save-reliability5" defer></script>
+  <script src="./reliquary.js?v=reliquary1" defer></script>
+  <script src="./studio-shell.js?v=reliquary1" defer></script>
+</body>
+</html>

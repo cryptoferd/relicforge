@@ -10,6 +10,7 @@
 
   const routes = [
     ['studio.html', 'Studio', 'Build and edit collections'],
+    ['reliquary.html', 'My Reliquary', 'Profile, stats and NFT showcase'],
     ['dashboard.html', 'Creator Dashboard', 'Manage launched collections'],
     ['collab.html', 'Collaboration', 'Shared projects and history'],
     ['upcoming.html', 'Upcoming Mints', 'Creator-published launches'],
@@ -22,6 +23,11 @@
 
   function iconMarkup() {
     return '<span></span><span></span><span></span>';
+  }
+
+  function shortAddress(address) {
+    const value = String(address || '');
+    return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
   }
 
   let toggle = document.getElementById('studioMenuBtn');
@@ -55,11 +61,15 @@
     <div class="rf-shell-drawer-head">
       <a class="rf-shell-drawer-brand" href="./studio.html">
         <img src="./relic-forge-logo.svg" alt="" />
-        <div><strong>RELIC FORGE</strong><span>Studio Menu</span></div>
+        <div><strong>RELIC FORGE</strong><span>Platform Menu</span></div>
       </a>
       <button class="rf-shell-close" id="rfStudioClose" type="button" aria-label="Close menu">×</button>
     </div>
-    <nav class="rf-shell-nav" aria-label="Relic Forge Studio navigation">
+    <section class="rf-shell-wallet-slot" aria-label="Connected wallet">
+      <div class="rf-shell-section-title">Wallet</div>
+      <div class="rf-shell-wallet-mount" id="rfShellWalletMount"></div>
+    </section>
+    <nav class="rf-shell-nav" aria-label="Relic Forge navigation">
       ${routes.map(([href, label, note]) => {
         const active = current === href;
         return `<a href="./${href}"${active ? ' class="active" aria-current="page"' : ''}><strong>${label}</strong><span>${note}</span></a>`;
@@ -70,11 +80,16 @@
 
   body.append(backdrop, drawer);
   const context = drawer.querySelector('#rfStudioContext');
+  const walletMount = drawer.querySelector('#rfShellWalletMount');
 
   const projectActions = document.getElementById('studioProjectActions');
   if (projectActions) {
     projectActions.classList.add('rf-shell-action-stack');
     projectActions.querySelector('.studio-dashboard-link')?.remove();
+
+    const studioWallet = projectActions.querySelector('.wallet-session-control');
+    if (studioWallet) walletMount.appendChild(studioWallet);
+
     const section = document.createElement('section');
     section.className = 'rf-shell-section';
     section.innerHTML = '<div class="rf-shell-section-title">Project</div>';
@@ -89,17 +104,73 @@
     const buttons = ['launchedConnectBtn','launchedChangeWalletBtn','launchedDisconnectBtn']
       .map(id => document.getElementById(id)).filter(Boolean);
     if (buttons.length) {
-      const section = document.createElement('section');
-      section.className = 'rf-shell-section';
-      section.innerHTML = '<div class="rf-shell-section-title">Creator Wallet</div>';
       const stack = document.createElement('div');
-      stack.className = 'rf-shell-action-stack';
+      stack.className = 'rf-shell-action-stack rf-shell-wallet-native-actions';
       buttons.forEach(button => stack.appendChild(button));
-      section.appendChild(stack);
-      context.appendChild(section);
+      walletMount.appendChild(stack);
     }
     dashboardActions.remove();
   }
+
+  async function genericProvider() {
+    if (window.RelicForgeWallets?.getProviderAsync) {
+      return window.RelicForgeWallets.getProviderAsync({ allowChooser: false });
+    }
+    return window.ethereum || null;
+  }
+
+  async function readGenericAccount() {
+    try {
+      const provider = await genericProvider();
+      if (!provider?.request) return null;
+      const accounts = await provider.request({ method: 'eth_accounts' });
+      return accounts?.[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function setGenericWalletState(button, address) {
+    button.dataset.wallet = address || '';
+    button.innerHTML = address
+      ? `<span class="rf-shell-wallet-dot"></span><span><strong>${shortAddress(address)}</strong><small>Connected · open My Reliquary</small></span>`
+      : `<span class="rf-shell-wallet-dot"></span><span><strong>Connect Wallet</strong><small>Connect to open your Reliquary</small></span>`;
+    button.classList.toggle('connected', Boolean(address));
+  }
+
+  async function installGenericWallet() {
+    if (walletMount.children.length) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'rf-shell-generic-wallet';
+    setGenericWalletState(button, await readGenericAccount());
+    button.addEventListener('click', async () => {
+      try {
+        let address;
+        if (window.RelicForgeWallets?.requestAccount) {
+          address = await window.RelicForgeWallets.requestAccount({ forceChooser: true });
+        } else {
+          const provider = window.ethereum;
+          if (!provider?.request) throw new Error('No EVM wallet provider found.');
+          address = (await provider.request({ method: 'eth_requestAccounts' }))?.[0];
+        }
+        if (!address) return;
+        setGenericWalletState(button, address);
+        window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address } }));
+      } catch (error) {
+        button.title = error.message || 'Wallet connection was not completed.';
+      }
+    });
+    walletMount.appendChild(button);
+
+    const sync = async () => setGenericWalletState(button, await readGenericAccount());
+    window.addEventListener('relicforge:wallet-connected', event => setGenericWalletState(button, event.detail?.address || null));
+    window.addEventListener('relicforge:wallet-disconnected', () => setGenericWalletState(button, null));
+    window.addEventListener('relicforge:wallet-accounts-changed', sync);
+    window.addEventListener('relicforge:wallet-provider-changed', sync);
+  }
+
+  installGenericWallet().catch(() => {});
 
   document.querySelector('.rc47b-nav-links')?.remove();
 
@@ -108,7 +179,7 @@
     requestAnimationFrame(() => body.classList.add('rf-shell-open'));
     toggle.setAttribute('aria-expanded', 'true');
     drawer.setAttribute('aria-hidden', 'false');
-    drawer.querySelector('a,button')?.focus({ preventScroll: true });
+    drawer.querySelector('#rfStudioClose')?.focus({ preventScroll: true });
   }
 
   function close({ returnFocus = false } = {}) {
