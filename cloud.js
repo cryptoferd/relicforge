@@ -2,6 +2,7 @@
   'use strict';
   const TOKEN_KEY = 'relicforge_cloud_session_v1';
   const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
+  const SESSION_REFRESH_SKEW_MS = 2 * 60 * 1000;
   let session = null;
   let signInFlight = null;
   let authEpoch = 0;
@@ -20,6 +21,28 @@
     session = null;
     authEpoch += 1;
     try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  }
+
+  function decodeJwtPayload(token) {
+    try {
+      const part = String(token || '').split('.')[1];
+      if (!part) return null;
+      const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return null;
+    }
+  }
+
+  function sessionIsUsable(active, wallet = null, skewMs = SESSION_REFRESH_SKEW_MS) {
+    if (!active?.token) return false;
+    if (wallet && String(active.wallet || '').toLowerCase() !== String(wallet || '').toLowerCase()) return false;
+    const payload = decodeJwtPayload(active.token);
+    const expiresAt = Number(payload?.exp || 0) * 1000;
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
+    return expiresAt - Date.now() > Math.max(0, Number(skewMs || 0));
   }
 
   function permissionMethodUnsupported(error) {
@@ -141,7 +164,8 @@
     const normalized = window.ethers.getAddress(wallet);
     const walletKey = normalized.toLowerCase();
     const existing = loadSession();
-    if (existing?.wallet?.toLowerCase() === walletKey && existing?.token) return existing;
+    if (sessionIsUsable(existing, walletKey)) return existing;
+    if (existing?.token) clearSession();
 
     // Multiple Studio modules can request Cloud auth at the same time (project save,
     // Forge, dashboard discovery, asset upload). Reuse one in-flight login so the
@@ -158,7 +182,8 @@
   }
   async function ensureSignedIn(wallet) {
     const active = loadSession();
-    if (active?.token && active?.wallet?.toLowerCase() === String(wallet || '').toLowerCase()) return active;
+    if (sessionIsUsable(active, wallet)) return active;
+    if (active?.token) clearSession();
     return signIn(wallet);
   }
   async function sha256(file) {
@@ -280,7 +305,7 @@
   };
 
   window.RelicForgeCloud = {
-    version: '11.1.6', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession,
+    version: '11.1.7', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession, sessionIsUsable,
     uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob, uploadBinary
   };
 })();

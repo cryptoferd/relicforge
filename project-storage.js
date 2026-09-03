@@ -6,6 +6,8 @@
   const STORE = 'projects';
   const MAX_CLOUD_PROJECTS = 10;
   const BACKUP_SCHEMA = 'relic-forge/project-backup@1';
+  const SAVE_REMINDER_MS = 30 * 60 * 1000;
+  const SAVE_AGE_TICK_MS = 60 * 1000;
   let dbPromise = null;
   let wallet = null;
   let currentProjectId = null;
@@ -14,6 +16,9 @@
   let cloudProjectLimit = MAX_CLOUD_PROJECTS;
   let hasUnsavedChanges = false;
   let lastSavedAt = null;
+  let dirtySinceAt = null;
+  let saveReminderDismissedAt = null;
+  let saveReminderTimer = null;
   let dirtyTrackingReady = false;
 
   const $ = id => document.getElementById(id);
@@ -90,8 +95,10 @@
   }
 
   function cloudSessionReady() {
-    const active = window.RelicForgeCloud?.loadSession?.();
-    return !!(wallet && active?.token && active?.wallet?.toLowerCase() === wallet);
+    const cloud = window.RelicForgeCloud;
+    const active = cloud?.loadSession?.();
+    if (!(wallet && active?.token && active?.wallet?.toLowerCase() === wallet)) return false;
+    return cloud?.sessionIsUsable ? cloud.sessionIsUsable(active, wallet) : true;
   }
 
   function updateSaveGate() {
@@ -172,11 +179,79 @@
     return 'Not saved yet · No changes to protect yet.';
   }
 
-  function setStatus(message, type = '') {
+  function setStatus(message, type = '', mode = 'general') {
     const node = $('projectSaveStatus');
     if (node) {
       node.innerHTML = `<strong>${esc(message)}</strong><span>${esc(saveSafetyText())}</span>`;
       node.className = `project-save-status ${type}${hasUnsavedChanges ? ' unsaved' : ''}`.trim();
+      node.dataset.saveStatusMode = mode;
+    }
+  }
+
+  function saveReferenceTimeMs() {
+    const savedMs = lastSavedAt ? new Date(lastSavedAt).getTime() : NaN;
+    if (Number.isFinite(savedMs)) return savedMs;
+    const dirtyMs = dirtySinceAt ? new Date(dirtySinceAt).getTime() : NaN;
+    return Number.isFinite(dirtyMs) ? dirtyMs : null;
+  }
+
+  function unsavedAgeStatus() {
+    if (!hasUnsavedChanges) return 'No unsaved changes';
+    const savedMs = lastSavedAt ? new Date(lastSavedAt).getTime() : NaN;
+    if (Number.isFinite(savedMs)) {
+      const minutes = Math.max(0, Math.floor((Date.now() - savedMs) / 60_000));
+      if (minutes < 1) return 'Unsaved changes Â· Last saved less than a minute ago';
+      if (minutes === 1) return 'Unsaved changes Â· Last saved 1 minute ago';
+      return `Unsaved changes Â· Last saved ${minutes} minutes ago`;
+    }
+    const dirtyMs = dirtySinceAt ? new Date(dirtySinceAt).getTime() : NaN;
+    if (!Number.isFinite(dirtyMs)) return 'Unsaved changes';
+    const minutes = Math.max(0, Math.floor((Date.now() - dirtyMs) / 60_000));
+    if (minutes < 1) return 'Unsaved changes Â· Project has not been saved yet';
+    if (minutes === 1) return 'Unsaved changes Â· Unsaved for 1 minute';
+    return `Unsaved changes Â· Unsaved for ${minutes} minutes`;
+  }
+
+  function hideSaveReminder() {
+    $('saveReminder')?.classList.add('hidden');
+  }
+
+  function showSaveReminder() {
+    if (!hasUnsavedChanges) return hideSaveReminder();
+    const title = $('saveReminderTitle');
+    const copy = $('saveReminderCopy');
+    if (title) {
+      title.textContent = lastSavedAt
+        ? 'Itâ€™s been 30 minutes since your last save'
+        : 'Youâ€™ve had unsaved work for 30 minutes';
+    }
+    if (copy) copy.textContent = 'You have unsaved changes. Save now to protect your progress.';
+    $('saveReminder')?.classList.remove('hidden');
+  }
+
+  function scheduleSaveReminder() {
+    if (saveReminderTimer) {
+      clearTimeout(saveReminderTimer);
+      saveReminderTimer = null;
+    }
+    if (!hasUnsavedChanges) {
+      hideSaveReminder();
+      return;
+    }
+    const reference = Number(saveReminderDismissedAt || saveReferenceTimeMs());
+    if (!Number.isFinite(reference) || reference <= 0) return;
+    const delay = Math.max(0, SAVE_REMINDER_MS - (Date.now() - reference));
+    saveReminderTimer = setTimeout(() => {
+      saveReminderTimer = null;
+      showSaveReminder();
+    }, delay);
+  }
+
+  function refreshDirtyStatus() {
+    if (!hasUnsavedChanges) return;
+    const node = $('projectSaveStatus');
+    if (node?.dataset.saveStatusMode === 'dirty') {
+      setStatus(unsavedAgeStatus(), 'warning', 'dirty');
     }
   }
 
@@ -184,13 +259,23 @@
     if (!dirtyTrackingReady) return;
     if (!hasUnsavedChanges) {
       hasUnsavedChanges = true;
-      setStatus('Unsaved changes', 'warning');
+      dirtySinceAt = new Date().toISOString();
+      saveReminderDismissedAt = null;
+      setStatus(unsavedAgeStatus(), 'warning', 'dirty');
+      scheduleSaveReminder();
     }
   }
 
   function markSaved(value = new Date()) {
     hasUnsavedChanges = false;
     lastSavedAt = value instanceof Date ? value.toISOString() : String(value || new Date().toISOString());
+    dirtySinceAt = null;
+    saveReminderDismissedAt = null;
+    if (saveReminderTimer) {
+      clearTimeout(saveReminderTimer);
+      saveReminderTimer = null;
+    }
+    hideSaveReminder();
     setStatus('All changes saved', 'success');
   }
 
@@ -198,14 +283,19 @@
     const cloud = window.RelicForgeCloud;
     if (!wallet || !cloud?.enabled?.()) return null;
     const active = cloud.loadSession?.();
-    if (active?.wallet?.toLowerCase() === wallet && active?.token) {
+    const usable = cloud?.sessionIsUsable
+      ? cloud.sessionIsUsable(active, wallet)
+      : !!(active?.wallet?.toLowerCase() === wallet && active?.token);
+    if (usable) {
       updateSaveGate();
       return active;
     }
-    setStatus('Wallet connected. Sign once to enable global project saves…');
+    setStatus(active?.token
+      ? 'Cloud session expired Â· sign once to keep saving this projectâ€¦'
+      : 'Wallet connected. Sign once to enable global project savesâ€¦', 'warning');
     const signed = await cloud.ensureSignedIn(wallet);
     updateSaveGate();
-    setStatus(`Signed in · global saves enabled for ${shortAddress(wallet)}.`, 'success');
+    setStatus(`Signed in Â· global saves enabled for ${shortAddress(wallet)}.`, 'success');
     return signed;
   }
 
@@ -296,6 +386,16 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function localSaveFailureMessage(error) {
+    const name = String(error?.name || '');
+    const message = String(error?.message || '').trim();
+    if (name === 'QuotaExceededError') return 'Browser storage is full.';
+    if (name === 'IOError' || /failed to write blobs|ioerror/i.test(message)) {
+      return 'Browser local storage could not write the artwork files.';
+    }
+    return message || name || 'Browser local cache write failed.';
+  }
+
   async function cloudMeta() {
     if (!window.RelicForgeCloud?.enabled?.()) return { projects: [], count: 0, limit: MAX_CLOUD_PROJECTS };
     await ensureCloudSession();
@@ -330,7 +430,13 @@
     }
 
     const key = `${wallet}:${id}`;
-    const existing = await idbGet(key);
+    let existing = null;
+    let localReadError = null;
+    try {
+      existing = await idbGet(key);
+    } catch (error) {
+      localReadError = error;
+    }
     const now = new Date().toISOString();
     const record = {
       key,
@@ -344,33 +450,54 @@
       forge,
     };
 
-    setStatus('Saving project + artwork locally…');
-    try {
-      await idbPut(record);
-    } catch (error) {
-      if (error?.name === 'QuotaExceededError') throw new Error('Browser storage is full. Download a project backup or remove older local projects, then try again.');
-      throw error;
+    let localSaveError = localReadError;
+    setStatus('Saving project + artwork locallyâ€¦');
+    if (!localSaveError) {
+      try {
+        await idbPut(record);
+      } catch (error) {
+        localSaveError = error;
+      }
     }
+
+    if (localSaveError && !window.RelicForgeCloud?.enabled?.()) {
+      hasUnsavedChanges = true;
+      const localMessage = localSaveFailureMessage(localSaveError);
+      setStatus(`${localMessage} Download a backup before closing this tab.`, 'error');
+      throw new Error(localMessage);
+    }
+
     currentProjectId = id;
     currentProjectOwner = wallet;
     if (window.RelicForgeCloud?.enabled?.()) {
       try {
-        setStatus(`Local cache ready · syncing “${name}” to RelicForge Cloud…`);
+        if (localSaveError) {
+          setStatus(`Browser local cache unavailable Â· saving â€œ${name}â€ directly to RelicForge Cloudâ€¦`, 'warning');
+        } else {
+          setStatus(`Local cache ready Â· syncing â€œ${name}â€ to RelicForge Cloudâ€¦`);
+        }
         await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
         markSaved(now);
-        setStatus(`Saved globally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+        if (localSaveError) {
+          setStatus('Saved globally Â· browser cache unavailable, but your cloud project is safe.', 'warning');
+        } else {
+          setStatus(`Saved globally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+        }
       } catch (error) {
         hasUnsavedChanges = true;
         updateSaveGate();
-        setStatus(`Global save failed. Your browser has a temporary cache, but this project is not safely saved yet: ${error.message}`, 'error');
+        if (localSaveError) {
+          setStatus(`Save failed locally and globally. Download a backup before closing this tab. Local: ${localSaveFailureMessage(localSaveError)} Cloud: ${error.message}`, 'error');
+        } else {
+          setStatus(`Global save failed. Your browser has a temporary cache, but this project is not safely saved yet: ${error.message}`, 'error');
+        }
         throw error;
       }
     } else {
       markSaved(now);
-      setStatus(`Saved locally · ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+      setStatus(`Saved locally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
     }
-    await renderProjects();
-    return record;
+    await renderProjects();    return record;
   }
 
   function cloudRowFor(id) {
@@ -425,6 +552,13 @@
     currentProjectOwner = record.owner;
     hasUnsavedChanges = false;
     lastSavedAt = record.updatedAt || new Date().toISOString();
+    dirtySinceAt = null;
+    saveReminderDismissedAt = null;
+    if (saveReminderTimer) {
+      clearTimeout(saveReminderTimer);
+      saveReminderTimer = null;
+    }
+    hideSaveReminder();
     closeManager();
     setStatus(`Opened “${record.name}”${fromCloud ? ' from the latest cloud save' : ''}.`, 'success');
   }
@@ -793,6 +927,24 @@
     });
     $('newProjectBtn')?.addEventListener('click', startNewProject);
     $('saveProjectBtn')?.addEventListener('click', () => saveProject().catch(error => setStatus(error.message, 'error')));
+    $('saveReminderSaveBtn')?.addEventListener('click', async () => {
+      const button = $('saveReminderSaveBtn');
+      if (button) button.disabled = true;
+      try {
+        await saveProject();
+      } catch (error) {
+        setStatus(error.message, 'error');
+        showSaveReminder();
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+    $('saveReminderDismissBtn')?.addEventListener('click', () => {
+      saveReminderDismissedAt = Date.now();
+      hideSaveReminder();
+      scheduleSaveReminder();
+      refreshDirtyStatus();
+    });
     $('openProjectsBtn')?.addEventListener('click', openManager);
     $('projectManagerCloseBtn')?.addEventListener('click', closeManager);
     $('projectManagerBackdrop')?.addEventListener('click', closeManager);
@@ -861,6 +1013,12 @@
     document.addEventListener('change', event => { if (isStudioEditTarget(event.target)) markDirty(); }, true);
     document.addEventListener('click', event => { if (event.target.closest?.(mutationClickSelector)) setTimeout(markDirty, 0); }, true);
     document.addEventListener('drop', event => { if (isStudioEditTarget(event.target)) setTimeout(markDirty, 0); }, true);
+    window.setInterval(refreshDirtyStatus, SAVE_AGE_TICK_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      refreshDirtyStatus();
+      scheduleSaveReminder();
+    });
     window.addEventListener('beforeunload', event => {
       if (!hasUnsavedChanges) return;
       event.preventDefault();

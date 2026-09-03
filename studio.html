@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="./rc47c.css?v=rc4.7c" />
   <link rel="stylesheet" href="./rc47d.css?v=rc4.7d" />
   <link rel="stylesheet" href="./creator-controls-complete.css?v=ux2" />
+  <link rel="stylesheet" href="./save-reminder.css?v=save-reliability5" />
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -66,6 +67,17 @@
 </div>
 </header>
 <div class="project-save-status" id="projectSaveStatus"><strong>Wallet required to save</strong><span>Not saved yet · Connect and sign in with a wallet before closing if you want to keep this project.</span></div>
+<div class="save-reminder hidden" id="saveReminder" role="status" aria-live="polite">
+  <div class="save-reminder-copy">
+    <span class="save-reminder-eyebrow">SAVE REMINDER</span>
+    <strong id="saveReminderTitle">Itâ€™s been 30 minutes since your last save</strong>
+    <span id="saveReminderCopy">You have unsaved changes. Save now to protect your progress.</span>
+  </div>
+  <div class="save-reminder-actions">
+    <button class="primary-btn" id="saveReminderSaveBtn" type="button">Save Project</button>
+    <button class="ghost-btn" id="saveReminderDismissBtn" type="button">Remind Me in 30 Minutes</button>
+  </div>
+</div>
 <div class="wallet-save-gate" id="walletSaveGate">
 <div><strong id="walletSaveGateTitle">Sign in with a wallet to save this project</strong><span id="walletSaveGateCopy">Relic Forge ties cloud projects to your EVM wallet. Connect and sign a one-time message before closing this tab if you want this project available on other devices.</span></div>
 <button class="primary-btn" id="walletSaveGateBtn" type="button">Connect Wallet to Save</button>
@@ -841,10 +853,10 @@
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
-  <script src="./cloud.js?v=rc4.7a" defer></script>
+  <script src="./cloud.js?v=save-reliability5" defer></script>
   <script src="./app.js?v=stability1-encoding2" defer></script>
   <script src="./forge.js?v=stability1-encoding2" defer></script>
-  <script src="./project-storage.js?v=stability1-encoding2" defer></script>
+  <script src="./project-storage.js?v=save-reliability5" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>
   <script src="./rc47b-bootstrap.js?v=rc4.7c" defer></script>
   <script src="./rc47b-studio.js?v=rc4.7b" defer></script>

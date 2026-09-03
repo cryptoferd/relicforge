@@ -1,0 +1,70 @@
+.save-reminder {
+  width: min(1460px, calc(100% - 48px));
+  margin: 12px auto 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(210, 181, 100, 0.44);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(35, 31, 22, 0.96), rgba(18, 18, 18, 0.98));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.save-reminder.hidden {
+  display: none !important;
+}
+
+.save-reminder-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.save-reminder-eyebrow {
+  color: #d6bd78;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.save-reminder-copy strong {
+  color: #f2f0eb;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.save-reminder-copy > span:last-child {
+  color: #b8b5ae;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.save-reminder-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-reminder-actions button {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .save-reminder {
+    width: min(100% - 24px, 1460px);
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .save-reminder-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .save-reminder-actions button {
+    flex: 1 1 180px;
+  }
+}
