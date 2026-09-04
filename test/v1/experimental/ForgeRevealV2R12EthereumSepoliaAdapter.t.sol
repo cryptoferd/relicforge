@@ -64,6 +64,7 @@ contract ForgeRevealV2R12EthereumSepoliaAdapterTest is TestBase {
             RelicForgeBatchQueueV2Harness collection
         )
     {
+        vm.chainId(SEPOLIA_CHAIN_ID);
         vm.deal(address(this), address(this).balance + 10 ether);
         wrapper = new RelicChainlinkVRFV25WrapperMockV2(0.0001 ether, 1 gwei);
         registry = new R12CanonicalRegistryMock();
@@ -164,6 +165,7 @@ contract ForgeRevealV2R12EthereumSepoliaAdapterTest is TestBase {
     }
 
     function testR12DownstreamRejectionCannotEraseOrRerollWord() public {
+        vm.chainId(SEPOLIA_CHAIN_ID);
         RelicChainlinkVRFV25WrapperMockV2 wrapper = new RelicChainlinkVRFV25WrapperMockV2(0.0001 ether, 1 gwei);
         R12CanonicalRegistryMock registry = new R12CanonicalRegistryMock();
         RelicChainlinkVRFV25DirectAdapterV2 adapter =

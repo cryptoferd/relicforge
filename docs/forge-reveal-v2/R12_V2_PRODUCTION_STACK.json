@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "phase": "R12_V2_ETHEREUM_PRODUCTION_STACK",
+  "asOf": "2026-09-03",
+  "baselineCommit": "9e8d1193ccbf0c14f4c6b870f25ce7f49271cb28",
+  "productionEnabled": false,
+  "activationAllowed": false,
+  "target": {
+    "sepoliaChainId": 11155111,
+    "mainnetChainId": 1
+  },
+  "contracts": [
+    "RelicForgeV2Core",
+    "RFRevealPermutationV2",
+    "RelicForgeCanonicalRegistryV2",
+    "RelicForgeReserveV2",
+    "RelicMintPhasesV2",
+    "RelicCollectionV2",
+    "RelicForgeFactoryV2",
+    "RelicChainlinkVRFV25DirectAdapterV2"
+  ],
+  "lockedBehavior": {
+    "factoryUsesMinimalProxyCollectionClones": true,
+    "factoryUsesMinimalProxyProjectDataClones": true,
+    "collectorMintCallsRandomnessProvider": false,
+    "maxForgeBatchNfts": 20,
+    "upstreamCallbackStorageOnly": true,
+    "permissionlessExactWordReplay": true,
+    "permissionlessOrderedSettlement": true,
+    "delayedRevealUsesO1State": true,
+    "delayedRevealPerTokenWrites": false,
+    "unsoldAfterDelayedRevealAutoSwitchesToForge": true,
+    "delayedAndForgeRecipesShareOneNonDuplicatingDomain": true,
+    "hopperPaysFirst": true,
+    "reserveExactShortfallOnly": true,
+    "creatorForgeProceedsEscrowUntilSettlement": true,
+    "providerTargetChainFailClosed": true,
+    "factoryUsesMinimalProxyMintPhaseClones": true,
+    "collectionMintEntrypointRetained": true
+  },
+  "knownMainnetGate": "replace_or_certify_scale_safe_reserve_revenue_sync_before_activation",
+  "nextGate": "R12-v2 local full regression plus live read-only Sepolia fork",
+  "eip170R1Finding": {
+    "relicCollectionV2DeployedBytes": 26755,
+    "limitBytes": 24576,
+    "excessBytes": 2179,
+    "resolution": "move phase/allowlist/wallet-limit bookkeeping into per-collection EIP-1167 RelicMintPhasesV2 clone"
+  },
+  "r2CompileFinding": {
+    "scope": "test_only",
+    "cause": "duplicate declarations in hybrid fixture and missing declarations in freeze fixture",
+    "productionContractBehaviorChangedInR3": false
+  },
+  "r3CompileFinding": {
+    "scope": "production compiler shape",
+    "error": "Variable var_collection is 1 too deep in the stack",
+    "resolution": "compact Factory LaunchConfig plus shared RelicCollectionInitV2 tuple",
+    "publicFactoryLaunchAbiChanged": false,
+    "featureRemoved": false
+  },
+  "r4CompileFinding": {
+    "scope": "new V2 public ABI decoder",
+    "error": "Variable _5 is 1 too deep in the stack",
+    "resolution": "createCollectionV2 now accepts one LaunchConfig calldata tuple",
+    "legacyCreateCollectionEntrypointPreserved": true,
+    "legacyCreateCollectionWithFeeModeEntrypointPreserved": true,
+    "featureRemoved": false
+  },
+  "r5FocusedTestFinding": {
+    "scope": "production EIP-1167 clone initialization",
+    "error": "RFV2_BatchNotLockedProd in delayed-reveal-to-Forge sellout flow",
+    "rootCause": "inline non-zero storage initializers do not initialize minimal-proxy clone storage",
+    "fix": "explicitly initialize queue sentinels in RelicCollectionV2.initialize",
+    "sentinels": {
+      "nextReservationId": 1,
+      "openBatchId": 1,
+      "nextSettleBatchId": 1
+    },
+    "featureRemoved": false
+  },
+  "r5MeasuredEip170": {
+    "RelicCollectionV2DeployedBytes": 24002,
+    "LimitBytes": 24576,
+    "HeadroomBytes": 574,
+    "status": "passed_but_headroom_should_be_rechecked_after_R6_clone_fix"
+  },
+  "r6CompileFinding": {
+    "scope": "test_only",
+    "error": "ForgeBatch public getter returns 12 components but test destructured 10",
+    "fix": "select component 10 locked and component 12 settled",
+    "productionContractBehaviorChangedInR7": false
+  }
+}

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "../experimental/RelicThinRandomnessAdapterBaseV2.sol";
+import "./RelicForgeV2Core.sol";
 
 error RFV2_OnlyChainlinkWrapperR12();
+error RFV2_WrongTargetChainR12();
 
 interface IRelicCanonicalCollectionRegistryR12 {
     function isCanonicalCollection(address collection) external view returns (bool);
@@ -35,7 +36,7 @@ interface IRelicChainlinkVRFV25WrapperR12 {
 /// @dev R12 ETHEREUM SEPOLIA CANDIDATE. NOT MAINNET-ACTIVATED.
 ///      Chainlink's rawFulfillRandomWords callback is STORAGE ONLY.
 ///      Delivery is a later permissionless replayFulfillment() transaction.
-contract RelicChainlinkVRFV25DirectAdapterV2 is RelicThinRandomnessAdapterBaseV2 {
+contract RelicChainlinkVRFV25DirectAdapterV2 is RelicThinRandomnessAdapterBaseV2Prod {
     bytes4 internal constant EXTRA_ARGS_V1_TAG = bytes4(keccak256("VRF ExtraArgsV1"));
     uint32 public constant NUM_WORDS = 1;
 
@@ -83,24 +84,18 @@ contract RelicChainlinkVRFV25DirectAdapterV2 is RelicThinRandomnessAdapterBaseV2
     }
 
     function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) external view returns (uint256) {
+        _requireTargetChain();
         return chainlinkWrapper.estimateRequestPriceNative(UPSTREAM_CALLBACK_GAS, NUM_WORDS, requestGasPriceWei);
     }
 
     /// @notice Chainlink VRF v2.5 wrapper callback entrypoint.
-    /// @dev STORAGE ONLY. Do not replace this with _recordVerifiedWord().
+    /// @dev STORAGE ONLY. It stores the exact verified word and returns.
     function rawFulfillRandomWords(uint256 upstreamRequestId, uint256[] calldata randomWords) external {
+        _requireTargetChain();
         if (msg.sender != address(chainlinkWrapper)) revert RFV2_OnlyChainlinkWrapperR12();
         if (randomWords.length != NUM_WORDS) revert RF_BadRequest();
 
-        uint256 localRequestId = upstreamRequestIdToLocalRequestId[upstreamRequestId];
-        if (localRequestId == 0) revert RF_BadRequest();
-
-        Delivery storage d = deliveries[localRequestId];
-        if (d.wordReady) revert RF_AlreadyFulfilled();
-
-        d.wordReady = true;
-        d.word = randomWords[0];
-        emit ThinRandomWordRecorded(localRequestId, upstreamRequestId, randomWords[0]);
+        _storeVerifiedWordOnly(upstreamRequestId, randomWords[0]);
     }
 
     function upstreamRequestIdForLocalRequest(uint256 localRequestId) external view returns (uint256) {
@@ -119,11 +114,17 @@ contract RelicChainlinkVRFV25DirectAdapterV2 is RelicThinRandomnessAdapterBaseV2
         return deliveries[localRequestId].delivered;
     }
 
+    function _requireTargetChain() internal view {
+        if (block.chainid != targetChainId) revert RFV2_WrongTargetChainR12();
+    }
+
     function _requireAuthorizedConsumer(address consumer) internal view override {
+        _requireTargetChain();
         if (!canonicalCollectionRegistry.isCanonicalCollection(consumer)) revert RF_NotAuthorized();
     }
 
     function _quoteUpstreamRequest(uint32 upstreamCallbackGas) internal view override returns (uint256) {
+        _requireTargetChain();
         return chainlinkWrapper.calculateRequestPriceNative(upstreamCallbackGas, NUM_WORDS);
     }
 
@@ -132,6 +133,7 @@ contract RelicChainlinkVRFV25DirectAdapterV2 is RelicThinRandomnessAdapterBaseV2
         override
         returns (uint256 upstreamRequestId)
     {
+        _requireTargetChain();
         upstreamRequestId = chainlinkWrapper.requestRandomWordsInNative{value: requestPrice}(
             upstreamCallbackGas, requestConfirmations, NUM_WORDS, nativePaymentExtraArgs()
         );
