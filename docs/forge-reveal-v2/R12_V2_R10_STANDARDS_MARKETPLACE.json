@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "phase": "R12_V2_R10_STANDARDS_MARKETPLACE_COMPATIBILITY",
+  "asOf": "2026-09-03",
+  "productionEnabled": false,
+  "activationAllowed": false,
+  "scope": "RelicCollectionV2 + RelicMintPhasesV2",
+  "r9Findings": {
+    "onchainCheckerTokenDirect": "PASS_5_OF_5_FULLY_ONCHAIN",
+    "onchainCheckerCollectionScan": "FAIL_ERC4906_DECODE",
+    "etherscanSupplyRecognition": "FAIL_TOTALSUPPLY_MISSING"
+  },
+  "changes": {
+    "erc4906CanonicalEvents": true,
+    "erc4906CanonicalArgumentNames": true,
+    "totalSupplyConvention": true,
+    "erc173Ownership": true,
+    "mintPhasesControllerTransferSync": true,
+    "erc721GetApprovedInvalidTokenReverts": true,
+    "fullERC721EnumerableClaimed": false
+  },
+  "interfaces": {
+    "ERC165": "0x01ffc9a7",
+    "ERC721": "0x80ac58cd",
+    "ERC721Metadata": "0x5b5e139f",
+    "ERC2981": "0x2a55205a",
+    "ERC4906": "0x49064906",
+    "ERC173": "0x7f5828d0",
+    "ERC721Enumerable": "NOT_CLAIMED"
+  },
+  "certificationGates": {
+    "build": true,
+    "eip170CollectionLimit": 24576,
+    "standardsAbiAudit": true,
+    "runtimeInterfaceTests": true,
+    "erc4906LogTopicsAndDataTests": true,
+    "ownershipControllerSyncTest": true,
+    "getApprovedInvalidTokenTest": true,
+    "r7ProductionRegression": true,
+    "r8ShardingRegression": true,
+    "fullRepositoryRegression": true,
+    "freshSepoliaMarketplaceCanaryRequiredAfterCommit": true
+  },
+  "freshCanaryAcceptance": {
+    "etherscanTotalSupplyNonZero": true,
+    "etherscanERC721Recognized": true,
+    "etherscanERC2981Recognized": true,
+    "onchainCheckerCollectionScan": "PASS",
+    "onchainCheckerDirectToken": "5_OF_5_FULLY_ONCHAIN",
+    "etherscanProxyAbiVisible": true
+  },
+  "mainnetGate": "CLOSED"
+}

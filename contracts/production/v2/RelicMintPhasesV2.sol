@@ -55,6 +55,7 @@ contract RelicMintPhasesV2 {
     event PhaseCreated(uint32 indexed phaseId, uint8 accessType, uint96 price, uint16 priority);
     event PhaseUpdated(uint32 indexed phaseId);
     event PhaseEnabled(uint32 indexed phaseId, bool enabled);
+    event ControllerTransferred(address indexed oldController, address indexed newController);
     event ControllerRenounced(address indexed oldController);
 
     modifier onlyController() {
@@ -248,6 +249,13 @@ contract RelicMintPhasesV2 {
 
         creatorPrice = uint256(phase.price) * quantity;
         (platformFeeWei, oracleHealthy, feeActive) = platformMintFeeQuote(quantity);
+    }
+
+    function transferController(address newController) external onlyCollection {
+        if (newController == address(0)) revert RF_ZeroAddress();
+        address old = controller;
+        controller = newController;
+        emit ControllerTransferred(old, newController);
     }
 
     function renounceController() external onlyCollection {

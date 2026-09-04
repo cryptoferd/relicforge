@@ -63,9 +63,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-    event MetadataUpdate(uint256 indexed tokenId);
-    event BatchMetadataUpdate(uint256 indexed fromTokenId, uint256 indexed toTokenId);
+    event MetadataUpdate(uint256 _tokenId);
+    event BatchMetadataUpdate(uint256 _fromTokenId, uint256 _toTokenId);
     event ContractURIUpdated();
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     event FutureRevealModeSet(uint8 mode);
     event DelayedRevealRequested(uint256 indexed requestId, uint32 revealedSupply, uint256 randomnessCost);
@@ -165,7 +166,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
 
     mapping(uint256 => address) private _ownerOf;
     mapping(address => uint256) private _balanceOf;
-    mapping(uint256 => address) public getApproved;
+    mapping(uint256 => address) private _getApproved;
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     mapping(uint256 => uint256) public assignedRecipePlusOne;
@@ -237,6 +238,7 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
         description = init_.description;
         creator = init_.creator;
         controller = init_.creator;
+        emit OwnershipTransferred(address(0), init_.creator);
         dataContract = init_.dataContract;
         renderer = init_.renderer;
         randomnessProvider = init_.randomnessProvider;
@@ -270,7 +272,13 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
         return interfaceId == 0x01ffc9a7 || interfaceId == 0x80ac58cd || interfaceId == 0x5b5e139f
-            || interfaceId == 0x2a55205a || interfaceId == 0x49064906;
+            || interfaceId == 0x2a55205a || interfaceId == 0x49064906 || interfaceId == 0x7f5828d0;
+    }
+
+    /// @notice Conventional minted-supply getter used by explorers and NFT indexers.
+    /// @dev This does not claim the full ERC-721 Enumerable extension.
+    function totalSupply() external view returns (uint256) {
+        return totalMinted;
     }
 
     function balanceOf(address holder) external view returns (uint256) {
@@ -283,10 +291,16 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
         if (holder == address(0)) revert RF_NotMinted();
     }
 
+    /// @dev ERC-721 requires getApproved() to revert for an invalid token ID.
+    function getApproved(uint256 tokenId) external view returns (address) {
+        ownerOf(tokenId);
+        return _getApproved[tokenId];
+    }
+
     function approve(address to, uint256 tokenId) external {
         address holder = ownerOf(tokenId);
         if (msg.sender != holder && !isApprovedForAll[holder][msg.sender]) revert RF_NotAuthorized();
-        getApproved[tokenId] = to;
+        _getApproved[tokenId] = to;
         emit Approval(holder, to, tokenId);
     }
 
@@ -299,11 +313,11 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
         if (to == address(0)) revert RF_ZeroAddress();
         address holder = ownerOf(tokenId);
         if (holder != from) revert RF_WrongFrom();
-        if (msg.sender != holder && msg.sender != getApproved[tokenId] && !isApprovedForAll[holder][msg.sender]) {
+        if (msg.sender != holder && msg.sender != _getApproved[tokenId] && !isApprovedForAll[holder][msg.sender]) {
             revert RF_NotAuthorized();
         }
 
-        delete getApproved[tokenId];
+        delete _getApproved[tokenId];
         unchecked {
             --_balanceOf[from];
             ++_balanceOf[to];
@@ -364,7 +378,30 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
         if (totalMinted != 0) emit BatchMetadataUpdate(1, totalMinted);
     }
 
+    /// @notice ERC-173 current contract owner. Relic Forge maps ownership to the active controller.
+    function owner() external view returns (address) {
+        return controller;
+    }
+
+    /// @notice ERC-173 ownership transfer while preserving immutable creator provenance.
+    /// @dev The bound MintPhases controller is transferred atomically with collection control.
+    function transferOwnership(address newOwner) external onlyController {
+        if (newOwner == address(0)) {
+            _renounceControl();
+            return;
+        }
+
+        address oldOwner = controller;
+        RelicMintPhasesV2(mintPhases).transferController(newOwner);
+        controller = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+
     function renounceControl() external onlyController {
+        _renounceControl();
+    }
+
+    function _renounceControl() internal {
         if (!IRelicProjectDataV1(dataContract).contentSealed()) revert RF_RenounceUnsafe();
         if (delayedRevealRequested && !delayedRevealed) revert RF_RenounceUnsafe();
         if (futureRevealMode == REVEAL_DEFERRED && totalMinted != 0 && !delayedRevealed) revert RF_RenounceUnsafe();
@@ -373,9 +410,11 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
                 && futureRevealMode != REVEAL_FORGE
         ) revert RF_RenounceUnsafe();
 
+        address oldOwner = controller;
         RelicMintPhasesV2(mintPhases).renounceController();
         controller = address(0);
-        emit ControllerRenounced(creator);
+        emit ControllerRenounced(oldOwner);
+        emit OwnershipTransferred(oldOwner, address(0));
     }
 
     // -------------------------------------------------------------------------
