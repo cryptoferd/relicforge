@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "phase": "R12_ETHEREUM_SEPOLIA",
+  "asOf": "2026-09-03",
+  "status": "candidate_pending_local_and_live_fork_validation",
+  "productionEnabled": false,
+  "target": {
+    "network": "Ethereum Sepolia",
+    "chainId": 11155111,
+    "paymentMode": "native Sepolia ETH",
+    "vrfVersion": "Chainlink VRF v2.5 direct funding",
+    "requestConfirmations": 3,
+    "numWords": 1,
+    "upstreamCallbackGas": 300000
+  },
+  "officialChainlinkSnapshot": {
+    "source": "https://docs.chain.link/vrf/v2-5/supported-networks",
+    "linkToken": "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+    "vrfCoordinator": "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
+    "vrfWrapper": "0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1",
+    "keyHash500Gwei": "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae",
+    "nativePremiumPercent": 24,
+    "minimumConfirmations": 3,
+    "maximumConfirmations": 200,
+    "directFundingMaxRandomValues": 10,
+    "wrapperGasOverhead": 13400,
+    "coordinatorGasOverheadNative": 90000,
+    "coordinatorGasOverheadPerWord": 435
+  },
+  "lockedArchitecture": {
+    "collectorMintCallsProvider": false,
+    "randomnessRequestedByLaterPermissionlessExecutor": true,
+    "hopperPaysFirst": true,
+    "reserveCoversExactShortfall": true,
+    "upstreamCallbackStorageOnly": true,
+    "exactWordStoredBeforeDownstreamWork": true,
+    "permissionlessExactWordReplay": true,
+    "orderedSettlementSeparateTransaction": true,
+    "automaticRerequest": false,
+    "automaticRefund": false,
+    "replacementRandomness": false
+  },
+  "activationAllowed": false,
+  "nextGate": "local_forge_validation_and_live_read_only_sepolia_fork"
+}
