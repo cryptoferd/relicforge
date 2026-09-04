@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "phase": "R12_V2_R8_COMPATIBILITY_VERIFICATION",
+  "asOf": "2026-09-03",
+  "baselineCommit": "31ab844423dc1a9d1d58c8cd0402d166e1679ded",
+  "productionEnabled": false,
+  "activationAllowed": false,
+  "productionContractChanges": false,
+  "mainBranchCompatibility": {
+    "usesRelicProjectDataV1": true,
+    "usesRelicRendererV1": true,
+    "multipleArtShardsTested": true,
+    "multipleDnaShardsTested": true,
+    "recipeShardBoundaryTested": true,
+    "contentSealAndProvenanceTested": true,
+    "placeholderShardTested": true,
+    "deferredRevealRenderTested": true,
+    "postRevealForgeRenderTested": true,
+    "globalRecipeUniquenessTested": true
+  },
+  "etherscanVerification": {
+    "automaticWorkerProvided": true,
+    "apiVersion": "Etherscan V2",
+    "proxyType": "EIP-1167 minimal proxy",
+    "expectedImplementationEnforced": true,
+    "collectionProxyCovered": true,
+    "projectDataProxyCovered": true,
+    "mintPhasesProxyCovered": true,
+    "proxyAbiVisibilityRequired": true,
+    "apiKeyReadFromEnvironmentOnly": true,
+    "launchBlocking": false,
+    "liveSubmissionInR8": false
+  },
+  "nextGate": "real Ethereum Sepolia deployment + implementation source verification + live proxy verification + real mint/reveal canary",
+  "r1InstallerFinding": {
+    "scope": "installer_parser_only",
+    "cause": "PowerShell interpreted $mainRef: as an invalid scoped variable reference",
+    "fix": "use ${mainRef}: in the status string",
+    "repositoryMutationBeforeFailure": false,
+    "payloadBehaviorChangedInR2": false
+  },
+  "r2AbiVisibilityFinding": {
+    "scope": "offline_verifier_only",
+    "cause": "current Foundry pretty-prints forge inspect ABI output by default",
+    "fix": "use forge inspect --json --quiet and normalize direct-array/object ABI JSON shapes",
+    "productionContractChanges": false,
+    "shardingCompatibilityAlreadyPassedBeforeFailure": true
+  },
+  "r3AbiVisibilityFinding": {
+    "scope": "offline_verifier_toolchain_compatibility",
+    "cause": "installed Foundry rejects simultaneous --json and --quiet for forge inspect",
+    "fix": "use forge inspect --json <contract> abi and keep stderr separately piped",
+    "productionContractChanges": false,
+    "shardingCompatibilityStillPassedBeforeFailure": true,
+    "r7ProductionStackStillPassedBeforeFailure": true
+  }
+}
