@@ -8,8 +8,12 @@ import "./RelicForgeV2Core.sol";
 /// @dev The reserve can fund only the exact shortfall reported by the calling canonical collection.
 ///      There is no bridge, swap, arbitrary recipient, or provider-selection surface.
 contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
+    uint256 public constant MAX_SYNC_COLLECTIONS_PER_CALL = 64;
+
     address public founder;
     address payable public revenueTreasury;
+    address payable public pendingRevenueTreasury;
+    address public pendingFounder;
 
     address public bootstrapAuthority;
     address public factory;
@@ -25,6 +29,9 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
     uint256 public totalActiveBatches;
     uint256 public activeCollectionCount;
     uint256 public totalRevenueReleased;
+
+    // R11: blocks accounting/balance mutations while revenue ETH is in an external call.
+    bool private _revenueReleaseActive;
 
     mapping(address => bool) public canonicalCollection;
     mapping(address => uint256) public collectionExposureWei;
@@ -50,11 +57,18 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         uint256 maxSubsidyPerRequestWei,
         uint256 maxSubsidyPerCollectionWei
     );
+    event RevenueTreasuryTransferStarted(address indexed currentTreasury, address indexed pendingTreasury);
     event RevenueTreasuryUpdated(address indexed treasury);
+    event FounderTransferStarted(address indexed currentFounder, address indexed pendingFounder);
     event FounderTransferred(address indexed oldFounder, address indexed newFounder);
 
     modifier onlyFounder() {
         if (msg.sender != founder) revert RF_NotAuthorized();
+        _;
+    }
+
+    modifier reserveUnlocked() {
+        if (_revenueReleaseActive) revert RF_Reentrant();
         _;
     }
 
@@ -95,7 +109,7 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         emit FactoryBound(factory_);
     }
 
-    function registerCollection(address collection) external {
+    function registerCollection(address collection) external reserveUnlocked {
         if (msg.sender != factory || factory == address(0)) revert RF_NotAuthorized();
         if (collection == address(0) || collection.code.length == 0) revert RF_BadConfig();
         if (canonicalCollection[collection]) revert RFV2_CollectionAlreadyRegisteredProd();
@@ -110,16 +124,31 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         return collections.length;
     }
 
-    function syncCollection(address collection) public {
+    function syncCollection(address collection) public reserveUnlocked {
         if (!canonicalCollection[collection]) revert RFV2_CollectionNotRegisteredProd();
         _syncCollection(collection);
     }
 
-    function syncAllCollections() public {
+    function syncCollections(uint256 cursor, uint256 maxCollections)
+        external
+        reserveUnlocked
+        returns (uint256 nextCursor)
+    {
+        if (maxCollections == 0 || maxCollections > MAX_SYNC_COLLECTIONS_PER_CALL) {
+            revert RF_BadConfig();
+        }
+
         uint256 count = collections.length;
-        for (uint256 i; i < count; ++i) {
+        if (cursor >= count) return count;
+
+        uint256 end = cursor + maxCollections;
+        if (end > count) end = count;
+
+        for (uint256 i = cursor; i < end; ++i) {
             _syncCollection(collections[i]);
         }
+
+        return end;
     }
 
     function _syncCollection(address collection) internal {
@@ -173,14 +202,14 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         emit CollectionDeposit(msg.sender, msg.value);
     }
 
-    function pullCollectionExcess(address collection) external returns (uint256 amount) {
+    function pullCollectionExcess(address collection) external reserveUnlocked returns (uint256 amount) {
         if (!canonicalCollection[collection]) revert RFV2_CollectionNotRegisteredProd();
         amount = IRelicForgeReserveCollectionV2Prod(collection).sweepExcessToReserve();
         _syncCollection(collection);
         emit CollectionExcessPulled(collection, amount, msg.sender);
     }
 
-    function fundRandomnessShortfall(uint64 batchId, uint256 amount) external {
+    function fundRandomnessShortfall(uint64 batchId, uint256 amount) external reserveUnlocked {
         if (!canonicalCollection[msg.sender]) revert RFV2_CollectionNotRegisteredProd();
 
         uint256 expected = IRelicForgeReserveCollectionV2Prod(msg.sender).randomnessShortfallFor(batchId);
@@ -198,19 +227,23 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         emit RandomnessShortfallFunded(msg.sender, batchId, amount);
     }
 
-    /// @notice Founder-only revenue release. Every registered collection is re-synced before the boundary is computed.
-    /// @dev This is deliberately conservative and O(N) for R12 Sepolia. Mainnet activation remains gated on replacing
-    ///      this global scan with a scale-safe accounting mechanism if collection count makes the scan impractical.
-    function releaseRevenue() external onlyFounder returns (uint256 amount) {
-        syncAllCollections();
+    /// @notice Founder-only O(1) revenue release using conservatively push-synchronized aggregate accounting.
+    /// @dev R11 requires every liability-increasing Collection transition to synchronize atomically. Liability-decreasing
+    ///      transitions may remain stale only in the conservative direction until a later or permissionless sync.
+    function releaseRevenue() external onlyFounder reserveUnlocked returns (uint256 amount) {
         amount = availableRevenueWei();
         if (amount == 0) revert RFV2_NoRevenueAvailableProd();
 
+        uint256 requiredAfter = requiredReserveWei();
+        address payable treasury = revenueTreasury;
+
         totalRevenueReleased += amount;
-        (bool ok,) = revenueTreasury.call{value: amount}("");
+        _revenueReleaseActive = true;
+        (bool ok,) = treasury.call{value: amount}("");
+        _revenueReleaseActive = false;
         if (!ok) revert RF_WithdrawFailed();
 
-        emit RevenueReleased(revenueTreasury, amount, requiredReserveWei());
+        emit RevenueReleased(treasury, amount, requiredAfter);
     }
 
     function setReservePolicy(
@@ -219,7 +252,7 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         uint32 exposureSafetyBps_,
         uint256 maxSubsidyPerRequestWei_,
         uint256 maxSubsidyPerCollectionWei_
-    ) external onlyFounder {
+    ) external onlyFounder reserveUnlocked {
         if (exposureSafetyBps_ < 10_000 || exposureSafetyBps_ > 50_000) {
             revert RF_BadConfig();
         }
@@ -240,17 +273,40 @@ contract RelicForgeReserveV2 is IRelicForgeReserveV2Prod {
         );
     }
 
-    function setRevenueTreasury(address payable treasury_) external onlyFounder {
-        if (treasury_ == address(0)) revert RF_ZeroAddress();
-        revenueTreasury = treasury_;
-        emit RevenueTreasuryUpdated(treasury_);
+    function proposeRevenueTreasury(address payable treasury_) external onlyFounder reserveUnlocked {
+        if (treasury_ == address(0) || treasury_ == revenueTreasury) revert RF_BadConfig();
+        pendingRevenueTreasury = treasury_;
+        emit RevenueTreasuryTransferStarted(revenueTreasury, treasury_);
     }
 
-    function transferFounder(address newFounder) external onlyFounder {
-        if (newFounder == address(0)) revert RF_ZeroAddress();
+    function acceptRevenueTreasury() external reserveUnlocked {
+        address payable pending = pendingRevenueTreasury;
+        if (pending == address(0) || msg.sender != pending) revert RF_NotAuthorized();
+
+        revenueTreasury = pending;
+        pendingRevenueTreasury = payable(address(0));
+        emit RevenueTreasuryUpdated(pending);
+    }
+
+    function proposeFounder(address newFounder) external onlyFounder reserveUnlocked {
+        if (newFounder == address(0) || newFounder == founder) revert RF_BadConfig();
+        pendingFounder = newFounder;
+        emit FounderTransferStarted(founder, newFounder);
+    }
+
+    function acceptFounder() external reserveUnlocked {
+        address pending = pendingFounder;
+        if (pending == address(0) || msg.sender != pending) revert RF_NotAuthorized();
+
         address old = founder;
-        founder = newFounder;
-        emit FounderTransferred(old, newFounder);
+        founder = pending;
+        pendingFounder = address(0);
+
+        // Do not allow a treasury redirect proposed by the old founder to survive
+        // the ownership handoff. The new founder must explicitly propose it again.
+        pendingRevenueTreasury = payable(address(0));
+
+        emit FounderTransferred(old, pending);
     }
 
     receive() external payable {}

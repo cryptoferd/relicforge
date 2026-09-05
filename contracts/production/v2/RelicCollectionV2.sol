@@ -271,8 +271,15 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
     // -------------------------------------------------------------------------
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0x01ffc9a7 || interfaceId == 0x80ac58cd || interfaceId == 0x5b5e139f
-            || interfaceId == 0x2a55205a || interfaceId == 0x49064906 || interfaceId == 0x7f5828d0;
+        // Exact membership test for the seven supported 4-byte interface IDs.
+        // Every XOR factor is < 2^32 and there are seven factors, so the
+        // product is < 2^224 and cannot overflow uint256. The product is zero
+        // iff interfaceId equals one of the supported IDs.
+        uint256 x = uint32(interfaceId);
+        unchecked {
+            return (x ^ 0x01ffc9a7) * (x ^ 0x80ac58cd) * (x ^ 0x5b5e139f) * (x ^ 0x2a55205a) * (x ^ 0x49064906)
+                    * (x ^ 0x7f5828d0) * (x ^ 0xe8a3d485) == 0;
+        }
     }
 
     /// @notice Conventional minted-supply getter used by explorers and NFT indexers.
@@ -492,6 +499,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
 
         totalCommitted += quantity;
         totalMinted += quantity;
+
+        // R11: a successful deferred mint can increase Reserve exposure.
+        // Push the new liability atomically; failure reverts the mint.
+        IRelicForgeReserveV2Prod(forgeReserve).syncCollection(address(this));
     }
 
     // -------------------------------------------------------------------------
@@ -585,6 +596,10 @@ contract RelicCollectionV2 is IRelicRandomnessConsumerV1, IRelicForgeReserveColl
             ForgeBatch storage finalOpen = batches[openBatchId];
             if (finalOpen.totalQuantity != 0 && !finalOpen.locked) _lockOpenBatch(false);
         }
+
+        // R11: new Forge reservations can increase global exposure/active-batch liability.
+        // This synchronization is required, not best-effort.
+        IRelicForgeReserveV2Prod(forgeReserve).syncCollection(address(this));
     }
 
     function lockTimedOutBatch() external returns (uint64 batchId) {

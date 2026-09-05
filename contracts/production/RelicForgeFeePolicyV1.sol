@@ -23,6 +23,8 @@ contract RelicForgeFeePolicyV1 {
 
     address public platformAdmin;
     address public treasury;
+    address public pendingTreasury;
+    address public pendingPlatformAdmin;
 
     uint32 public sponsoredFeeCents = 25;
     uint32 public minterFeeCents = 50;
@@ -38,7 +40,9 @@ contract RelicForgeFeePolicyV1 {
     event CollectionFeesEnabledSet(address indexed collection, bool enabled);
     event CollectionFeeCentsSet(address indexed collection, uint32 feeCents);
     event DefaultFeeCentsSet(uint32 sponsoredFeeCents, uint32 minterFeeCents);
+    event TreasuryTransferStarted(address indexed currentTreasury, address indexed pendingTreasury);
     event TreasurySet(address indexed treasury);
+    event PlatformAdminTransferStarted(address indexed currentAdmin, address indexed pendingAdmin);
     event PlatformAdminTransferred(address indexed oldAdmin, address indexed newAdmin);
     event CollectionFeeWaived(address indexed collection);
     event SponsoredFeeReceived(
@@ -92,12 +96,8 @@ contract RelicForgeFeePolicyV1 {
         return !_collectionFeeDisabled[collection] && !collectionFeeWaived[collection];
     }
 
-    function currentCollectionFeeCents(address collection, uint32 lockedFeeCents)
-        public view returns (uint32)
-    {
-        return collectionFeeOverrideSet[collection]
-            ? _collectionFeeCentsOverride[collection]
-            : lockedFeeCents;
+    function currentCollectionFeeCents(address collection, uint32 lockedFeeCents) public view returns (uint32) {
+        return collectionFeeOverrideSet[collection] ? _collectionFeeCentsOverride[collection] : lockedFeeCents;
     }
 
     function setCollectionFeesEnabled(address collection, bool enabled) external onlyPlatformAdmin {
@@ -125,10 +125,7 @@ contract RelicForgeFeePolicyV1 {
 
         collectionFeeOverrideSet[collection] = false;
         delete _collectionFeeCentsOverride[collection];
-        emit CollectionFeeCentsSet(
-            collection,
-            IRelicCollectionFeeViewV1(collection).lockedPlatformFeeCents()
-        );
+        emit CollectionFeeCentsSet(collection, IRelicCollectionFeeViewV1(collection).lockedPlatformFeeCents());
     }
 
     /// @notice Changes defaults for collections created after this transaction only.
@@ -142,16 +139,38 @@ contract RelicForgeFeePolicyV1 {
     }
 
     function setTreasury(address treasury_) external onlyPlatformAdmin {
-        if (treasury_ == address(0)) revert RF_ZeroAddress();
-        treasury = treasury_;
-        emit TreasurySet(treasury_);
+        if (treasury_ == address(0) || treasury_ == treasury) revert RF_ZeroAddress();
+        pendingTreasury = treasury_;
+        emit TreasuryTransferStarted(treasury, treasury_);
+    }
+
+    function acceptTreasury() external {
+        address pending = pendingTreasury;
+        if (pending == address(0) || msg.sender != pending) revert RF_NotAuthorized();
+
+        treasury = pending;
+        pendingTreasury = address(0);
+        emit TreasurySet(pending);
     }
 
     function transferPlatformAdmin(address newAdmin) external onlyPlatformAdmin {
-        if (newAdmin == address(0)) revert RF_ZeroAddress();
+        if (newAdmin == address(0) || newAdmin == platformAdmin) revert RF_ZeroAddress();
+        pendingPlatformAdmin = newAdmin;
+        emit PlatformAdminTransferStarted(platformAdmin, newAdmin);
+    }
+
+    function acceptPlatformAdmin() external {
+        address pending = pendingPlatformAdmin;
+        if (pending == address(0) || msg.sender != pending) revert RF_NotAuthorized();
+
         address oldAdmin = platformAdmin;
-        platformAdmin = newAdmin;
-        emit PlatformAdminTransferred(oldAdmin, newAdmin);
+        platformAdmin = pending;
+        pendingPlatformAdmin = address(0);
+
+        // Old-admin treasury proposals do not survive the admin handoff.
+        pendingTreasury = address(0);
+
+        emit PlatformAdminTransferred(oldAdmin, pending);
     }
 
     /// @notice One-way permanent waiver. There is intentionally no unwaive function.
@@ -170,18 +189,11 @@ contract RelicForgeFeePolicyV1 {
         if (usdCents > uint256(type(uint32).max) * MAX_COLLECTION_FEE_CENTS) return (0, false);
 
         try IRFAggregatorV3V1(priceFeed).latestRoundData() returns (
-            uint80 roundId,
-            int256 answer,
-            uint256,
-            uint256 updatedAt,
-            uint80 answeredInRound
+            uint80 roundId, int256 answer, uint256, uint256 updatedAt, uint80 answeredInRound
         ) {
             if (
-                answer <= 0 ||
-                updatedAt == 0 ||
-                updatedAt > block.timestamp ||
-                answeredInRound < roundId ||
-                block.timestamp - updatedAt > maxOracleAge
+                answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp || answeredInRound < roundId
+                    || block.timestamp - updatedAt > maxOracleAge
             ) {
                 return (0, false);
             }
@@ -204,7 +216,9 @@ contract RelicForgeFeePolicyV1 {
     }
 
     function quoteSponsoredFee(uint32 maxSupply)
-        external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
+        external
+        view
+        returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
     {
         if (sponsoredFeeCents == 0 || maxSupply == 0) return (0, true, false);
         (feeWei, oracleHealthy) = quoteUsdCents(uint256(sponsoredFeeCents) * maxSupply);
@@ -212,7 +226,9 @@ contract RelicForgeFeePolicyV1 {
     }
 
     function quoteMintFee(address collection, uint32 lockedFeeCents, uint32 quantity)
-        external view returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
+        external
+        view
+        returns (uint256 feeWei, bool oracleHealthy, bool feeActive)
     {
         if (!collectionFeesEnabled(collection) || quantity == 0) return (0, true, false);
 
@@ -223,22 +239,16 @@ contract RelicForgeFeePolicyV1 {
         feeActive = true;
     }
 
-    function recordSponsoredFee(
-        address collection,
-        address creator,
-        uint32 maxSupply,
-        uint32 feeCents
-    ) external payable {
+    function recordSponsoredFee(address collection, address creator, uint32 maxSupply, uint32 feeCents)
+        external
+        payable
+    {
         if (collection == address(0) || creator == address(0)) revert RF_ZeroAddress();
 
         IRelicCollectionFeeViewV1 c = IRelicCollectionFeeViewV1(collection);
         if (
-            c.factory() != msg.sender ||
-            c.feePolicy() != address(this) ||
-            c.platformFeeMode() != FEE_MODE_SPONSORED ||
-            c.lockedPlatformFeeCents() != feeCents ||
-            c.maxSupply() != maxSupply ||
-            c.creator() != creator
+            c.factory() != msg.sender || c.feePolicy() != address(this) || c.platformFeeMode() != FEE_MODE_SPONSORED
+                || c.lockedPlatformFeeCents() != feeCents || c.maxSupply() != maxSupply || c.creator() != creator
         ) revert RF_NotAuthorized();
 
         accruedFees += msg.value;
@@ -249,10 +259,9 @@ contract RelicForgeFeePolicyV1 {
         if (msg.sender != collection || collection == address(0)) revert RF_NotAuthorized();
 
         IRelicCollectionFeeViewV1 c = IRelicCollectionFeeViewV1(collection);
-        if (
-            c.feePolicy() != address(this) ||
-            c.platformFeeMode() != FEE_MODE_MINTER_SUPPORTED
-        ) revert RF_NotAuthorized();
+        if (c.feePolicy() != address(this) || c.platformFeeMode() != FEE_MODE_MINTER_SUPPORTED) {
+            revert RF_NotAuthorized();
+        }
 
         accruedFees += msg.value;
         emit MintFeesReceived(collection, msg.value);
@@ -270,5 +279,7 @@ contract RelicForgeFeePolicyV1 {
         emit PlatformFeesWithdrawn(receiver, amount);
     }
 
-    receive() external payable { revert RF_BadRequest(); }
+    receive() external payable {
+        revert RF_BadRequest();
+    }
 }

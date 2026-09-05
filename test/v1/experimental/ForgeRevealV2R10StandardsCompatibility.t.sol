@@ -163,6 +163,7 @@ contract ForgeRevealV2R10StandardsCompatibilityTest is TestBase {
         assertTrue(collection.supportsInterface(0x2a55205a), "ERC2981");
         assertTrue(collection.supportsInterface(0x49064906), "ERC4906");
         assertTrue(collection.supportsInterface(0x7f5828d0), "ERC173");
+        assertTrue(collection.supportsInterface(0xe8a3d485), "ERC7572");
         assertFalse(collection.supportsInterface(0x780e9d63), "must not claim full ERC721Enumerable");
         assertFalse(collection.supportsInterface(0xffffffff), "ERC165 invalid interface");
 
