@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 12,
+  "asOf": "2026-09-02",
+  "defaultPolicy": "fail_closed",
+  "productionEnabled": false,
+  "certificationGates": [
+    "verified_async_randomness",
+    "no_block_local_fallback",
+    "exact_request_identity",
+    "persist_word_before_delivery",
+    "exact_word_replay",
+    "no_reroll_after_word",
+    "known_callback_gas_semantics",
+    "documented_liveness_path",
+    "documented_trust_assumptions",
+    "production_acceptable_audit_status",
+    "chain_addresses_reverified",
+    "canonical_consumers_only",
+    "production_safe_cost_cap_or_reservation",
+    "per_request_actual_cost_attribution_if_shared_liquidity",
+    "independent_user_contribution_policy_when_required",
+    "atomic_provider_funding_or_certified_reconciliation_path",
+    "unknown_pairs_fail_closed"
+  ],
+  "pairs": [
+    {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "provider": "chainlink_vrf_v2_5_direct_native",
+      "status": "phase2d_r1_local_harness_passed",
+      "productionEnabled": false,
+      "coordinator": "0xD7f86b4b8Cae7D942340FF628F82735b7a20893a",
+      "wrapper": "0x02aae1A04f9828517b3007f83f6181900CaD910c",
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "remaining": [
+        "live_testnet_or_fork_request",
+        "address_reverification_at_deployment",
+        "production_adapter_audit",
+        "governed_registry_and_rotation"
+      ],
+      "r5Disposition": "primary_production_advancement_candidate"
+    },
+    {
+      "chain": "Base",
+      "chainId": 8453,
+      "provider": "chainlink_vrf_v2_5_direct_native",
+      "status": "phase2d_r1_local_harness_passed",
+      "productionEnabled": false,
+      "coordinator": "0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634",
+      "wrapper": "0xb0407dbe851f8318bd31404A49e658143C982F23",
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "remaining": [
+        "live_testnet_or_fork_request",
+        "l1_data_fee_benchmark",
+        "address_reverification_at_deployment",
+        "production_adapter_audit",
+        "governed_registry_and_rotation"
+      ],
+      "r5Disposition": "primary_production_advancement_candidate"
+    },
+    {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "provider": "chainlink_vrf_v2_5_subscription_native",
+      "status": "phase2d_r2_local_harness_candidate",
+      "productionEnabled": false,
+      "thinCallbackGas": 300000,
+      "fundingModel": "per_request_conservative_reservation_into_shared_native_subscription",
+      "actualPaymentAvailability": "post_callback_RandomWordsFulfilled_event",
+      "knownGap": "exact_onchain_per_request_actual_cost_attribution_unresolved",
+      "remaining": [
+        "live_testnet_or_fork_request",
+        "production_safe_reservation_derivation",
+        "config_rotation_protection",
+        "exact_actual_cost_reconciliation_or_stronger_isolation",
+        "governance_and_automation_ownership",
+        "production_adapter_audit"
+      ],
+      "r5Disposition": "not_selected_shared_liquidity_actual_cost_attribution_gate"
+    },
+    {
+      "chain": "Base",
+      "chainId": 8453,
+      "provider": "pyth_entropy_v2",
+      "status": "phase2d_r3_local_harness_candidate",
+      "productionEnabled": false,
+      "entropy": "0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb",
+      "defaultProviderSnapshot": "0x52DeaA1c84233F7bb8C8A45baeDE41091c616506",
+      "requestVariant": "requestV2(address,bytes32,uint32)",
+      "requestedCallbackGas": 300000,
+      "maxEffectiveCallbackGasPolicy": 500000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "live_getFeeV2_exact_request_payment",
+      "recoveryModel": "pyth_CALLBACK_FAILED_revealWithCallback_same_commitments_plus_local_exact_word_replay",
+      "contributionModel": "external_independent_contribution_source_required",
+      "auditSnapshot": "Trail_of_Bits_2024_entropy_and_fortuna_scope_listed_by_pyth",
+      "knownGaps": [
+        "production_grade_independent_user_contribution_source",
+        "live_base_fork_or_test_request",
+        "current_default_provider_configuration_reverification",
+        "provider_front_running_and_censorship_operational_policy",
+        "contribution_source_governance_and_liveness",
+        "production_adapter_audit"
+      ],
+      "r5Disposition": "secondary_base_research_candidate_pending_independent_contribution_source"
+    },
+    {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "provider": "pyth_entropy_v2",
+      "status": "not_in_current_official_entropy_deployment_snapshot",
+      "productionEnabled": false,
+      "r5Disposition": "not_selected_not_in_current_entropy_deployment_snapshot"
+    },
+    {
+      "chain": "Ethereum",
+      "chainId": 1,
+      "provider": "supra_dvrf_v3",
+      "status": "phase2d_r4_local_harness_candidate",
+      "productionEnabled": false,
+      "router": "0x23726e27Ec79d421cf58C815D37748AfCaFeC9e4",
+      "deposit": "0xb63b8391e666d21958b8b3459840594A12055D2d",
+      "servicePremiumBps": 3000,
+      "requestedRandomWords": 1,
+      "requestedConfirmations": 3,
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "client_wallet_prepaid_shared_subscription_plus_collection_reservation_escrow_harness",
+      "retryModel": "automatic_failed_callback_retry_every_6h_up_to_48h_documented_for_insufficient_gas",
+      "requestIntegrity": "v3_onchain_request_parameter_hash_validation",
+      "knownGaps": [
+        "documented_depositFundClient_is_client_self_funding_and_cannot_atomically_route_collection_payment_to_another_client_wallet",
+        "exact_onchain_per_request_actual_cost_attribution_to_collection_unresolved",
+        "reservation_reconciliation_or_refund_path_unresolved",
+        "shared_subscription_replenishment_requires_wallet_or_automation_operational_step",
+        "live_fork_or_test_request",
+        "callback_gas_price_and_limit_reverification",
+        "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
+        "production_adapter_audit",
+        "subscription_wallet_governance_and_automation"
+      ],
+      "r5Disposition": "not_selected_shared_subscription_reconciliation_and_audit_gates"
+    },
+    {
+      "chain": "Base",
+      "chainId": 8453,
+      "provider": "supra_dvrf_v3",
+      "status": "phase2d_r4_local_harness_candidate",
+      "productionEnabled": false,
+      "router": "0x73970504Df8290E9A508676a0fbd1B7f4Bcb7f5a",
+      "deposit": "0x52Ad5Ba5c041D6cF952c476c595844c647a692Eb",
+      "servicePremiumBps": 3000,
+      "requestedRandomWords": 1,
+      "requestedConfirmations": 3,
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "client_wallet_prepaid_shared_subscription_plus_collection_reservation_escrow_harness",
+      "retryModel": "automatic_failed_callback_retry_every_6h_up_to_48h_documented_for_insufficient_gas",
+      "requestIntegrity": "v3_onchain_request_parameter_hash_validation",
+      "knownGaps": [
+        "documented_depositFundClient_is_client_self_funding_and_cannot_atomically_route_collection_payment_to_another_client_wallet",
+        "exact_onchain_per_request_actual_cost_attribution_to_collection_unresolved",
+        "reservation_reconciliation_or_refund_path_unresolved",
+        "shared_subscription_replenishment_requires_wallet_or_automation_operational_step",
+        "live_fork_or_test_request",
+        "l1_data_fee_and_callback_cost_benchmark",
+        "callback_gas_price_and_limit_reverification",
+        "official_audit_page_does_not_identify_dvrf_v3_specific_audit",
+        "production_adapter_audit",
+        "subscription_wallet_governance_and_automation"
+      ],
+      "r5Disposition": "not_selected_shared_subscription_reconciliation_and_audit_gates"
+    },
+    {
+      "chain": "Robinhood Chain",
+      "chainId": 4663,
+      "provider": "dice_entropy_v10",
+      "status": "phase2d_r11_collector_contribution_mainnet_read_only_preflight_local_certified",
+      "productionEnabled": false,
+      "oracle": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+      "testnetChainId": 46630,
+      "testnetOracle": "0xE4F1cc334a3d5FFf8b588573921CA9e2FFE22E5c",
+      "providerAddress": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+      "requestVariant": "requestV2(address,bytes32,uint32)",
+      "thinCallbackGas": 300000,
+      "consumerWordDeliveryGas": 150000,
+      "fundingModel": "exact_live_getFeeV2_native_payment_per_request",
+      "documentedFeeSnapshotWei": 25000000000000,
+      "refundDelaySnapshotL1Blocks": 6,
+      "mintPathIsolation": "collector_transaction_never_calls_randomness_provider",
+      "stalledRequestPolicy": "keep_same_dice_sequence_live_no_automatic_refund_no_reroll",
+      "recoveryModel": "R8_storage_only_upstream_word_persistence_then_permissionless_exact_word_replay; zero_default_provider_side_retry_not_assumed",
+      "contributionModel": "collector_team_entropy_frozen_per_batch_r11_local_certified_pending_production_security_review",
+      "knownGaps": [
+        "zero_default_mode_has_no_provider_side_retry_if_storage_only_callback_itself_fails",
+        "mainnet_bytecode_and_verified_source_reverification_at_activation",
+        "collector_contribution_source_r11_local_certified_pending_production_security_review",
+        "single_provider_censorship_and_keeper_liveness_operational_policy",
+        "no_published_independent_third_party_v10_audit_in_reviewed_sources",
+        "production_adapter_audit",
+        "fee_provider_commitment_and_address_rotation_monitoring"
+      ],
+      "r6Disposition": "primary_robinhood_production_advancement_candidate_pending_live_and_audit_gates",
+      "r7Disposition": "live_liveness_certified_zero_default_gas_storage_only_hardening_required",
+      "r8Disposition": "live_storage_only_callback_and_exact_word_replay_certified_zero_default_mode_residual_operational_gate",
+      "r9Disposition": "production_integration_local_certified_pending_mainnet_contribution_audit_operational_gates",
+      "r10Disposition": "factory_interface_freeze_local_certified_production_still_fail_closed_pending_mainnet_contribution_audit_operational_gates",
+      "r11Disposition": "collector_contribution_local_certified_mainnet_read_only_preflight_passed_production_still_fail_closed_pending_live_mainnet_request_audit_operational_gates",
+      "prohibitedFallbacks": [
+        "block.prevrandao",
+        "block.difficulty",
+        "block.timestamp",
+        "blockhash",
+        "sequencer_local_entropy"
+      ]
+    }
+  ],
+  "sourceSnapshots": {
+    "pythCrosschainCommit": "4dd956ede61a7ad6b19317e6001a3b95c308dcf2",
+    "supraDocsReviewed": "2026-09-01",
+    "supraDVRFV3PremiumBps": 3000,
+    "relicForgeBaseline": "890cb7c78e9df91cdfc5f40c3826eea7c9694bea",
+    "chainlinkVRFDocsReviewed": "2026-09-01",
+    "pythEntropyDocsReviewed": "2026-09-01",
+    "robinhoodChainDocsReviewed": "2026-09-01",
+    "diceProtocolRepoCommit": "466b93ae2879e2e36ecb80cd33c0ee3a1ae6a799",
+    "diceProtocolDocsReviewed": "2026-09-01",
+    "r7LiveResultReviewed": "2026-09-02",
+    "r8LiveResultReviewed": "2026-09-02",
+    "r9PackagePrepared": "2026-09-02",
+    "r9LocalValidationReviewed": "2026-09-02",
+    "r10PackagePrepared": "2026-09-02",
+    "r10LocalValidationReviewed": "2026-09-02",
+    "r11PackagePrepared": "2026-09-02",
+    "r11LocalValidationReviewed": "2026-09-02",
+    "r11LocalValidation": {
+      "focusedContribution": { "passed": 10, "failed": 0 },
+      "mainnetReadOnlyFork": { "passed": 5, "failed": 0 },
+      "phase2d": { "passed": 119, "failed": 0 },
+      "experimental": { "passed": 194, "failed": 0 },
+      "fullRegression": { "passed": 318, "failed": 0 },
+      "gitDiffCheckPassed": true,
+      "mainnetTransactionSent": false,
+      "privateKeyUsed": false
+    },
+    "r10LocalValidation": {
+      "focused": { "passed": 10, "failed": 0 },
+      "phase2d": { "passed": 109, "failed": 0 },
+      "experimental": { "passed": 179, "failed": 0 },
+      "fullRegression": { "passed": 303, "failed": 0 }
+    },
+    "r9LocalValidation": {
+      "focused": { "passed": 10, "failed": 0 },
+      "phase2d": { "passed": 99, "failed": 0 },
+      "experimental": { "passed": 169, "failed": 0 },
+      "fullRegression": { "passed": 293, "failed": 0 }
+    }
+  },
+  "r5Decision": {
+    "status": "phase2d_r5_provider_selection_policy_candidate",
+    "productionEnabled": false,
+    "meaning": "advancement_priority_only_not_production_activation",
+    "globalRules": [
+      "no_automatic_cross_provider_fallback_after_request_creation",
+      "no_block_local_randomness_fallback",
+      "exact_stored_word_replay_only",
+      "unknown_chain_provider_pairs_fail_closed"
+    ],
+    "chains": [
+      {
+        "chain": "Ethereum",
+        "chainId": 1,
+        "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+        "secondaryResearchCandidate": null,
+        "productionEnabled": false
+      },
+      {
+        "chain": "Base",
+        "chainId": 8453,
+        "primaryAdvancementProvider": "chainlink_vrf_v2_5_direct_native",
+        "secondaryResearchCandidate": "pyth_entropy_v2",
+        "productionEnabled": false,
+        "secondaryCandidateIsAutomaticFallback": false
+      },
+      {
+        "chain": "Robinhood Chain",
+        "chainId": 4663,
+        "primaryAdvancementProvider": null,
+        "secondaryResearchCandidate": null,
+        "status": "unsupported_fail_closed",
+        "productionEnabled": false
+      }
+    ]
+  },
+  "r6Decision": {
+    "status": "phase2d_r6_robinhood_dice_local_candidate",
+    "productionEnabled": false,
+    "collectorMintProviderIsolation": true,
+    "automaticDiceRefundEnabled": false,
+    "automaticProviderRerollEnabled": false,
+    "robinhoodPrimaryAdvancementProvider": "dice_entropy_v10",
+    "meaning": "mint acceptance remains independent of provider availability; live/audit/contribution gates remain before activation"
+  }
+}

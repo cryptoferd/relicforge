@@ -1,0 +1,46 @@
+name: Forge Reveal V2 Experiment
+
+on:
+  push:
+    branches:
+      - forge-reveal-v2
+    paths:
+      - "contracts/production/experimental/**"
+      - "test/v1/experimental/**"
+      - "docs/forge-reveal-v2/**"
+      - ".github/workflows/forge-reveal-v2.yml"
+      - "foundry.toml"
+  pull_request:
+    paths:
+      - "contracts/production/experimental/**"
+      - "test/v1/experimental/**"
+      - "foundry.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  forge-reveal-v2:
+    name: Prototype + Full V1 Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+
+      - name: Compile
+        run: forge build
+
+      - name: Run Forge Reveal V2 prototype tests
+        run: forge test --match-path "test/v1/experimental/*.t.sol" -vvv
+
+      - name: Run complete V1 regression suite
+        run: forge test -vvv

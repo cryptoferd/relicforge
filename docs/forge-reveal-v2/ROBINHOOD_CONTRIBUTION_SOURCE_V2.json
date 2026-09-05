@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "phase": "2D_R11",
+  "asOf": "2026-09-02",
+  "status": "local_certified_mainnet_read_only_preflight_passed",
+  "productionEnabled": false,
+  "baseline": {
+    "repository": "cryptoferd/relicforge",
+    "branch": "forge-reveal-v2",
+    "commit": "d31f7b1f3a1c26dd43fd4e578a86126f1c2220ad",
+    "tree": "4d31968cbcccf2775e1bf7c8f1392bf7b7c09849"
+  },
+  "model": {
+    "name": "collector_team_entropy_frozen_per_forge_batch",
+    "frontendEntropy": "fresh_nonzero_bytes32_generated_offchain_by_collector_or_creator_client",
+    "executorSelectsContribution": false,
+    "usesBlockPrevrandao": false,
+    "usesBlockTimestampAsEntropy": false,
+    "usesBlockhashAsEntropy": false,
+    "usesSequencerEntropy": false,
+    "canonicalCollectionsOnly": true,
+    "onlyCollectionBoundAdapterMayConsume": true,
+    "contributionFrozenBeforeRandomnessRequest": true,
+    "postRequestContributionReplacement": false
+  },
+  "localCertification": {
+    "reviewed": "2026-09-02",
+    "forgeBuildPassed": true,
+    "focusedContributionTests": { "passed": 10, "failed": 0 },
+    "mainnetReadOnlyForkTests": { "passed": 5, "failed": 0 },
+    "phase2dTests": { "passed": 119, "failed": 0 },
+    "experimentalTests": { "passed": 194, "failed": 0 },
+    "fullRegression": { "passed": 318, "failed": 0 },
+    "gitDiffCheckPassed": true,
+    "mainnetTransactionSent": false,
+    "privateKeyUsed": false
+  },
+  "sourceInterface": "contributionForRequest(address,uint256,uint256)",
+  "collectionInterface": "frozenRandomnessContribution(uint256)",
+  "policyFingerprintPreimage": "RELIC_FORGE_DICE_CONTRIBUTION_V2|COLLECTOR_ENTROPY|FROZEN_BEFORE_REQUEST|EXECUTOR_INDEPENDENT|CANONICAL_ONLY",
+  "mainnetReadOnlyExpected": {
+    "chainId": 4663,
+    "diceEntropy": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+    "provider": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+    "feeWei": 25000000000000,
+    "defaultGasLimit": 200000,
+    "refundDelayL1Blocks": 6,
+    "liveTransactionSentByR11": false
+  },
+  "openGates": [
+
+
+    "mainnet_verified_source_and_runtime_bytecode_equivalence_review",
+    "live_mainnet_storage_only_request_callback_certification_or_explicit_equivalent_gate",
+    "single_provider_monitoring_and_incident_runbook",
+    "production_adapter_and_contribution_source_security_review",
+    "explicit_activation_decision"
+  ]
+}

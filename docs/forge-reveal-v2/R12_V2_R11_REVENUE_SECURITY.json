@@ -1,0 +1,18 @@
+{
+  "stack": "R12-v2",
+  "milestone": "R11",
+  "revision": "Revenue Security R3",
+  "requiresR11R1Installed": true,
+  "collectionRuntimeFrozenBytes": 24562,
+  "collectionChangedByR2": false,
+  "reserveRevenueDestination": "revenueTreasury",
+  "releaseRevenueCallerSelectableDestination": false,
+  "treasuryChange": "two-step propose/accept",
+  "founderChange": "two-step propose/accept",
+  "legacyOneStepTreasurySetter": false,
+  "legacyOneStepFounderTransfer": false,
+  "oldFounderPendingTreasuryProposalClearedOnHandoff": true,
+  "endToEndPlatformFeeSettlementTest": true,
+  "broadcastsTransactions": false,
+  "mainnetActivationAllowed": false
+}

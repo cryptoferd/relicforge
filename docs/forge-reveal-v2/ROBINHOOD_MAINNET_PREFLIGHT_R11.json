@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "phase": "2D_R11",
+  "asOf": "2026-09-02",
+  "status": "read_only_fork_passed",
+  "productionEnabled": false,
+  "rpcDefault": "https://rpc.mainnet.chain.robinhood.com",
+  "expected": {
+    "chainId": 4663,
+    "diceEntropy": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+    "provider": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+    "feeWei": 25000000000000,
+    "defaultGasLimit": 200000,
+    "refundDelayL1Blocks": 6
+  },
+  "checks": [
+    "chain_id_4663",
+    "dice_runtime_code_nonempty",
+    "provider_sequence_nonzero_and_below_end",
+    "provider_current_commitment_nonzero",
+    "provider_default_gas_limit_200000",
+    "getFeeV2_300000_exact_25000000000000",
+    "refund_delay_6",
+    "r10_frozen_adapter_providerReady_true",
+    "r10_frozen_adapter_storage_only_true",
+    "r10_frozen_adapter_automatic_refund_false"
+  ],
+  "observed": {
+    "chainId": 4663,
+    "diceEntropy": "0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c",
+    "provider": "0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6",
+    "feeWei": 25000000000000,
+    "defaultGasLimit": 200000,
+    "refundDelayL1Blocks": 6
+  },
+  "readOnlyForkValidation": {
+    "reviewed": "2026-09-02",
+    "passed": 5,
+    "failed": 0,
+    "transactionSent": false,
+    "privateKeyUsed": false
+  },
+  "sendsTransaction": false,
+  "requiresPrivateKey": false,
+  "activationAllowed": false
+}

@@ -1,0 +1,34 @@
+PHASE 2D R8 ROBINHOOD/DICE STORAGE-ONLY LIVE CERTIFICATION â€” REVIEWED EVIDENCE
+Reviewed/finalized UTC: 2026-09-02T16:42:08.8625916Z
+Branch: forge-reveal-v2
+Baseline HEAD (R7 commit; R8 remains uncommitted during finalization): b0cf2170a84089c5d531ca4b3b9cbbd6bd44d2a0
+Robinhood Chain Testnet chain ID: 46630
+RPC: https://rpc.testnet.chain.robinhood.com
+Dice oracle: 0xE4F1cc334a3d5FFf8b588573921CA9e2FFE22E5c
+Dice provider: 0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6
+Observed exact getFeeV2(provider,300000): 25000000000000 wei
+Observed provider mode: defaultGasLimit == 0 / remaining-gas mode
+R8 adapter: 0x7aEfe2e217DC22b46B8ddECe6d5bD8d561DD3850
+R8 downstream consumer: 0x96A6513cF07f370da3cfaF8d4592adcea36EeF66
+Adapter deployment tx: 0xa93bc1017ec6c310bf895515d96081226aab3382750a8a50276a44a55c27f45b
+Consumer deployment tx: 0xe488950a44f1ec2a17c19838eef40c437ee55eed0befac7891c3585d8f325147
+Dice request tx: 0x05771a9eb206fc98988463b680b2ba1dcc3d5171f61abfc7cd83988ab284ff2e
+Local request id: 1
+Dice sequence number: 840
+Exact stored word hex: 0x96eb0d68e93e9539108a961f1e85bff08774ee7e8107d6aaf78dc47b72e3de14
+Exact stored word decimal: 68262228898813349305827763738903909819587598674475084628255051467992357658132
+Immediate post-callback state from v7 live run: wordReady=true, delivered=false, downstream deliveryCount=0
+First intentionally rejected replay tx: 0x76d79ee764ca593be551ef32361b221f1737a0836a16d50acd7209890adbaf8c
+Under-gassed consumer-enable tx: 0x9930fc6df2d7e53fc07746e689683a4e74cf6e454274167e0b119b35f389961d
+Under-gassed tx observation: status=failed, gasLimit=30044, gasUsed=30044, target=0x96A6513cF07f370da3cfaF8d4592adcea36EeF66
+Successful explicit-gas consumer-enable tx: not captured by v7 wrapper; final state re-read on-chain
+Successful explicit-gas exact-word replay tx: not captured by v7 wrapper; final state re-read on-chain
+Final state independently re-read by finalizer: wordReady=true, delivered=true, revertDelivery=false, deliveryCount=1
+Final consumer word equals stored word: YES
+Dice refund performed: NO
+Replacement randomness request performed: NO
+Cross-provider fallback performed: NO
+Reroll performed: NO
+Result: REAL_DICE_STORAGE_ONLY_CALLBACK_AND_EXACT_WORD_REPLAY_OBSERVED / R8 LIVE CERTIFIED
+Residual gate: observed Dice zero-default mode has no provider-side retry if the storage-only callback itself fails before Relic persistence; production monitoring/security/audit/mainnet/configuration/contribution-source gates remain.
+Tooling correction: R8-v8 recovery uses explicit conservative transaction gas limits instead of relying on Robinhood testnet gas estimation for downstream recovery transactions.

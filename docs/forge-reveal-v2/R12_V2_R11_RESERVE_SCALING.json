@@ -1,0 +1,20 @@
+{
+  "phase": "R11",
+  "revision": "Reserve Scaling R1",
+  "baselineHead": "5db82ff59f88afd98b254c37e7f9b61f164d0d50",
+  "productionChanges": [
+    "contracts/production/v2/RelicCollectionV2.sol",
+    "contracts/production/v2/RelicForgeReserveV2.sol"
+  ],
+  "accountingModel": "conservative push synchronization",
+  "liabilityIncreasingPaths": [
+    "_mintDeferred",
+    "_queueForgeReservation"
+  ],
+  "releaseRevenueComplexity": "O(1)",
+  "maintenanceSyncMaxCollectionsPerCall": 64,
+  "revenueExternalCallLock": true,
+  "collectionEip170LimitBytes": 24576,
+  "broadcastsTransactions": false,
+  "mainnetActivationAllowed": false
+}

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "phase": "R12_V2_R9_REAL_ETHEREUM_SEPOLIA_CANARY",
+  "asOf": "2026-09-03",
+  "baselineCommit": "330d1da53a184dffb7ce89fedc2ebb7bd4d48094",
+  "productionEnabled": false,
+  "activationAllowed": false,
+  "targetChainId": 11155111,
+  "broadcastPackage": true,
+  "installScriptBroadcasts": false,
+  "canarySupply": 4,
+  "canaryReserveSeedWei": 10000000000000000,
+  "realLifecycle": {
+    "sharedInfrastructureDeployment": true,
+    "sourceVerification": true,
+    "factoryCloneLaunch": true,
+    "realArtShards": true,
+    "realDnaShards": true,
+    "contentSeal": true,
+    "delayedRevealChainlinkRequest": true,
+    "exactWordReplay": true,
+    "automaticDeferredToForge": true,
+    "forgeBatchChainlinkRequest": true,
+    "orderedSettlement": true,
+    "finalRendererAndTokenUri": true
+  },
+  "etherscan": {
+    "tier": "Free",
+    "freeTierCallsPerSecond": 3,
+    "workerMinimumIntervalMs": 1100,
+    "sourceVerificationSequential": true,
+    "sourceVerificationPostJobDelayMs": 2200,
+    "retry429And5xx": true,
+    "proxyExpectedImplementationEnforced": true,
+    "proxyAbiVisibilityRequired": true
+  },
+  "secrets": {
+    "rpcFromEnvironment": true,
+    "etherscanKeyFromEnvironment": true,
+    "privateKeyFromEnvironment": true,
+    "dotenvFallback": true,
+    "printSecrets": false
+  },
+  "mainnetGate": "CLOSED",
+  "r1InstallerFinding": {
+    "scope": "windows_powershell_parser_only",
+    "cause": "UTF-8 without BOM plus a non-ASCII em dash in the PowerShell source",
+    "effect": "Windows PowerShell 5.1 misparsed later quoted text",
+    "repositoryMutationBeforeFailure": false,
+    "fix": "all PowerShell scripts are ASCII-only in R2"
+  }
+}
