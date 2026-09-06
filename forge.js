@@ -1649,7 +1649,24 @@ ${await file.text()}`;
       };
       Object.entries(fields).forEach(([id,value]) => {
         const node = $(id);
-        if (node) { node.textContent = shortV1(value); node.title = value; }
+        if (!node) return;
+        node.textContent = shortV1(value);
+        node.title = value;
+        let link = node.closest('a.canonical-v1-address-link');
+        if (!link) {
+          link = document.createElement('a');
+          link.className = 'canonical-v1-address-link';
+          link.target = '_blank';
+          link.rel = 'noreferrer';
+          link.style.color = 'inherit';
+          link.style.textDecoration = 'none';
+          link.style.cursor = 'pointer';
+          node.replaceWith(link);
+          link.appendChild(node);
+        }
+        link.href = 'https://sepolia.etherscan.io/address/' + value;
+        link.title = 'Open ' + value + ' on Sepolia Etherscan';
+        node.style.cursor = 'pointer';
       });
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
         'R12-v2 certified Sepolia preproduction loaded. Mainnet remains disabled.';
@@ -1894,7 +1911,14 @@ ${await file.text()}`;
   }
 
   async function forgeCollection() {
+    const forgeButton = $('forgeCollectionBtn');
+    const collectionBeforeForge = forgeState.collectionAddress || null;
     try {
+      if (forgeButton) {
+        forgeButton.disabled = true;
+        forgeButton.textContent = 'Preparing Forge...';
+      }
+      log('forgeTestStatus', 'Preparing R12-v2 forge...', true);
       if (!forgeState.compiled) throw new Error('Compile the collection for onchain first.');
       if (currentRevealMode() !== forgeState.compiled.core.revealMode) throw new Error('Reveal mode changed after compilation. Recompile first.');
       if (!forgeState.signer) await connectWallet();
@@ -1965,7 +1989,9 @@ ${await file.text()}`;
         c.core.name, c.core.symbol, c.core.description, c.recipeCount, c.core.canvas[0], c.core.canvas[1], c.layerDefs.length,
         payoutWallet, royaltyWallet, royaltyBps, feeMode, currentRevealMode(), randomnessQuote.batchWindowSeconds, randomnessQuote.ceiling
       ];
+      if (forgeButton) forgeButton.textContent = 'Confirm Forge in Wallet...';
       const createTx = await factory.createCollectionV2(launchConfig, { value: feeMode === V1_FEE_MODE_SPONSORED ? upfrontFeeWei : 0n });
+      if (forgeButton) forgeButton.textContent = 'Forging on Sepolia...';
       steps[si].label = steps[si].label + ' - ' + createTx.hash.slice(0,10) + '...'; renderDeployProgress(steps);
       const createReceipt = await createTx.wait();
       if (createReceipt.status !== 1) throw new Error('R12-v2 collection creation transaction failed.');
@@ -2047,11 +2073,30 @@ ${await file.text()}`;
         'R12-v2 collection forged.\nCollection: ' + forgeState.collectionAddress + '\nProjectData: ' + forgeState.dataAddress + '\nMintPhases: ' + forgeState.mintPhasesAddress + '\nReveal: ' + (currentRevealMode() === 0 ? 'Deferred Reveal' : 'Forge Reveal') + '\nPlatform fee: ' + (feeMode === V1_FEE_MODE_SPONSORED ? 'Creator Covers Platform Fee' : 'Collector Covers Platform Fee') + ' - base ' + (Number(lockedFeeCents)/100) + ' USD/NFT\nRandomness quote: ' + window.ethers.formatEther(randomnessQuote.price) + ' ETH; ceiling: ' + window.ethers.formatEther(randomnessQuote.ceiling) + ' ETH\nMinting: ' + (masterMintEnabled ? 'ON (phase timestamps still enforced)' : 'OFF (manual enable required)'),
         true
       );
+      if (forgeButton) {
+        forgeButton.disabled = true;
+        forgeButton.textContent = 'Collection Forged';
+      }
       bridge().showStatus?.('R12-v2 collection forged on Sepolia. Public collector-page publishing remains blocked until R2.', 'success');
     } catch (error) {
       const partial = forgeState.collectionAddress ? '\nPartial R12-v2 collection: ' + forgeState.collectionAddress : '';
-      log('forgeTestStatus', 'FORGE ERROR: ' + (error.shortMessage || error.message) + partial, true);
-      if (forgeState.collectionAddress) bridge().showStatus?.('Forge stopped after the R12-v2 collection was created. Do not forge a duplicate; keep the displayed collection address for troubleshooting.', 'error');
+      const message = error.shortMessage || error.message;
+      log('forgeTestStatus', 'FORGE ERROR: ' + message + partial, true);
+      const createdThisAttempt = !!forgeState.collectionAddress &&
+        String(forgeState.collectionAddress).toLowerCase() !== String(collectionBeforeForge || '').toLowerCase();
+      if (createdThisAttempt) {
+        if (forgeButton) {
+          forgeButton.disabled = true;
+          forgeButton.textContent = 'Partial Forge - Do Not Reforge';
+        }
+        bridge().showStatus?.('Forge stopped after the R12-v2 collection was created. Do not forge a duplicate; keep the displayed collection address for troubleshooting.', 'error');
+      } else {
+        if (forgeButton) {
+          forgeButton.disabled = false;
+          forgeButton.textContent = 'Forge Collection on Sepolia';
+        }
+        bridge().showStatus?.('Forge error: ' + message, 'error');
+      }
     }
   }
 
@@ -3452,7 +3497,7 @@ ${await file.text()}`;
     };
   }
 
-  function restoreForgeProjectState(saved) {
+  function restoreForgeProjectState(saved, options = {}) {
     if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4', 'relic-forge/forge-settings@5', 'relic-forge/forge-settings@6'].includes(saved.schema)) return;
     const values = {
       launchName: saved.launchName,
@@ -3529,7 +3574,7 @@ ${await file.text()}`;
         $('downloadWhitelistBtn')?.classList.remove('hidden');
       } catch (_) {}
     }
-    forgeState.compiled = null;
+    if (!options.preserveCompiled) forgeState.compiled = null;
     updateRevealUi();
     updateWhitelistUi();
     bridge().updateLaunchSummary?.();

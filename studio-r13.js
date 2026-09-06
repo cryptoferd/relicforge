@@ -356,7 +356,7 @@
   function loadPhase(phase) {
     if (!state.originalGetForgeState || !state.originalRestoreForgeState) return;
     const current = state.originalGetForgeState();
-    state.originalRestoreForgeState(forgeStateWithPhase(current, phase));
+    state.originalRestoreForgeState(forgeStateWithPhase(current, phase), { preserveCompiled: true });
     if ($('r13AllowlistName')) $('r13AllowlistName').value = phase?.name || '';
     renderAllowlistManager();
   }
@@ -416,7 +416,7 @@
     if (next) loadPhase(next);
     else {
       const base = state.originalGetForgeState();
-      state.originalRestoreForgeState(forgeStateWithPhase(base, null));
+      state.originalRestoreForgeState(forgeStateWithPhase(base, null), { preserveCompiled: true });
       renderAllowlistManager();
     }
     markDirty();
@@ -691,7 +691,7 @@
       const enabled = state.phases.filter(phase => phase.enabled !== false).map(validatePhaseForForge).filter(Boolean);
       if (!enabled.length) {
         const base = state.originalGetForgeState();
-        state.originalRestoreForgeState(forgeStateWithPhase(base, null));
+        state.originalRestoreForgeState(forgeStateWithPhase(base, null), { preserveCompiled: true });
         state.pendingForge = { primary: null, extras: [] };
         watchForgeCompletion();
         return;
@@ -840,7 +840,7 @@
       state.originalRestoreForgeState(forgeStateWithPhase({
         ...base,
         whitelistPhaseId: phase.phaseId,
-      }, phase));
+      }, phase), { preserveCompiled: true });
       if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = false;
       if ($('r13AllowlistName')) $('r13AllowlistName').value = phase.name;
       renderAllowlistManager();

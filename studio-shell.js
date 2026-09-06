@@ -200,7 +200,7 @@
   if (current === 'studio.html' && !document.getElementById('r13StudioEnhancements')) {
     const script = document.createElement('script');
     script.id = 'r13StudioEnhancements';
-    script.src = './studio-r13.js?v=r13-multi-allowlist-nav1';
+    script.src = './studio-r13.js?v=r13-multi-allowlist-nav2-forgefix';
     script.async = false;
     document.body.appendChild(script);
   }
