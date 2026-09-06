@@ -200,16 +200,16 @@
     const savedMs = lastSavedAt ? new Date(lastSavedAt).getTime() : NaN;
     if (Number.isFinite(savedMs)) {
       const minutes = Math.max(0, Math.floor((Date.now() - savedMs) / 60_000));
-      if (minutes < 1) return 'Unsaved changes Â· Last saved less than a minute ago';
-      if (minutes === 1) return 'Unsaved changes Â· Last saved 1 minute ago';
-      return `Unsaved changes Â· Last saved ${minutes} minutes ago`;
+      if (minutes < 1) return 'Unsaved changes - Last saved less than a minute ago';
+      if (minutes === 1) return 'Unsaved changes - Last saved 1 minute ago';
+      return `Unsaved changes - Last saved ${minutes} minutes ago`;
     }
     const dirtyMs = dirtySinceAt ? new Date(dirtySinceAt).getTime() : NaN;
     if (!Number.isFinite(dirtyMs)) return 'Unsaved changes';
     const minutes = Math.max(0, Math.floor((Date.now() - dirtyMs) / 60_000));
-    if (minutes < 1) return 'Unsaved changes Â· Project has not been saved yet';
-    if (minutes === 1) return 'Unsaved changes Â· Unsaved for 1 minute';
-    return `Unsaved changes Â· Unsaved for ${minutes} minutes`;
+    if (minutes < 1) return 'Unsaved changes - Project has not been saved yet';
+    if (minutes === 1) return 'Unsaved changes - Unsaved for 1 minute';
+    return `Unsaved changes - Unsaved for ${minutes} minutes`;
   }
 
   function hideSaveReminder() {
@@ -222,8 +222,8 @@
     const copy = $('saveReminderCopy');
     if (title) {
       title.textContent = lastSavedAt
-        ? 'Itâ€™s been 30 minutes since your last save'
-        : 'Youâ€™ve had unsaved work for 30 minutes';
+        ? 'It has been 30 minutes since your last save'
+        : 'You have had unsaved work for 30 minutes';
     }
     if (copy) copy.textContent = 'You have unsaved changes. Save now to protect your progress.';
     $('saveReminder')?.classList.remove('hidden');
@@ -291,11 +291,11 @@
       return active;
     }
     setStatus(active?.token
-      ? 'Cloud session expired Â· sign once to keep saving this projectâ€¦'
-      : 'Wallet connected. Sign once to enable global project savesâ€¦', 'warning');
+      ? 'Cloud session expired - sign once to keep saving this project...'
+      : 'Wallet connected. Sign once to enable global project saves...', 'warning');
     const signed = await cloud.ensureSignedIn(wallet);
     updateSaveGate();
-    setStatus(`Signed in Â· global saves enabled for ${shortAddress(wallet)}.`, 'success');
+    setStatus(`Signed in - global saves enabled for ${shortAddress(wallet)}.`, 'success');
     return signed;
   }
 
@@ -451,7 +451,7 @@
     };
 
     let localSaveError = localReadError;
-    setStatus('Saving project + artwork locallyâ€¦');
+    setStatus('Saving project + artwork locally...');
     if (!localSaveError) {
       try {
         await idbPut(record);
@@ -472,16 +472,16 @@
     if (window.RelicForgeCloud?.enabled?.()) {
       try {
         if (localSaveError) {
-          setStatus(`Browser local cache unavailable Â· saving â€œ${name}â€ directly to RelicForge Cloudâ€¦`, 'warning');
+          setStatus(`Browser local cache unavailable - saving "${name}" directly to RelicForge Cloud...`, 'warning');
         } else {
-          setStatus(`Local cache ready Â· syncing â€œ${name}â€ to RelicForge Cloudâ€¦`);
+          setStatus(`Local cache ready - syncing "${name}" to RelicForge Cloud...`);
         }
         await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
         markSaved(now);
         if (localSaveError) {
-          setStatus('Saved globally Â· browser cache unavailable, but your cloud project is safe.', 'warning');
+          setStatus('Saved globally - browser cache unavailable, but your cloud project is safe.', 'warning');
         } else {
-          setStatus(`Saved globally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+          setStatus(`Saved globally - ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
         }
       } catch (error) {
         hasUnsavedChanges = true;
@@ -495,7 +495,7 @@
       }
     } else {
       markSaved(now);
-      setStatus(`Saved locally Â· ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
+      setStatus(`Saved locally - ${new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success');
     }
     await renderProjects();    return record;
   }
