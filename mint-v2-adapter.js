@@ -150,12 +150,17 @@
       const res=await fetch(`${apiBase()}/api/public/v2/whitelist/${Number(app.config.chainId)}/${encodeURIComponent(app.config.contract)}/${Number(phaseId)}/${encodeURIComponent(wallet)}`,{headers:{accept:'application/json'},cache:'no-store'});
       const data=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error||`HTTP ${res.status}`);
-      const result=data.eligible?data:null;
+      const result={
+        ...data,
+        published:data.published !== false,
+        eligible:!!data.eligible,
+      };
       app.proofs.set(key,result);
       return result;
     } catch (_) {
-      app.proofs.set(key,null);
-      return null;
+      const result={ published:false, eligible:false, lookupError:true };
+      app.proofs.set(key,result);
+      return result;
     }
   }
 
@@ -210,12 +215,26 @@
     access.innerHTML=app.phases.map(phase=>{
       const row=walletRows.get(phase.id)||{minted:0,proof:null};
       const proof=row.proof;
-      const eligible=phase.accessType===0 || !!proof?.eligible;
-      const allowance=phase.accessType===1 ? Number(proof?.allowance||0) : null;
+      const rootMatches=phase.accessType!==1 || (
+        proof?.published !== false &&
+        String(proof?.merkleRoot||'').toLowerCase() === String(phase.merkleRoot||'').toLowerCase()
+      );
+      const eligible=phase.accessType===0 || (!!proof?.eligible && rootMatches);
+      const allowance=phase.accessType===1 && proof?.eligible ? Number(proof?.allowance||0) : null;
       const remaining=app.wallet?remainingFor(phase,row.minted,allowance):0;
       const usable=state.masterMintEnabled&&phase.open&&eligible&&(!app.wallet||remaining>0);
       const status=phase.accessType===1
-        ? (app.wallet?(eligible?`Eligible · ${remaining} remaining`:'Not eligible'):'Connect to check eligibility')
+        ? (app.wallet
+          ? (proof?.lookupError
+            ? 'Eligibility service unavailable'
+            : proof?.published === false
+              ? 'Approved Wallet proof list has not been synced by the creator'
+              : !rootMatches
+                ? 'Approved Wallet proof list is out of sync with the onchain stage root'
+                : eligible
+                  ? `Eligible · ${remaining} remaining`
+                  : 'Wallet is not on this Approved Wallet stage')
+          : 'Connect to check eligibility')
         : timingLabel(phase);
       return `<div class="access-card ${usable||!app.wallet?'':'disabled'}" data-v2-mint-stage="${phase.id}">
         <div class="access-top"><strong>${esc(phaseLabel(phase))}</strong><span>${esc(fmtEth(phase.price))}</span></div>
@@ -276,7 +295,12 @@
     let allowance=0,proof=[];
     if(phase.accessType===1){
       const published=await proofFor(phase.id,app.wallet);
-      if(!published?.eligible)throw new Error('This wallet does not have a published proof for this Approved Wallet stage.');
+      if(published?.lookupError)throw new Error('Approved Wallet eligibility service is temporarily unavailable.');
+      if(published?.published === false)throw new Error('This stage has not had its Approved Wallet proof list synced by the creator.');
+      if(String(published?.merkleRoot||'').toLowerCase() !== String(phase.merkleRoot||'').toLowerCase()) {
+        throw new Error('The published Approved Wallet proof list is out of sync with this stage. Ask the creator to repair/sync it.');
+      }
+      if(!published?.eligible)throw new Error('This wallet is not on this Approved Wallet stage.');
       allowance=Number(published.allowance);
       proof=published.proof||[];
     }

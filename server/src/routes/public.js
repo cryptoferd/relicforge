@@ -114,8 +114,8 @@ export default async function publicRoutes(app) {
       [chainId,contract,phaseId,holder]
     );
     reply.header('Cache-Control','public, s-maxage=60, stale-while-revalidate=300');
-    if(!row)return {eligible:false,wallet:getAddress(holder),phaseId,allowance:0,proof:[]};
-    return {eligible:Boolean(row.allowance),wallet:getAddress(holder),phaseId,merkleRoot:row.merkle_root,allowance:Number(row.allowance||0),proof:row.proof||[]};
+    if(!row)return {published:false,eligible:false,wallet:getAddress(holder),phaseId,merkleRoot:null,allowance:0,proof:[]};
+    return {published:true,eligible:Boolean(row.allowance),wallet:getAddress(holder),phaseId,merkleRoot:row.merkle_root,allowance:Number(row.allowance||0),proof:row.proof||[]};
   });
 
   app.get('/api/public/assets/:id', async (request, reply) => {

@@ -33,7 +33,7 @@
     }
     row.innerHTML=`<a class="primary-btn link-btn" href="${mintUrl(collection)}" target="_blank" rel="noreferrer">Open Mint Page</a>
       <a class="ghost-btn link-btn" href="${etherscanUrl(collection)}" target="_blank" rel="noreferrer">View Contract</a>
-      <button class="ghost-btn" id="r2SyncMintPageBtn" type="button">Sync Mint Page</button>`;
+      <button class="ghost-btn" id="r2SyncMintPageBtn" type="button">Repair / Sync Mint Proofs</button>`;
     $('r2SyncMintPageBtn')?.addEventListener('click',()=>syncCurrentProject().catch(error=>setSyncStatus(`Mint page sync failed: ${error.message}`,true)));
   }
 
@@ -126,9 +126,9 @@
   async function syncCurrentProject() {
     const detail=window.RelicForgeStudioR13?.getPublicationDetail?.();
     if(!detail?.collectionAddress)throw new Error('No launched R12-v2 collection is loaded in this Studio project.');
-    setSyncStatus('Syncing R12-v2 mint page and Approved Wallet proofs…');
+    setSyncStatus('Repairing / syncing R12-v2 mint page and Approved Wallet proofs…');
     await publish(detail);
-    setSyncStatus('Mint page synced. Public and Approved Wallet stages are ready for the collector page.');
+    setSyncStatus('Mint page + Approved Wallet proofs synced. Eligibility is ready for the collector page.');
     ensurePermanentLinks(detail.collectionAddress);
   }
 
@@ -190,7 +190,8 @@
     if(state?.collectionAddress&&window.ethers?.isAddress(state.collectionAddress)){
       ensurePermanentLinks(state.collectionAddress);
       if($('openMintPageBtn')){$('openMintPageBtn').disabled=false;$('openMintPageBtn').textContent='Open Mint Page';}
-      if($('publishMintPageBtn')){$('publishMintPageBtn').disabled=!window.RelicForgeCloud?.enabled?.();$('publishMintPageBtn').textContent='Sync Mint Page';}
+      if($('publishMintPageBtn')){$('publishMintPageBtn').disabled=!window.RelicForgeCloud?.enabled?.();$('publishMintPageBtn').textContent='Repair / Sync Proofs';}
+      setSyncStatus('Existing R12-v2 launch detected. If this collection was forged before Collector R2, use Repair / Sync Proofs once to publish its Approved Wallet proof tables.');
     }
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0));

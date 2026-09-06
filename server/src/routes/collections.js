@@ -96,7 +96,7 @@ export default async function collectionRoutes(app) {
         const placeholders = chunk.map((entry, index) => {
           const base = index * 6;
           values.push(chainId, contract, 0, normAddress(entry.address), Number(entry.allowance || 0), JSON.stringify(entry.proof || []));
-          return `(${base + 1},${base + 2},${base + 3},${base + 4},${base + 5},${base + 6}::jsonb)`;
+          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6}::jsonb)`;
         });
         if (placeholders.length) await client.query(
           `INSERT INTO whitelist_entries(chain_id,contract_address,phase_id,wallet,allowance,proof) VALUES ${placeholders.join(',')}`,
@@ -109,6 +109,46 @@ export default async function collectionRoutes(app) {
       await client.query('ROLLBACK');
       return reply.code(400).send({ error: error.message });
     } finally { client.release(); }
+  });
+
+
+  app.get('/api/collections/:chainId/:contract/v2/whitelist/:phaseId', { preHandler: authenticate }, async (request, reply) => {
+    const chainId=Number(request.params.chainId);
+    const contract=normAddress(request.params.contract);
+    const phaseId=Number(request.params.phaseId);
+    if(!Number.isInteger(phaseId)||phaseId<1)return reply.code(400).send({error:'Invalid R12-v2 MintPhases stage id.'});
+    try { await verifyCollectionOwner(chainId,contract,request.user.wallet); }
+    catch(error){ return reply.code(403).send({error:error.message}); }
+    let phases,raw;
+    try {
+      phases=await v2MintPhases(chainId,contract);
+      const count=Number(await phases.contract.phaseCount());
+      if(phaseId>count)throw new Error(`Stage ${phaseId} does not exist (phaseCount=${count}).`);
+      raw=await phases.contract.phases(phaseId);
+    } catch(error){ return reply.code(400).send({error:`R12-v2 stage could not be verified: ${error.shortMessage||error.message}`}); }
+    const accessType=Number(raw.accessType??raw[7]);
+    if(accessType!==1)return reply.code(400).send({error:'Only Approved Wallet stages have editable proof lists.'});
+    const onchainRoot=String(raw.merkleRoot??raw[6]).toLowerCase();
+    const header=await one(
+      'SELECT merkle_root,source_type,source_chain_id,source_contract,snapshot_block,updated_at FROM whitelists WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3',
+      [chainId,contract,phaseId]
+    );
+    const {rows}=await db.query(
+      'SELECT wallet,allowance FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3 ORDER BY wallet',
+      [chainId,contract,phaseId]
+    );
+    return {
+      published:!!header,
+      inSync:!!header && String(header.merkle_root).toLowerCase()===onchainRoot,
+      chainId,contract:getAddress(contract),phaseId,mintPhases:phases.address,onchainRoot,
+      storedRoot:header?.merkle_root||null,
+      sourceType:Number(header?.source_type||0),
+      sourceChainId:Number(header?.source_chain_id||0),
+      sourceContract:header?.source_contract||null,
+      snapshotBlock:Number(header?.snapshot_block||0),
+      updatedAt:header?.updated_at||null,
+      entries:rows.map(row=>({address:getAddress(row.wallet),allowance:Number(row.allowance||0)})),
+    };
   });
 
   app.put('/api/collections/:chainId/:contract/v2/whitelist/:phaseId', { preHandler: authenticate, bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
@@ -157,7 +197,7 @@ export default async function collectionRoutes(app) {
       await client.query('DELETE FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3',[chainId,contract,phaseId]);
       for(let i=0;i<normalized.length;i+=1000){
         const chunk=normalized.slice(i,i+1000),values=[],params=[];
-        chunk.forEach((entry,index)=>{const base=index*6;values.push(`(${base+1},${base+2},${base+3},${base+4},${base+5},${base+6}::jsonb)`);params.push(chainId,contract,phaseId,entry.wallet,entry.allowance,JSON.stringify(entry.proof));});
+        chunk.forEach((entry,index)=>{const base=index*6;values.push(`($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6}::jsonb)`);params.push(chainId,contract,phaseId,entry.wallet,entry.allowance,JSON.stringify(entry.proof));});
         if(values.length)await client.query(`INSERT INTO whitelist_entries(chain_id,contract_address,phase_id,wallet,allowance,proof) VALUES ${values.join(',')}`,params);
       }
       await client.query('COMMIT');
