@@ -12,7 +12,6 @@
     ['studio.html', 'Studio', 'Build and edit collections'],
     ['reliquary.html', 'My Reliquary', 'Profile, stats and NFT showcase'],
     ['dashboard.html', 'Creator Dashboard', 'Manage launched collections'],
-    ['collab.html', 'Collaboration', 'Shared projects and history'],
     ['upcoming.html', 'Upcoming Mints', 'Creator-published launches'],
     ['how-to.html', 'How-To', 'Relic Forge guide'],
   ];

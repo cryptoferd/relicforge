@@ -223,11 +223,18 @@ export default async function rc47bRoutes(app) {
     const id = uuid(request.params.id);
     if (!id) return reply.code(400).send({ error: 'Invalid project id.' });
     const { name, snapshot } = request.body || {};
+    const expectedVersion = request.body?.expectedVersion == null ? null : Number(request.body.expectedVersion);
+    if (expectedVersion !== null && (!Number.isInteger(expectedVersion) || expectedVersion < 1)) {
+      return reply.code(400).send({ error: 'expectedVersion must be a positive integer.' });
+    }
     if (!snapshot || typeof snapshot !== 'object') return reply.code(400).send({ error: 'Project snapshot is required.' });
     const access = await accessFor(id, request.user.wallet);
     if (!access) return reply.code(404).send({ error: 'Shared project not found.' });
 
     const changed = classifyProjectChanges(access.project.snapshot, snapshot);
+    if (access.role === 'collaborator' && !access.permissions.length) {
+      return reply.code(403).send({ error: 'Viewer access is read-only. Open the latest project without saving changes.' });
+    }
     if (access.role === 'collaborator') {
       if (protectedDeploymentBindingsChanged(access.project.snapshot, snapshot)) {
         return reply.code(403).send({ error: 'Collaborators cannot change deployed collection/data addresses or bound phase IDs.' });
@@ -246,6 +253,9 @@ export default async function rc47bRoutes(app) {
       const locked = await client.query('SELECT current_version,snapshot,name FROM projects WHERE id=$1 FOR UPDATE', [id]);
       if (!locked.rows.length) throw Object.assign(new Error('Project not found.'), { statusCode: 404 });
       const latest = locked.rows[0];
+      if (expectedVersion !== null && Number(latest.current_version) !== expectedVersion) {
+        throw Object.assign(new Error(`A newer version of this Studio project exists (v${latest.current_version}). Reload it before saving your changes.`), { statusCode: 409 });
+      }
       // Recompute against the locked latest version so two collaborators cannot bypass
       // permission checks by saving against a stale snapshot. Re-read collaborator
       // permissions inside the same transaction so a creator revocation wins even if
@@ -258,6 +268,7 @@ export default async function rc47bRoutes(app) {
         );
         if (!live.rows.length) throw Object.assign(new Error('Collaboration access was revoked before this save completed.'), { statusCode: 403 });
         const livePermissions = validPermissionIds(live.rows[0].permissions || []);
+        if (!livePermissions.length) throw Object.assign(new Error('Viewer access is read-only.'), { statusCode: 403 });
         if (protectedDeploymentBindingsChanged(latest.snapshot, snapshot)) throw Object.assign(new Error('Collaborators cannot change protected deployment binding fields.'), { statusCode: 403 });
         const denied = finalChanged.filter(section => !livePermissions.includes(section));
         if (denied.length) throw Object.assign(new Error(`Save rejected. This wallet cannot change: ${denied.join(', ')}.`), { statusCode: 403 });

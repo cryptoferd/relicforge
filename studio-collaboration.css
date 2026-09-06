@@ -1,0 +1,130 @@
+.studio-project-tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:14px 0;
+  padding-bottom:12px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.studio-project-tabs button{
+  border:1px solid rgba(255,255,255,.12);
+  background:#111;
+  color:#9b9b9b;
+  border-radius:10px;
+  padding:9px 13px;
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+}
+.studio-project-tabs button.active{
+  color:#fff;
+  border-color:rgba(238,153,34,.55);
+  box-shadow:inset 0 0 0 1px rgba(238,153,34,.18);
+}
+.studio-collab-pane{display:grid;gap:14px;margin:12px 0 18px}
+.studio-collab-pane.hidden{display:none}
+.studio-collab-heading,.studio-collab-section-head,.studio-shared-title,.studio-collab-selected{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.studio-collab-heading>div,.studio-collab-section-head{
+  display:flex;
+  flex-direction:column;
+}
+.studio-collab-heading strong,.studio-collab-section-head strong{color:#f0f0f0}
+.studio-collab-heading span,.studio-collab-section-head span,.studio-collab-access-note{
+  color:#949494;
+  font-size:.85rem;
+  line-height:1.5;
+}
+.studio-shared-list,.studio-collaborator-list,.studio-history-list{display:grid;gap:10px}
+.studio-shared-project-card,.studio-collaborator-row,.studio-history-row{
+  border:1px solid rgba(255,255,255,.1);
+  background:#0d0d0d;
+  border-radius:12px;
+  padding:14px;
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:center;
+}
+.studio-shared-project-card>div:first-child,.studio-collaborator-row>div:first-child{display:grid;gap:5px;min-width:0}
+.studio-shared-project-card code,.studio-collaborator-row code{
+  color:#aaa;
+  overflow-wrap:anywhere;
+}
+.studio-shared-project-card p{margin:2px 0 0;color:#aaa;font-size:.84rem}
+.studio-shared-title{justify-content:flex-start;align-items:center}
+.studio-shared-title span,.studio-history-version span{
+  border:1px solid rgba(238,153,34,.35);
+  color:#ee9922;
+  border-radius:999px;
+  padding:2px 7px;
+  font-size:.7rem;
+  letter-spacing:.04em;
+}
+.studio-collab-project-select{max-width:680px}
+.studio-collab-selected{
+  border:1px solid rgba(255,255,255,.08);
+  background:#0c0c0c;
+  border-radius:10px;
+  padding:11px 13px;
+}
+.studio-collab-selected span{color:#999;font-size:.82rem}
+.studio-collab-status{
+  border-left:3px solid #555;
+  padding:8px 10px;
+  background:#0c0c0c;
+  color:#aaa;
+  font-size:.85rem;
+}
+.studio-collab-status.success{border-left-color:#4d9b6b;color:#b8d9c3}
+.studio-collab-status.error{border-left-color:#b64f4f;color:#e4b5b5}
+.studio-collab-owner-controls{
+  display:grid;
+  gap:12px;
+  border:1px solid rgba(238,153,34,.2);
+  border-radius:12px;
+  padding:14px;
+  background:#0d0d0d;
+}
+.studio-collab-form{
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(220px,.7fr);
+  gap:12px;
+}
+.studio-collab-custom{display:grid;gap:8px}
+.studio-collab-custom.hidden{display:none}
+.studio-collab-permissions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.studio-collab-permission{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:9px 10px;
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:9px;
+  color:#bbb;
+  background:#0a0a0a;
+}
+.studio-collab-columns{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:16px;
+}
+.studio-collab-columns>section{display:grid;align-content:start;gap:10px;min-width:0}
+.studio-history-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start}
+.studio-history-row>div:nth-child(2){display:grid;gap:4px}
+.studio-history-row p{margin:2px 0;color:#bbb;line-height:1.45}
+.studio-history-version{display:flex;gap:5px;align-items:center;font-weight:800;color:#eee}
+@media(max-width:800px){
+  .studio-collab-form,.studio-collab-columns,.studio-collab-permissions{grid-template-columns:1fr}
+  .studio-shared-project-card,.studio-collaborator-row{align-items:flex-start;flex-direction:column}
+  .studio-shared-project-card .saved-project-actions,.studio-collaborator-row .saved-project-actions{width:100%}
+  .studio-history-row{grid-template-columns:1fr}
+}

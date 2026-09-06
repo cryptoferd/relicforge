@@ -184,11 +184,20 @@
       });
     }
 
+    const viewOnly = access?.role === 'collaborator' && !(access?.permissions || []).length;
     const save = $('saveProjectBtn');
-    const saveLabel = access?.role === 'collaborator' ? 'Save Collaboration Version' : 'Save Shared Version';
-    if (save && save.textContent !== saveLabel) save.textContent = saveLabel;
+    const saveLabel = viewOnly ? 'View Only' : (access?.role === 'collaborator' ? 'Save Collaboration Version' : 'Save Shared Version');
+    if (save) {
+      if (save.textContent !== saveLabel) save.textContent = saveLabel;
+      save.disabled = viewOnly;
+      if (viewOnly) save.title = 'Viewer access is read-only.';
+    }
     const managerSave = $('projectManagerSaveBtn');
-    if (managerSave && managerSave.textContent !== saveLabel) managerSave.textContent = saveLabel;
+    if (managerSave) {
+      if (managerSave.textContent !== saveLabel) managerSave.textContent = saveLabel;
+      managerSave.disabled = viewOnly;
+      if (viewOnly) managerSave.title = 'Viewer access is read-only.';
+    }
     const newProject = $('newProjectBtn');
     if (newProject) {
       newProject.disabled = true;
@@ -252,6 +261,7 @@
 
   async function saveShared() {
     if (!access) throw new Error('Shared project is not loaded.');
+    if (access.role === 'collaborator' && !(access.permissions || []).length) throw new Error('Viewer access is read-only.');
     const note = await noteDialog(access.role === 'collaborator');
     if (note === null) return;
     setStatus('Saving shared project version…');
@@ -261,7 +271,7 @@
     const name = String(studio?.ui?.collectionName || $('launchName')?.value || access.project.name || 'Untitled Collection').trim().slice(0, 180);
     const result = await window.RelicForgeCloud.json(
       `/api/rc47b/collab/projects/${encodeURIComponent(projectId)}/versions`,
-      { method:'POST', body:JSON.stringify({ name, snapshot, note }) },
+      { method:'POST', body:JSON.stringify({ name, snapshot, note, expectedVersion:Number(access.project.current_version || 0) }) },
       true
     );
     sourceSnapshot = snapshot;
