@@ -129,6 +129,7 @@
     setSyncStatus('Repairing / syncing R12-v2 mint page and Approved Wallet proofs…');
     await publish(detail);
     setSyncStatus('Mint page + Approved Wallet proofs synced. Eligibility is ready for the collector page.');
+    window.dispatchEvent(new CustomEvent('relicforge:v2-proof-sync-complete',{detail:{collectionAddress:detail.collectionAddress}}));
     ensurePermanentLinks(detail.collectionAddress);
   }
 
@@ -167,8 +168,10 @@
     try {
       await publish(detail);
       setSyncStatus('Mint page synced. Public and Approved Wallet stages are ready.');
+      window.dispatchEvent(new CustomEvent('relicforge:v2-proof-sync-complete',{detail:{collectionAddress:detail.collectionAddress}}));
     } catch(error) {
       setSyncStatus(`Launch is confirmed. Mint-page sync needs attention: ${error.message}`,true);
+      window.dispatchEvent(new CustomEvent('relicforge:v2-proof-sync-failed',{detail:{collectionAddress:detail.collectionAddress,error:error.message}}));
     }
   }
 

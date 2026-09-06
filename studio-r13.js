@@ -7,6 +7,7 @@
   const deepClone = value => value == null ? value : JSON.parse(JSON.stringify(value));
   const MINT_PHASES_ABI = [
     'function phaseCount() view returns(uint32)',
+    'function phases(uint32) view returns(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 minted,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled)',
     'function createPhase(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled) returns(uint32 phaseId)',
     'function phaseIsOpen(uint32 phaseId) view returns(bool)',
   ];
@@ -660,6 +661,21 @@
   }
 
 
+
+  function applyResumedPhaseBindings(bindings = []) {
+    const byId = new Map((bindings || []).map(row => [String(row.studioId || ''), row]));
+    for (const phase of state.phases) {
+      const binding = byId.get(String(phase.id));
+      if (!binding) continue;
+      phase.phaseId = Number(binding.phaseId || 0) || null;
+      phase.root = binding.root || phase.root || null;
+    }
+    renderAllowlistManager();
+    renderTestPhaseSelector();
+    markDirty();
+    return publicationDetail();
+  }
+
   function publicationDetail() {
     if (!state.originalGetForgeState) return null;
     const snap = state.originalGetForgeState();
@@ -956,6 +972,7 @@
   window.RelicForgeStudioR13 = Object.freeze({
     getPublicationDetail: publicationDetail,
     getAllowlistPhases: () => state.phases.map(serializePhase),
+    applyResumedPhaseBindings,
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);

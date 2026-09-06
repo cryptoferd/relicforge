@@ -40,7 +40,23 @@
     'function validatedRecipeCursor() view returns(uint64)',
     'function sealContent(bytes32 provenanceHash)',
     'function contentSealed() view returns(bool)',
-    'function provenanceHash() view returns(bytes32)'
+    'function provenanceHash() view returns(bytes32)',
+    'function creator() view returns(address)',
+    'function maxSupply() view returns(uint32)',
+    'function canvasWidth() view returns(uint16)',
+    'function canvasHeight() view returns(uint16)',
+    'function layerCount() view returns(uint8)',
+    'function oneOfOneLayerPlusOne() view returns(uint8)',
+    'function recipeCount() view returns(uint32)',
+    'function recipesPerShard() view returns(uint16)',
+    'function placeholderShard() view returns(address)',
+    'function layerNames(uint8) view returns(string)',
+    'function layerHiddenFromMetadata(uint8) view returns(bool)',
+    'function traitDetails(uint8,uint8) view returns(string,address,uint32,uint32,uint8,bool,bool)',
+    'function oneOfOneMetadata(uint8) view returns(string,string,bool)',
+    'function oneOfOneAttributeCount(uint8) view returns(uint16)',
+    'function oneOfOneAttribute(uint8,uint16) view returns(string,string)',
+    'function readPlaceholder() view returns(bytes)'
   ];
 
   const V1_COLLECTION_ABI = [
@@ -134,6 +150,9 @@
     'function requestRandomnessForBatch(uint64 batchId) returns(uint256 requestId)', 'function settleReady(uint32 maxTokens) returns(uint32 tokensSettled)',
     'function withdraw()', 'function tokenURI(uint256 tokenId) view returns(string)', 'function ownerOf(uint256 tokenId) view returns(address)',
     'function contractURI() view returns(string)',
+    'function flattenedRenderBaseURI() view returns(string)',
+    'function holderRenderModeEnabled() view returns(bool)',
+    'function defaultRenderMode() view returns(uint8)',
     'event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)',
     'event DelayedRevealRequested(uint256 indexed requestId,uint32 revealedSupply,uint256 randomnessCost)',
     'event ForgeReservationCreated(uint64 indexed reservationId,uint64 indexed batchId,address indexed payer,address recipient,uint32 quantity,uint256 creatorValue,bool creatorTeamMint)',
@@ -208,11 +227,59 @@
     launchedSelected: null,
     dashboardMintPageImageFile: null,
     dashboardMintPageBannerFile: null,
+    deploymentJournal: null,
   };
 
   function bridge() {
     if (!window.RelicForgeStudioBridge) throw new Error('Studio bridge is unavailable. Reload the page.');
     return window.RelicForgeStudioBridge;
+  }
+
+
+  const DEPLOYMENT_JOURNAL_STORAGE_KEY = 'relicforge_v2_deployment_journals_v1';
+
+  function cloneDeploymentJournal(value) { return value ? JSON.parse(JSON.stringify(value)) : null; }
+  function deploymentJournalMap() { try { return JSON.parse(localStorage.getItem(DEPLOYMENT_JOURNAL_STORAGE_KEY) || '{}') || {}; } catch { return {}; } }
+  function persistDeploymentJournal(journal) {
+    forgeState.deploymentJournal = journal ? cloneDeploymentJournal(journal) : null;
+    if (journal?.provenance) {
+      const map = deploymentJournalMap();
+      map[String(journal.provenance).toLowerCase()] = cloneDeploymentJournal(journal);
+      try { localStorage.setItem(DEPLOYMENT_JOURNAL_STORAGE_KEY, JSON.stringify(map)); } catch {}
+    }
+    window.dispatchEvent(new CustomEvent('relicforge:deployment-checkpoint', { detail: { journal: cloneDeploymentJournal(forgeState.deploymentJournal) } }));
+    return forgeState.deploymentJournal;
+  }
+  function findLocalDeploymentJournal(provenance) { if (!provenance) return null; return cloneDeploymentJournal(deploymentJournalMap()[String(provenance).toLowerCase()] || null); }
+  function beginDeploymentJournal(compiled, factoryAddress) {
+    const prior = forgeState.deploymentJournal?.provenance === compiled.provenance ? forgeState.deploymentJournal : findLocalDeploymentJournal(compiled.provenance);
+    if (prior?.collectionAddress && prior.status !== 'complete') throw new Error('An incomplete deployment already exists for this compiled build. Use Resume Deployment instead of creating a duplicate collection.');
+    if (prior?.collectionAddress && prior.status === 'complete') throw new Error('This compiled build is already associated with a completed deployment. Open the existing collection instead of forging a duplicate.');
+    return persistDeploymentJournal({schema:'relic-forge/deployment-journal@1',chainId:11155111,provenance:compiled.provenance,factory:factoryAddress,collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,status:'creating',steps:{},startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastError:null});
+  }
+  function adoptDeploymentJournal(partial) {
+    const existing = forgeState.deploymentJournal || findLocalDeploymentJournal(partial?.provenance) || {};
+    return persistDeploymentJournal({...existing,schema:'relic-forge/deployment-journal@1',chainId:11155111,...partial,steps:{...(existing.steps||{}),...(partial?.steps||{})},startedAt:existing.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()});
+  }
+  function bindDeploymentJournal(collectionAddress,dataAddress,mintPhasesAddress,txHash) {
+    const j=forgeState.deploymentJournal||{};
+    return persistDeploymentJournal({...j,collectionAddress,dataAddress,mintPhasesAddress,status:'partial',steps:{...(j.steps||{}),factoryCreate:{label:'Create R12-v2 Collection + ProjectData + MintPhases',txHash,status:'confirmed',confirmedAt:new Date().toISOString()}},updatedAt:new Date().toISOString(),lastError:null});
+  }
+  function checkpointExternalDeployment(key,txHash,label) {
+    if(!forgeState.deploymentJournal)return null;
+    const j=forgeState.deploymentJournal;
+    return persistDeploymentJournal({...j,steps:{...(j.steps||{}),[String(key||label||'step')]:{label:String(label||key||'Deployment step'),txHash:txHash||null,status:'confirmed',confirmedAt:new Date().toISOString()}},updatedAt:new Date().toISOString(),lastError:null});
+  }
+  function setDeploymentStatus(status,lastError=null) { if(!forgeState.deploymentJournal)return null; return persistDeploymentJournal({...forgeState.deploymentJournal,status,updatedAt:new Date().toISOString(),lastError:lastError||null}); }
+  function getDeploymentJournal(){return cloneDeploymentJournal(forgeState.deploymentJournal);}
+  function getResumeContext(){return {compiled:forgeState.compiled,provider:forgeState.provider,signer:forgeState.signer,wallet:forgeState.wallet,collectionAddress:forgeState.collectionAddress,dataAddress:forgeState.dataAddress,mintPhasesAddress:forgeState.mintPhasesAddress,publicPhaseId:forgeState.publicPhaseId,whitelistPhaseId:forgeState.whitelistPhaseId,journal:getDeploymentJournal(),config:canonicalV1Config(),projectState:getForgeProjectState()};}
+  function applyResumeBindings(next={}) {
+    if(next.collectionAddress&&window.ethers?.isAddress(next.collectionAddress)){forgeState.collectionAddress=window.ethers.getAddress(next.collectionAddress);if($('forgedCollectionAddress'))$('forgedCollectionAddress').textContent=forgeState.collectionAddress;if($('forgedEtherscanLink'))$('forgedEtherscanLink').href='https://sepolia.etherscan.io/address/'+forgeState.collectionAddress;$('forgeResult')?.classList.remove('hidden');if($('viewerCollectionAddress'))$('viewerCollectionAddress').value=forgeState.collectionAddress;}
+    if(next.dataAddress&&window.ethers?.isAddress(next.dataAddress))forgeState.dataAddress=window.ethers.getAddress(next.dataAddress);
+    if(next.mintPhasesAddress&&window.ethers?.isAddress(next.mintPhasesAddress))forgeState.mintPhasesAddress=window.ethers.getAddress(next.mintPhasesAddress);
+    if('publicPhaseId' in next)forgeState.publicPhaseId=next.publicPhaseId?Number(next.publicPhaseId):null;
+    if('whitelistPhaseId' in next)forgeState.whitelistPhaseId=next.whitelistPhaseId?Number(next.whitelistPhaseId):null;
+    if(forgeState.deploymentJournal)adoptDeploymentJournal({collectionAddress:forgeState.collectionAddress,dataAddress:forgeState.dataAddress,mintPhasesAddress:forgeState.mintPhasesAddress,publicPhaseId:forgeState.publicPhaseId,whitelistPhaseId:forgeState.whitelistPhaseId});
   }
 
   function esc(value) {
@@ -1896,6 +1963,7 @@ ${await file.text()}`;
     steps[index].status = 'done';
     steps[index].label = label;
     renderDeployProgress(steps);
+    checkpointExternalDeployment(label, tx.hash, label);
     return receipt;
   }
 
@@ -1994,6 +2062,7 @@ ${await file.text()}`;
         c.core.name, c.core.symbol, c.core.description, c.recipeCount, c.core.canvas[0], c.core.canvas[1], c.layerDefs.length,
         payoutWallet, royaltyWallet, royaltyBps, feeMode, currentRevealMode(), randomnessQuote.batchWindowSeconds, randomnessQuote.ceiling
       ];
+      beginDeploymentJournal(c, cfg.factory);
       if (forgeButton) forgeButton.textContent = 'Confirm Forge in Wallet...';
       const createTx = await factory.createCollectionV2(launchConfig, { value: feeMode === V1_FEE_MODE_SPONSORED ? upfrontFeeWei : 0n });
       if (forgeButton) forgeButton.textContent = 'Forging on Sepolia...';
@@ -2009,6 +2078,7 @@ ${await file.text()}`;
       forgeState.dataAddress = window.ethers.getAddress(dataAddress);
       forgeState.mintPhasesAddress = window.ethers.getAddress(await factory.mintPhasesForCollection(forgeState.collectionAddress));
       forgeState.publicPhaseId = null; forgeState.whitelistPhaseId = null; forgeState.masterMintArmed = false;
+      bindDeploymentJournal(forgeState.collectionAddress, forgeState.dataAddress, forgeState.mintPhasesAddress, createTx.hash);
       const collection = collectionContract();
       const boundMintPhases = window.ethers.getAddress(await collection.mintPhases());
       if (boundMintPhases.toLowerCase() !== forgeState.mintPhasesAddress.toLowerCase()) throw new Error('Factory/Collection MintPhases binding mismatch.');
@@ -2080,11 +2150,12 @@ ${await file.text()}`;
         'R12-v2 collection forged.\nCollection: ' + forgeState.collectionAddress + '\nProjectData: ' + forgeState.dataAddress + '\nMintPhases: ' + forgeState.mintPhasesAddress + '\nReveal: ' + (currentRevealMode() === 0 ? 'Deferred Reveal' : 'Forge Reveal') + '\nPlatform fee: ' + (feeMode === V1_FEE_MODE_SPONSORED ? 'Creator Covers Platform Fee' : 'Collector Covers Platform Fee') + ' - base ' + (Number(lockedFeeCents)/100) + ' USD/NFT\nRandomness quote: ' + window.ethers.formatEther(randomnessQuote.price) + ' ETH; ceiling: ' + window.ethers.formatEther(randomnessQuote.ceiling) + ' ETH\nMinting: ' + (masterMintEnabled ? 'ON (phase timestamps still enforced)' : 'OFF (manual enable required)'),
         true
       );
+      setDeploymentStatus('base-complete');
       if (forgeButton) {
         forgeButton.disabled = true;
         forgeButton.textContent = 'Collection Forged';
       }
-      bridge().showStatus?.('R12-v2 collection forged on Sepolia. Public collector-page publishing remains blocked until R2.', 'success');
+      bridge().showStatus?.('R12-v2 base collection deployment confirmed on Sepolia.', 'success');
     } catch (error) {
       const partial = forgeState.collectionAddress ? '\nPartial R12-v2 collection: ' + forgeState.collectionAddress : '';
       const message = error.shortMessage || error.message;
@@ -2094,9 +2165,10 @@ ${await file.text()}`;
       if (createdThisAttempt) {
         if (forgeButton) {
           forgeButton.disabled = true;
-          forgeButton.textContent = 'Partial Forge - Do Not Reforge';
+          forgeButton.textContent = 'Deployment Interrupted - Resume Below';
         }
-        bridge().showStatus?.('Forge stopped after the R12-v2 collection was created. Do not forge a duplicate; keep the displayed collection address for troubleshooting.', 'error');
+        setDeploymentStatus('partial', message);
+        bridge().showStatus?.('Forge paused after the R12-v2 collection was created. Use Resume Deployment to continue from confirmed Sepolia state; do not create a duplicate.', 'error');
       } else {
         if (forgeButton) {
           forgeButton.disabled = false;
@@ -3519,6 +3591,7 @@ ${await file.text()}`;
       mintPhasesAddress: forgeState.mintPhasesAddress || null,
       publicPhaseId: forgeState.publicPhaseId,
       whitelistPhaseId: forgeState.whitelistPhaseId,
+      deploymentJournal: cloneDeploymentJournal(forgeState.deploymentJournal),
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
@@ -3534,6 +3607,8 @@ ${await file.text()}`;
 
   function restoreForgeProjectState(saved, options = {}) {
     if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4', 'relic-forge/forge-settings@5', 'relic-forge/forge-settings@6'].includes(saved.schema)) return;
+    forgeState.deploymentJournal = saved.deploymentJournal ? cloneDeploymentJournal(saved.deploymentJournal) : null;
+    if (forgeState.deploymentJournal) persistDeploymentJournal(forgeState.deploymentJournal);
     const values = {
       launchName: saved.launchName,
       launchSymbol: saved.launchSymbol,
@@ -3799,7 +3874,7 @@ ${await file.text()}`;
     }
   }
 
-  window.RelicForgeForge = { version: '11.1.6', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet };
+  window.RelicForgeForge = { version: '11.1.6-r24-resume', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();
