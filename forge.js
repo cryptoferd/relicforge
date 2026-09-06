@@ -419,6 +419,11 @@
 
   async function openMintPage() {
     try {
+      if (forgeState.collectionAddress && await isCanonicalV2Collection(forgeState.collectionAddress)) {
+        window.open(`./mint.html?contract=${encodeURIComponent(forgeState.collectionAddress)}&chain=11155111`, '_blank', 'noopener');
+        if ($('mintPageStatus')) $('mintPageStatus').textContent = 'R12-v2 collector mint page opened.';
+        return;
+      }
       const config = await persistMintPageConfig();
       if (window.RelicForgeCloud?.enabled?.()) {
         if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing current mint page settings globally…';
@@ -2066,8 +2071,10 @@ ${await file.text()}`;
       if ($('forgeDeferredRevealBtn')) $('forgeDeferredRevealBtn').disabled = currentRevealMode() !== 0;
       ['forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn'].forEach(id => { if ($(id)) $(id).disabled = currentRevealMode() !== 1; });
       if ($('forgeInspectBtn')) $('forgeInspectBtn').disabled = false;
-      ['openMintPageBtn','publishMintPageBtn','downloadMintPageBtn'].forEach(id => { if ($(id)) $(id).disabled = true; });
-      if ($('mintPageStatus')) $('mintPageStatus').textContent = 'R12-v2 collection forged. Collector mint-page publishing is intentionally disabled until the V2 R2 mint-page adapter is installed.';
+      if ($('openMintPageBtn')) { $('openMintPageBtn').disabled = false; $('openMintPageBtn').textContent = 'Open Mint Page'; }
+      if ($('publishMintPageBtn')) { $('publishMintPageBtn').disabled = !window.RelicForgeCloud?.enabled?.(); $('publishMintPageBtn').textContent = 'Sync Mint Page'; }
+      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = true;
+      if ($('mintPageStatus')) $('mintPageStatus').textContent = 'R12-v2 collection forged. Open the collector page now; Approved Wallet proofs sync after all configured MintPhases transactions confirm.';
 
       log('forgeTestStatus',
         'R12-v2 collection forged.\nCollection: ' + forgeState.collectionAddress + '\nProjectData: ' + forgeState.dataAddress + '\nMintPhases: ' + forgeState.mintPhasesAddress + '\nReveal: ' + (currentRevealMode() === 0 ? 'Deferred Reveal' : 'Forge Reveal') + '\nPlatform fee: ' + (feeMode === V1_FEE_MODE_SPONSORED ? 'Creator Covers Platform Fee' : 'Collector Covers Platform Fee') + ' - base ' + (Number(lockedFeeCents)/100) + ' USD/NFT\nRandomness quote: ' + window.ethers.formatEther(randomnessQuote.price) + ' ETH; ceiling: ' + window.ethers.formatEther(randomnessQuote.ceiling) + ' ETH\nMinting: ' + (masterMintEnabled ? 'ON (phase timestamps still enforced)' : 'OFF (manual enable required)'),
@@ -3113,22 +3120,32 @@ ${await file.text()}`;
 
   function v2PhaseRows(snap, canControl) {
     if (!snap.phases.length) return '<div class="forge-market-empty">No MintPhases stages created yet.</div>';
-    return snap.phases.map(p => '<div class="launched-section" data-v2-phase-row="' + p.id + '">' +
-      '<div class="launched-stats"><div><span>Stage</span><strong>#' + p.id + ' ' + (p.accessType === 1 ? 'APPROVED WALLETS' : 'PUBLIC') + '</strong></div><div><span>State</span><strong>' + (p.open ? 'OPEN' : (p.enabled ? 'ENABLED' : 'DISABLED')) + '</strong></div><div><span>Minted</span><strong>' + p.minted + (p.phaseSupply ? ' / ' + p.phaseSupply : '') + '</strong></div></div>' +
-      '<div class="launched-controls-grid">' +
-      '<label class="field"><span>Price ETH</span><input id="v2PhasePrice-' + p.id + '" value="' + esc(window.ethers.formatEther(p.price)) + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>Start unix</span><input id="v2PhaseStart-' + p.id + '" type="number" value="' + p.startTime + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>End unix (0 none)</span><input id="v2PhaseEnd-' + p.id + '" type="number" value="' + p.endTime + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>Stage supply (0 none)</span><input id="v2PhaseSupply-' + p.id + '" type="number" value="' + p.phaseSupply + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>Max / wallet (0 none)</span><input id="v2PhaseWallet-' + p.id + '" type="number" value="' + p.maxPerWallet + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>Merkle root</span><input id="v2PhaseRoot-' + p.id + '" value="' + esc(p.merkleRoot) + '" ' + (canControl?'':'disabled') + '/></label>' +
-      '<label class="field"><span>Access</span><select id="v2PhaseAccess-' + p.id + '" ' + (canControl?'':'disabled') + '><option value="0" ' + (p.accessType===0?'selected':'') + '>Public</option><option value="1" ' + (p.accessType===1?'selected':'') + '>Approved Wallets</option></select></label>' +
-      '<label class="field"><span>Priority</span><input id="v2PhasePriority-' + p.id + '" type="number" value="' + p.priority + '" ' + (canControl?'':'disabled') + '/></label></div>' +
-      '<div class="launched-actions"><button class="primary-btn" data-v2-phase-save="' + p.id + '" ' + (canControl?'':'disabled') + '>Save Stage</button><button class="ghost-btn" data-v2-phase-toggle="' + p.id + '" ' + (canControl?'':'disabled') + '>' + (p.enabled?'Disable':'Enable') + ' Stage</button></div></div>').join('');
+    return snap.phases.map(p => {
+      const access = p.accessType === 1 ? 'Approved Wallets' : 'Public';
+      const rootValue = p.accessType === 1 ? p.merkleRoot : 'Not used for Public stages';
+      return '<div class="launched-section" data-v2-phase-row="' + p.id + '">' +
+        '<div class="launched-stats"><div><span>Stage</span><strong>#' + p.id + ' ' + (p.accessType === 1 ? 'APPROVED WALLETS' : 'PUBLIC') + '</strong></div><div><span>State</span><strong>' + (p.open ? 'OPEN' : (p.enabled ? 'ENABLED' : 'DISABLED')) + '</strong></div><div><span>Minted</span><strong>' + p.minted + (p.phaseSupply ? ' / ' + p.phaseSupply : '') + '</strong></div></div>' +
+        '<div class="launched-controls-grid">' +
+        '<label class="field"><span>Price ETH</span><input id="v2PhasePrice-' + p.id + '" value="' + esc(window.ethers.formatEther(p.price)) + '" ' + (canControl?'':'disabled') + '/></label>' +
+        '<label class="field"><span>Start date / time</span><input id="v2PhaseStart-' + p.id + '" type="datetime-local" value="' + esc(dashboardPhaseLocal(p.startTime)) + '" ' + (canControl?'':'disabled') + '/><small>' + esc(dashboardPhaseTimeLabel(p.startTime,'Starts immediately when minting is enabled')) + '</small></label>' +
+        '<label class="field"><span>End date / time</span><input id="v2PhaseEnd-' + p.id + '" type="datetime-local" value="' + esc(dashboardPhaseLocal(p.endTime)) + '" ' + (!p.endTime?'disabled ':'') + (canControl?'':'disabled') + '/><small>' + esc(dashboardPhaseTimeLabel(p.endTime,'No automatic end')) + '</small></label>' +
+        '<label class="project-toggle-row r2-no-end-toggle"><span><strong>No end date</strong><small>Keep this stage open until disabled manually.</small></span><input id="v2PhaseNoEnd-' + p.id + '" data-v2-no-end="' + p.id + '" type="checkbox" ' + (!p.endTime?'checked ':'') + (canControl?'':'disabled') + '/></label>' +
+        '<label class="field"><span>Stage supply (0 = unlimited)</span><input id="v2PhaseSupply-' + p.id + '" type="number" min="0" value="' + p.phaseSupply + '" ' + (canControl?'':'disabled') + '/></label>' +
+        '<label class="field"><span>Max / wallet (0 = unlimited)</span><input id="v2PhaseWallet-' + p.id + '" type="number" min="0" value="' + p.maxPerWallet + '" ' + (canControl?'':'disabled') + '/></label>' +
+        '<label class="field r2-readonly-field"><span>Access</span><input type="text" readonly value="' + esc(access) + '"/><small>Locked to the stage type created in Studio.</small></label>' +
+        '<label class="field r2-readonly-field"><span>Allowlist verification root</span><input type="text" readonly value="' + esc(rootValue) + '"/><small>' + (p.accessType===1?'Auto-generated from the Approved Wallet list. Editing it manually could invalidate proofs.':'Public stages do not use a Merkle root.') + '</small></label>' +
+        '<label class="field r2-readonly-field"><span>Priority</span><input type="text" readonly value="Auto · ' + p.priority + '"/><small>Relic Forge manages stage priority automatically.</small></label>' +
+        '</div>' +
+        '<div class="launched-actions"><button class="primary-btn" data-v2-phase-save="' + p.id + '" ' + (canControl?'':'disabled') + '>Save Stage</button><button class="ghost-btn" data-v2-phase-toggle="' + p.id + '" ' + (canControl?'':'disabled') + '>' + (p.enabled?'Disable':'Enable') + ' Stage</button></div></div>';
+    }).join('');
   }
 
   async function handleV2LaunchedAction(action, snap) {
     try {
+      if (action === 'mintpage') {
+        window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
+        return;
+      }
       if (!forgeState.signer) await connectWallet();
       const collection = new window.ethers.Contract(snap.address, V2_COLLECTION_ABI, forgeState.signer);
       const phases = new window.ethers.Contract(snap.mintPhasesAddress, V2_MINT_PHASES_ABI, forgeState.signer);
@@ -3161,10 +3178,28 @@ ${await file.text()}`;
       '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="'+(snap.masterMintEnabled?'ghost-btn danger-btn':'primary-btn')+'" data-v2-dashboard-action="mastermint" '+(canControl?'':'disabled')+'>'+(snap.masterMintEnabled?'Pause Minting':'Enable Minting')+'</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="50" value="1" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" '+(canControl?'':'disabled')+'>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="'+esc(snap.payoutReceiver)+'" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="payout" '+(canControl?'':'disabled')+'>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="'+esc(snap.royaltyReceiver)+'" '+(canControl?'':'disabled')+'/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="'+(snap.royaltyBps/100).toFixed(2)+'" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" '+(canControl?'':'disabled')+'>Update Royalty</button></div></div>'+
       '<div class="launched-section"><h4>Reveal execution</h4><div class="launched-stats"><div><span>Delayed requested</span><strong>'+(snap.delayedRevealRequested?'YES':'NO')+'</strong></div><div><span>Delayed revealed</span><strong>'+(snap.delayedRevealed?'YES':'NO')+'</strong></div><div><span>Unrequested locked batches</span><strong>'+snap.unrequestedLockedBatches+'</strong></div><div><span>Locked unsettled</span><strong>'+snap.lockedUnsettledBatches+'</strong></div></div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="deferredreveal" '+(canControl&&snap.futureRevealMode===0&&!snap.delayedRevealRequested&&snap.totalMinted>0?'':'disabled')+'>Request Deferred Reveal</button><button class="ghost-btn" data-v2-dashboard-action="lockbatch">Lock Timed-Out Batch</button><label class="field"><span>Batch ID</span><input id="dashboardV2BatchId" type="number" min="1" value="'+(nextBatch?.id||Math.max(1,snap.nextSettleBatchId))+'"/></label><button class="ghost-btn" data-v2-dashboard-action="requestbatch">Request Randomness</button><label class="field"><span>Local request ID</span><input id="dashboardV2RequestId" type="number" min="1" value="'+(nextBatch&&nextBatch.requestId>0n?nextBatch.requestId.toString():(snap.delayedRevealRequestId>0n?snap.delayedRevealRequestId.toString():''))+'"/></label><button class="ghost-btn" data-v2-dashboard-action="replay">Replay Verified Word</button><label class="field"><span>Settle max</span><input id="dashboardV2SettleMax" type="number" min="1" value="100"/></label><button class="ghost-btn" data-v2-dashboard-action="settle">Settle Ready</button></div><small class="forge-footnote">Request gas: 1,500,000. Replay gas: 1,000,000. Replay is only reported successful after deliveredForLocalRequest is true.</small></div>'+
       '<div class="launched-section"><h4>MintPhases stages</h4>'+v2PhaseRows(snap,canControl)+'<div class="prototype-note"><strong>Create new stages in Studio R1</strong><p>Existing stages can be updated, enabled, or disabled here. Initial Public / Approved Wallet stage creation is handled during the R12-v2 Studio launch flow in R1.</p></div></div>'+
-      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">R12-v2 mint-page publishing is intentionally disabled in Creator UI R1. The V2 R2 collector-page rewrite must be installed before publishing.</div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
+      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">R12-v2 MintPhases-aware collector page is available at a permanent collection URL. Approved Wallet proof tables are synced from the saved Studio project.</div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/'+esc(snap.address)+'" rel="noreferrer" target="_blank">View on Etherscan</a></div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
     detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button=>button.addEventListener('click',()=>handleV2LaunchedAction(button.dataset.v2DashboardAction,snap)));
     detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button=>button.addEventListener('click',async()=>{try{const id=Number(button.dataset.v2PhaseToggle);const p=snap.phases.find(x=>x.id===id);const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);const tx=await mp.setPhaseEnabled(id,!p.enabled);await tx.wait();await openLaunchedCollection(snap.address);}catch(error){launchedStatus('Stage toggle: '+(error.shortMessage||error.message));}}));
-    detail.querySelectorAll('[data-v2-phase-save]').forEach(button=>button.addEventListener('click',async()=>{try{const id=Number(button.dataset.v2PhaseSave);const price=window.ethers.parseEther(String($('v2PhasePrice-'+id)?.value||0));const start=Math.max(0,Math.floor(Number($('v2PhaseStart-'+id)?.value||0)));const end=Math.max(0,Math.floor(Number($('v2PhaseEnd-'+id)?.value||0)));const supply=Math.max(0,Math.floor(Number($('v2PhaseSupply-'+id)?.value||0)));const wallet=Math.max(0,Math.floor(Number($('v2PhaseWallet-'+id)?.value||0)));const root=String($('v2PhaseRoot-'+id)?.value||window.ethers.ZeroHash).trim();const access=Number($('v2PhaseAccess-'+id)?.value||0);const priority=Math.max(0,Math.floor(Number($('v2PhasePriority-'+id)?.value||0)));if(access===1&&!/^0x[0-9a-fA-F]{64}$/.test(root))throw new Error('Approved Wallet stage requires a bytes32 Merkle root.');const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);const tx=await mp.updatePhase(id,price,start,end,supply,wallet,access===0?window.ethers.ZeroHash:root,access,priority);await tx.wait();await openLaunchedCollection(snap.address);}catch(error){launchedStatus('Stage update: '+(error.shortMessage||error.message));}}));
+    detail.querySelectorAll('[data-v2-no-end]').forEach(toggle=>toggle.addEventListener('change',()=>{const id=Number(toggle.dataset.v2NoEnd);const endInput=$('v2PhaseEnd-'+id);if(endInput){endInput.disabled=toggle.checked||!canControl;if(toggle.checked)endInput.value='';}}));
+    detail.querySelectorAll('[data-v2-phase-save]').forEach(button=>button.addEventListener('click',async()=>{try{
+      const id=Number(button.dataset.v2PhaseSave);
+      const p=snap.phases.find(row=>row.id===id);
+      if(!p)throw new Error('Stage was not found.');
+      const parseDate=(fieldId,label,allowBlank=true)=>{const raw=String($(fieldId)?.value||'').trim();if(!raw){if(allowBlank)return 0;throw new Error(label+' is required.');}const date=new Date(raw);if(!Number.isFinite(date.getTime()))throw new Error(label+' is invalid.');return Math.floor(date.getTime()/1000);};
+      const price=window.ethers.parseEther(String($('v2PhasePrice-'+id)?.value||0));
+      const start=parseDate('v2PhaseStart-'+id,'Start date/time',true);
+      const noEnd=!!$('v2PhaseNoEnd-'+id)?.checked;
+      const end=noEnd?0:parseDate('v2PhaseEnd-'+id,'End date/time',false);
+      if(end&&end<=start)throw new Error('End date/time must be later than the start.');
+      const supply=Math.max(0,Math.floor(Number($('v2PhaseSupply-'+id)?.value||0)));
+      const wallet=Math.max(0,Math.floor(Number($('v2PhaseWallet-'+id)?.value||0)));
+      const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);
+      launchedStatus('Updating Stage '+id+' without changing its access type, verification root, or priority…');
+      const tx=await mp.updatePhase(id,price,start,end,supply,wallet,p.merkleRoot,p.accessType,p.priority);
+      await tx.wait();
+      await openLaunchedCollection(snap.address);
+    }catch(error){launchedStatus('Stage update: '+(error.shortMessage||error.message));}}));
   }
   async function openLaunchedCollection(address) {
     try {

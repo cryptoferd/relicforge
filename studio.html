@@ -587,14 +587,14 @@
     <article class="forge-workbench-card mint-page-builder-card">
       <div class="forge-card-heading">
         <div><span>PUBLIC MINT PAGE</span><h3>Customize the minter experience</h3></div>
-        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">V2 Mint Page in R2</button><button class="primary-btn" disabled id="publishMintPageBtn" type="button">Publishing Disabled in R1</button><button class="ghost-btn" disabled id="downloadMintPageBtn" type="button">V2 Export in R2</button></div>
+        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">Open Mint Page</button><button class="primary-btn" disabled id="publishMintPageBtn" type="button">Sync Mint Page</button><button class="ghost-btn" disabled id="downloadMintPageBtn" type="button">Standalone Export Later</button></div>
       </div>
       <div class="mint-page-builder-grid">
         <div class="mint-page-media-settings">
           <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageImageInput" type="file"/></label>
           <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageBannerInput" type="file"/></label>
-          <div class="prototype-note"><strong>Public mint only</strong><p>Creator UI R1 intentionally blocks the old V1 collector page for R12-v2 collections. The dedicated V2 collector-page R2 rewrite will understand MintPhases and Forge reservations.</p></div>
-          <div class="forge-inline-status" id="mintPageStatus">Preview-only in R1. Publishing/export remains disabled for R12-v2 until the dedicated collector mint-page R2 adapter is installed.</div>
+          <div class="prototype-note"><strong>R12-v2 collector page</strong><p>The collector page reads MintPhases directly, supports multiple Approved Wallet stages, and understands Forge reservations.</p></div>
+          <div class="forge-inline-status" id="mintPageStatus">Forge the collection to activate its permanent mint-page link. Approved Wallet proofs sync through RelicForge Cloud.</div>
         </div>
         <div class="mint-page-studio-preview">
           <div class="mint-page-preview-banner" id="mintPagePreviewBanner"><span>BANNER</span></div>
@@ -869,6 +869,7 @@
   </section>
 </div>
 
+  <link rel="stylesheet" href="./studio-r2.css?v=r12v2-r2-1"/>
   <script src="./relicforge-config.js?v=11.1.6"></script>
 
   <script src="./relicforge-v2-addresses.js?v=r12v2-r1"></script>
@@ -884,6 +885,7 @@
   <script src="./rc47b-bootstrap.js?v=rc4.7c" defer></script>
   <script src="./rc47b-studio.js?v=rc4.7b" defer></script>
   <script src="./studio-shell.js?v=reliquary1-forgeclickfix1" defer></script>
+  <script src="./studio-r2.js?v=r12v2-r2-1" defer></script>
   <script src="./creator-controls-complete.js?v=ux2-event1-encoding1"></script>
   <script src="./relicforge-language.js?v=ux2-encoding1"></script>
 </body>

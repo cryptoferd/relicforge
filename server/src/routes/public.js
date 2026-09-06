@@ -96,9 +96,26 @@ export default async function publicRoutes(app) {
 
   app.get('/api/public/whitelist/:chainId/:contract/:wallet', async (request, reply) => {
     const chainId = Number(request.params.chainId), contract = address(request.params.contract), wallet = address(request.params.wallet);
-    const row = await one('SELECT allowance,proof FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2 AND wallet=$3', [chainId, contract, wallet]);
+    const row = await one('SELECT allowance,proof FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2 AND phase_id=0 AND wallet=$3', [chainId, contract, wallet]);
     reply.header('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
     return row ? { eligible: true, wallet: getAddress(wallet), allowance: Number(row.allowance), proof: row.proof || [] } : { eligible: false, wallet: getAddress(wallet), allowance: 0, proof: [] };
+  });
+
+
+  app.get('/api/public/v2/whitelist/:chainId/:contract/:phaseId/:wallet', async (request, reply) => {
+    const chainId=Number(request.params.chainId),contract=address(request.params.contract),phaseId=Number(request.params.phaseId),holder=address(request.params.wallet);
+    if(!Number.isInteger(phaseId)||phaseId<1)return reply.code(400).send({error:'Invalid MintPhases stage id.'});
+    const row=await one(
+      `SELECT w.merkle_root,e.allowance,e.proof
+       FROM whitelists w
+       LEFT JOIN whitelist_entries e
+         ON e.chain_id=w.chain_id AND e.contract_address=w.contract_address AND e.phase_id=w.phase_id AND e.wallet=$4
+       WHERE w.chain_id=$1 AND w.contract_address=$2 AND w.phase_id=$3`,
+      [chainId,contract,phaseId,holder]
+    );
+    reply.header('Cache-Control','public, s-maxage=60, stale-while-revalidate=300');
+    if(!row)return {eligible:false,wallet:getAddress(holder),phaseId,allowance:0,proof:[]};
+    return {eligible:Boolean(row.allowance),wallet:getAddress(holder),phaseId,merkleRoot:row.merkle_root,allowance:Number(row.allowance||0),proof:row.proof||[]};
   });
 
   app.get('/api/public/assets/:id', async (request, reply) => {

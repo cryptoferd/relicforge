@@ -555,11 +555,11 @@ export default async function rc47bRoutes(app) {
       await client.query(
         `INSERT INTO whitelists(chain_id,contract_address,merkle_root,phase_id,source_type,source_chain_id,source_contract,snapshot_block)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT(chain_id,contract_address) DO UPDATE
+         ON CONFLICT(chain_id,contract_address,phase_id) DO UPDATE
          SET merkle_root=EXCLUDED.merkle_root,phase_id=EXCLUDED.phase_id,source_type=EXCLUDED.source_type,source_chain_id=EXCLUDED.source_chain_id,source_contract=EXCLUDED.source_contract,snapshot_block=EXCLUDED.snapshot_block,updated_at=now()`,
         [chainId, contractAddress.toLowerCase(), root, phaseId, Number(request.body?.sourceType || 0), Number(request.body?.sourceChainId || 0), request.body?.sourceContract || null, Number(request.body?.snapshotBlock || 0)]
       );
-      await client.query('DELETE FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2', [chainId, contractAddress.toLowerCase()]);
+      await client.query('DELETE FROM whitelist_entries WHERE chain_id=$1 AND contract_address=$2 AND phase_id=$3', [chainId, contractAddress.toLowerCase(), phaseId]);
       for (let i = 0; i < normalized.length; i += 500) {
         const batch = normalized.slice(i, i + 500);
         if (!batch.length) continue;

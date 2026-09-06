@@ -659,6 +659,41 @@
     return { root: layers[layers.length - 1][0], entries, proofByAddress };
   }
 
+
+  function publicationDetail() {
+    if (!state.originalGetForgeState) return null;
+    const snap = state.originalGetForgeState();
+    if (!window.ethers?.isAddress(snap.collectionAddress || '') || !window.ethers?.isAddress(snap.mintPhasesAddress || '')) return null;
+    captureActivePhase();
+    const allowlists = [];
+    for (const phase of state.phases.filter(row => row.enabled !== false && row.phaseId && row.whitelist?.entries?.length)) {
+      const checked = validatePhaseForForge(phase);
+      const tree = buildBoundMerkle(checked.entries, snap.collectionAddress, phase.phaseId);
+      phase.root = tree.root;
+      allowlists.push({
+        phaseId: Number(phase.phaseId),
+        name: phase.name,
+        root: tree.root,
+        sourceType: Number(phase.whitelist?.sourceType || 0),
+        sourceChainId: Number(phase.whitelist?.sourceChainId || phase.sourceChain || 0),
+        sourceContract: phase.whitelist?.sourceContract || phase.collectionAddress || null,
+        snapshotBlock: Number(phase.whitelist?.snapshotBlock || 0),
+        entries: tree.entries.map(entry => ({
+          address: entry.address,
+          allowance: Number(entry.allowance),
+          proof: tree.proofByAddress[String(entry.address).toLowerCase()]?.proof || [],
+        })),
+      });
+    }
+    return {
+      chainId: 11155111,
+      collectionAddress: snap.collectionAddress,
+      mintPhasesAddress: snap.mintPhasesAddress,
+      publicPhaseId: snap.publicPhaseId ? Number(snap.publicPhaseId) : null,
+      allowlists,
+    };
+  }
+
   async function eip1193Provider() {
     if (window.RelicForgeWallets?.getProviderAsync) {
       const provider = await window.RelicForgeWallets.getProviderAsync({ allowChooser: false });
@@ -806,6 +841,8 @@
       'good'
     );
     window.RelicForgeStudioBridge?.showStatus?.('R12-v2 collection and configured allowlist phases forged. Save the project to preserve launch phase IDs.', 'success');
+    const launchDetail = publicationDetail();
+    if (launchDetail) window.dispatchEvent(new CustomEvent('relicforge:v2-launch-complete', { detail: launchDetail }));
   }
 
   function renderTestPhaseSelector() {
@@ -826,10 +863,14 @@
   function installTestPhaseSelector() {
     const button = $('forgeWhitelistMintBtn');
     if (!button || $('r13AllowlistTestPhase')) return;
+    const group = document.createElement('div');
+    group.className = 'r2-allowlist-test-group';
+    button.insertAdjacentElement('beforebegin', group);
     const label = document.createElement('label');
     label.className = 'field r13-test-phase';
-    label.innerHTML = '<span>Allowlist test phase</span><select id="r13AllowlistTestPhase"><option value="">No bound allowlist phases</option></select>';
-    button.insertAdjacentElement('beforebegin', label);
+    label.innerHTML = '<span>Approved Wallet stage</span><select id="r13AllowlistTestPhase"><option value="">No bound Approved Wallet stages</option></select>';
+    group.appendChild(label);
+    group.appendChild(button);
     $('r13AllowlistTestPhase')?.addEventListener('change', event => {
       const phaseId = Number(event.target.value || 0);
       const phase = state.phases.find(item => Number(item.phaseId) === phaseId);
@@ -911,6 +952,11 @@
     state.installed = true;
     document.body.dataset.r13Studio = 'multi-allowlist-nav';
   }
+
+  window.RelicForgeStudioR13 = Object.freeze({
+    getPublicationDetail: publicationDetail,
+    getAllowlistPhases: () => state.phases.map(serializePhase),
+  });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();

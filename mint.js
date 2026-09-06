@@ -619,6 +619,13 @@
 
   async function init(){
     await hydratePublishedConfig();
+    if(window.RelicForgeMintV2Adapter?.start){
+      const isV2=config.schema==='relic-forge/mint-page@3' || await window.RelicForgeMintV2Adapter.detect?.(config);
+      if(isV2){
+        await window.RelicForgeMintV2Adapter.start({...config,schema:'relic-forge/mint-page@3',protocol:'r12-v2'});
+        return;
+      }
+    }
     if(config.schema==='relic-forge/mint-page@2'&&window.RelicForgeMintV1Adapter?.start){
       await window.RelicForgeMintV1Adapter.start(config);
       return;
