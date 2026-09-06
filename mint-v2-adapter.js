@@ -361,6 +361,20 @@
     }
   }
 
+  async function mintSigner() {
+    const injected=await ensureChain();
+    app.browserProvider=new window.ethers.BrowserProvider(injected);
+    const signer=await app.browserProvider.getSigner();
+    const wallet=window.ethers.getAddress(await signer.getAddress());
+    if(!app.wallet || wallet.toLowerCase()!==app.wallet.toLowerCase()){
+      app.wallet=wallet;
+      app.proofs.clear();
+      if($('connectBtn')) $('connectBtn').textContent=short(app.wallet);
+    }
+    app.signer=signer;
+    return signer;
+  }
+
   async function connect() {
     let address;
     if(window.RelicForgeWallets?.requestAccount) address=await window.RelicForgeWallets.requestAccount({forceChooser:true});
@@ -380,6 +394,7 @@
 
   async function mintPhase(phaseId) {
     if(!app.wallet)await connect();
+    const signer=await mintSigner();
     await readState();
     const phase=app.phases.find(row=>row.id===Number(phaseId));
     if(!phase)throw new Error('Mint stage no longer exists.');
@@ -406,7 +421,8 @@
     const liveQuote=await app.mintPhases.quoteMint(phase.id,qty);
     const minimumValue=BigInt(liveQuote.minimumValue??liveQuote[2]);
     setStatus(`Confirm ${fmtEth(minimumValue)} for Stage ${phase.id} in your wallet.`);
-    const tx=await app.collection.mint(phase.id,qty,allowance,proof,{value:minimumValue});
+    const writeCollection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,signer);
+    const tx=await writeCollection.mint(phase.id,qty,allowance,proof,{value:minimumValue});
     setStatus(`Mint submitted: ${short(tx.hash)}. Waiting for confirmation…`);
     const receipt=await tx.wait();
     if(!receipt || Number(receipt.status)!==1)throw new Error('Mint transaction was not confirmed.');
