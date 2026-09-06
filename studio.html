@@ -516,26 +516,27 @@
 
     <div class="launch-card">
       <h3>Reveal</h3>
-      <label class="reveal-choice selected" data-reveal-card="0">
-        <input checked name="revealMode" type="radio" value="0"/>
-        <span><strong>Forge Reveal</strong><small>Each mint shows Relic Forge's forging placeholder until secure randomness assigns one remaining recipe.</small></span>
+      <label class="reveal-choice" data-reveal-card="0">
+        <input name="revealMode" type="radio" value="0"/>
+        <span><strong>Deferred Reveal</strong><small>Hidden NFTs mint immediately. One later verified Chainlink word permanently fixes the collection-wide assignment permutation.</small></span>
       </label>
-      <label class="reveal-choice" data-reveal-card="1">
-        <input name="revealMode" type="radio" value="1"/>
-        <span><strong>Deferred Reveal</strong><small>Minted tokens remain behind the forging placeholder until you request a Chainlink VRF reveal epoch.</small></span>
+      <label class="reveal-choice selected" data-reveal-card="1">
+        <input checked name="revealMode" type="radio" value="1"/>
+        <span><strong>Forge Reveal</strong><small>Collector mints create reservations. Batches are randomized later and settled in deterministic order.</small></span>
       </label>
-      <label class="compact-upload forge-placeholder-upload hidden" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
+      <label class="compact-upload forge-placeholder-upload" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
         <strong>Custom forging placeholder (optional)</strong>
-        <span id="creatorPlaceholderName">PNG, WEBP, JPG, GIF, or SVG</span>
-        <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="creatorPlaceholderInput" type="file"/>
+        <span id="creatorPlaceholderName">PNG, WEBP, JPG, or SVG</span>
+        <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="creatorPlaceholderInput" type="file"/>
       </label>
       <div class="prototype-note">
-        <strong>Fair assignment</strong>
-        <p>The canonical V1 stack uses Relic Forge's predeployed Chainlink VRF v2.5 direct-funded adapter. Randomness infrastructure is shared and immutable; each collection has isolated randomness credit.</p>
+        <strong>Verified randomness</strong>
+        <p>R12-v2 collector transactions never call Chainlink. The Collection funds later randomness requests from its reveal hopper first and may use only an exact bounded Reserve shortfall.</p>
       </div>
       <div class="vrf-credit-box">
-        <label class="field"><span>Initial VRF request budget</span><input id="vrfFundingRequests" min="1" max="100" step="1" type="number" value="5"/><small>Relic Forge funds enough collection-isolated Sepolia credit for this many VRF requests, plus a 20% buffer. You can add more later.</small></label>
-        <div class="forge-inline-status" id="vrfQuoteStatus">Loading Chainlink request price...</div>
+        <label class="field"><span>Forge batch window (seconds)</span><input id="batchWindowSeconds" min="1" max="86400" step="1" type="number" value="180"/><small>A full 20-NFT Forge batch locks automatically. A partial batch can be permissionlessly locked after this window.</small></label>
+        <label class="field"><span>Maximum randomness cost / batch (ETH)</span><input id="maxRandomnessCostPerBatchEth" min="0.000001" step="0.000001" type="number" value="0.02"/><small>The onchain request reverts if the live randomness quote exceeds this ceiling.</small></label>
+        <div class="forge-inline-status" id="vrfQuoteStatus">Loading current Chainlink request quote...</div>
       </div>
     </div>
 
@@ -548,16 +549,18 @@
 
     <div class="launch-card canonical-v1-card">
       <div class="canonical-v1-heading">
-        <div><h3>Relic Forge V1</h3><small>Canonical infrastructure · creator deployment disabled</small></div>
+        <div><h3>Relic Forge R12-v2</h3><small>Certified Sepolia preproduction infrastructure</small></div>
         <span class="canonical-v1-live">SEPOLIA</span>
       </div>
       <div class="canonical-v1-addresses">
-        <div><span>Factory</span><code id="canonicalFactoryAddress">Loading…</code></div>
-        <div><span>Fee policy</span><code id="canonicalFeePolicyAddress">Loading…</code></div>
-        <div><span>VRF adapter</span><code id="canonicalRandomnessAddress">Loading…</code></div>
-        <div><span>Renderer</span><code id="canonicalRendererAddress">Loading…</code></div>
+        <div><span>Factory</span><code id="canonicalFactoryAddress">Loading...</code></div>
+        <div><span>Fee policy</span><code id="canonicalFeePolicyAddress">Loading...</code></div>
+        <div><span>VRF adapter</span><code id="canonicalRandomnessAddress">Loading...</code></div>
+        <div><span>Renderer</span><code id="canonicalRendererAddress">Loading...</code></div>
+        <div><span>Reserve</span><code id="canonicalReserveAddress">Loading...</code></div>
+        <div><span>MintPhases impl</span><code id="canonicalMintPhasesAddress">Loading...</code></div>
       </div>
-      <div class="forge-inline-status" id="canonicalV1Status">Loading canonical V1 deployment…</div>
+      <div class="forge-inline-status" id="canonicalV1Status">Loading R12-v2 Sepolia deployment...</div>
       <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Creator Wallet</button>
       <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
     </div>
@@ -566,8 +569,8 @@
       <h3>Relic Forge platform fee</h3>
       <p class="forge-footnote">Choose how this collection supports Relic Forge. The selected model is recorded onchain at collection creation.</p>
       <div class="platform-fee-options">
-        <label class="reveal-choice" data-fee-mode-card="1"><input name="platformFeeMode" type="radio" value="1"/><span><strong>Sponsored</strong><small>Creator pays upfront. Minters never pay a Relic Forge platform mint fee.</small></span></label>
-        <label class="reveal-choice selected" data-fee-mode-card="2"><input checked name="platformFeeMode" type="radio" value="2"/><span><strong>Minter Supported</strong><small>No upfront platform fee. The collection's current fee is added per NFT minted.</small></span></label>
+        <label class="reveal-choice" data-fee-mode-card="1"><input name="platformFeeMode" type="radio" value="1"/><span><strong>Creator Covers Platform Fee</strong><small>Creator pays the quoted amount at launch. Collectors do not pay a Relic Forge per-mint platform fee.</small></span></label>
+        <label class="reveal-choice selected" data-fee-mode-card="2"><input checked name="platformFeeMode" type="radio" value="2"/><span><strong>Collector Covers Platform Fee</strong><small>No upfront platform fee. The active current fee is added per NFT when the fee oracle is healthy.</small></span></label>
       </div>
       <div class="platform-fee-quote">
         <div><span>Mode</span><strong id="platformFeePolicyLabel">Loading…</strong></div>
@@ -575,7 +578,7 @@
         <div><span>Creator upfront</span><strong id="platformFeeUpfront">—</strong></div>
       </div>
       <div class="forge-inline-status" id="platformFeeQuoteStatus">Waiting for canonical FeePolicy quote.</div>
-      <small class="forge-footnote">Minter Supported fees are controlled independently per collection by the Relic Forge platform admin. V1 enforces a $5.00/NFT maximum. Sponsored collections are settled at creation.</small>
+      <small class="forge-footnote">Platform fee value first supports verified-randomness execution through the collection hopper and shared Reserve. Only Reserve surplus above protected requirements can become releasable platform revenue. R12-v2 enforces a $5.00/NFT hard maximum.</small>
     </div>
   </div>
 
@@ -583,14 +586,14 @@
     <article class="forge-workbench-card mint-page-builder-card">
       <div class="forge-card-heading">
         <div><span>PUBLIC MINT PAGE</span><h3>Customize the minter experience</h3></div>
-        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">Open Mint Page</button><button class="primary-btn" disabled id="publishMintPageBtn" type="button">Publish Mint Page</button><button class="ghost-btn" disabled id="downloadMintPageBtn" type="button">Download Standalone Page</button></div>
+        <div class="inline-actions"><button class="ghost-btn" id="previewMintPageBtn" type="button">Preview</button><button class="ghost-btn" disabled id="openMintPageBtn" type="button">V2 Mint Page in R2</button><button class="primary-btn" disabled id="publishMintPageBtn" type="button">Publishing Disabled in R1</button><button class="ghost-btn" disabled id="downloadMintPageBtn" type="button">V2 Export in R2</button></div>
       </div>
       <div class="mint-page-builder-grid">
         <div class="mint-page-media-settings">
           <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageImageInput" type="file"/></label>
           <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageBannerInput" type="file"/></label>
-          <div class="prototype-note"><strong>Public mint only</strong><p>The generated page exposes Public Mint and Whitelist Mint when enabled. Creator Mint remains available only inside Studio.</p></div>
-          <div class="forge-inline-status" id="mintPageStatus">Customize the page now. After forging, Relic Forge can open the contract-driven mint page or export a standalone HTML file.</div>
+          <div class="prototype-note"><strong>Public mint only</strong><p>Creator UI R1 intentionally blocks the old V1 collector page for R12-v2 collections. The dedicated V2 collector-page R2 rewrite will understand MintPhases and Forge reservations.</p></div>
+          <div class="forge-inline-status" id="mintPageStatus">Preview-only in R1. Publishing/export remains disabled for R12-v2 until the dedicated collector mint-page R2 adapter is installed.</div>
         </div>
         <div class="mint-page-studio-preview">
           <div class="mint-page-preview-banner" id="mintPagePreviewBanner"><span>BANNER</span></div>
@@ -658,20 +661,34 @@
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>TEST THE V1 RESULT</span><h3>Arm + mint + reveal + inspect</h3></div></div>
+      <div class="forge-card-heading"><div><span>TEST R12-v2 RESULT</span><h3>Mint + request + replay + settle</h3></div></div>
       <div class="forge-mint-controls">
         <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" max="50" step="1" type="number" value="1"/></label>
-        <button class="primary-btn" disabled id="forgeArmMintBtn" type="button">Enable Master Mint</button>
+        <button class="primary-btn" disabled id="forgeArmMintBtn" type="button">Enable Minting</button>
         <button class="ghost-btn" disabled id="forgeMintTestBtn" type="button">Public Mint</button>
-        <button class="ghost-btn" disabled id="forgeWhitelistMintBtn" type="button">Whitelist Mint</button>
+        <button class="ghost-btn" disabled id="forgeWhitelistMintBtn" type="button">Approved Wallet Mint</button>
         <button class="ghost-btn" disabled id="forgeCreatorMintBtn" type="button">Creator Mint</button>
-        <button class="ghost-btn" disabled id="forgeDeferredRevealBtn" type="button">Request Deferred Epoch</button>
-        <button class="ghost-btn" disabled id="forgeProcessRevealBtn" type="button">Process Ready Reveal</button>
       </div>
-      <div class="forge-inline-status">Every forged V1 collection starts with master mint OFF. Enabling it is a separate creator transaction. Chainlink VRF callbacks are asynchronous; after fulfillment, anyone can process the ready reveal in bounded steps.</div>
+      <div class="launched-section">
+        <h4>Deferred Reveal</h4>
+        <button class="ghost-btn" disabled id="forgeDeferredRevealBtn" type="button">Request Deferred Reveal</button>
+      </div>
+      <div class="launched-section">
+        <h4>Forge batch execution</h4>
+        <div class="forge-mint-controls">
+          <button class="ghost-btn" disabled id="forgeLockBatchBtn" type="button">Lock Timed-Out Batch</button>
+          <label class="field"><span>Batch ID</span><input id="forgeBatchId" min="1" step="1" type="number" value="1"/></label>
+          <button class="ghost-btn" disabled id="forgeRequestBatchBtn" type="button">Request Batch Randomness</button>
+          <label class="field"><span>Local request ID</span><input id="forgeLocalRequestId" min="1" step="1" type="number"/></label>
+          <button class="ghost-btn" disabled id="forgeReplayBtn" type="button">Replay Verified Word</button>
+          <label class="field"><span>Settle max tokens</span><input id="forgeSettleMaxTokens" min="1" max="500" step="1" type="number" value="100"/></label>
+          <button class="ghost-btn" disabled id="forgeSettleBtn" type="button">Settle Ready</button>
+        </div>
+      </div>
+      <div class="forge-inline-status">Request transactions use an explicit 1,500,000 gas limit. Replay uses 1,000,000 gas and is not reported successful until deliveredForLocalRequest(localRequestId) is true.</div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
-      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable V1 test controls.</pre>
+      <pre class="forge-log" id="forgeTestStatus">Forge an R12-v2 collection to enable test controls.</pre>
       <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
     </article>
 
@@ -712,7 +729,7 @@
 </section>
 </main>
 <footer>
-<span>Relic Forge Studio · wallet-synced collection compiler + Sepolia Forge test</span>
+<span>Relic Forge Studio · R12-v2 Sepolia preproduction creator workflow</span>
 <span>Saved projects sync privately to RelicForge Cloud; deployed collection artwork remains onchain.</span>
 </footer>
 </div>
@@ -796,15 +813,18 @@
       <div class="founder-policy-summary">
         <div><span>FeePolicy</span><code id="founderPolicyAddress">Loading...</code></div>
         <div><span>Platform admin</span><code id="founderPlatformAdmin">Loading...</code></div>
-        <div><span>Treasury</span><code id="founderTreasuryCurrent">Loading...</code></div>
-        <div><span>Accrued fees</span><strong id="founderAccruedFees">-</strong></div>
-        <div><span>V1 hard ceiling</span><strong id="founderFeeCap">$5.00 / NFT</strong></div>
+        <div><span>FeePolicy treasury</span><code id="founderTreasuryCurrent">Loading...</code></div>
+        <div><span>Pending FeePolicy treasury</span><code id="founderTreasuryPending">None</code></div>
+        <div><span>Reserve</span><code id="founderReserveAddress">Loading...</code></div>
+        <div><span>Reserve revenue treasury</span><code id="founderReserveTreasury">Loading...</code></div>
+        <div><span>Legacy FeePolicy accrued fees</span><strong id="founderAccruedFees">-</strong></div>
+        <div><span>R12-v2 hard ceiling</span><strong id="founderFeeCap">$5.00 / NFT</strong></div>
       </div>
       <div class="forge-inline-status" id="founderFeeAdminStatus">Checking the connected onchain platform admin...</div>
 
       <div class="founder-admin-section">
         <div class="founder-section-heading">
-          <div><strong>Collection Fee Control</strong><small>Load a canonical V1 collection and change only that collection.</small></div>
+          <div><strong>Collection Fee Control</strong><small>Load a canonical R12-v2 collection and change only that collection fee policy.</small></div>
         </div>
         <div class="founder-search-row">
           <label class="field"><span>Collection address</span><input id="founderCollectionAddress" placeholder="0x..." type="text"/></label>
@@ -835,12 +855,12 @@
 
         <div class="founder-admin-section">
           <div class="founder-section-heading">
-            <div><strong>Platform Treasury</strong><small>Platform fee withdrawals can only be sent to the configured treasury.</small></div>
+            <div><strong>FeePolicy Treasury Proposal</strong><small>This is separate from the Reserve revenue treasury. setTreasury() only proposes a target; it is not active until that target wallet accepts onchain.</small></div>
           </div>
           <label class="field"><span>Treasury address</span><input id="founderTreasuryInput" placeholder="0x..." type="text"/></label>
           <div class="inline-actions">
-            <button class="primary-btn" id="founderSaveTreasuryBtn" type="button">Update Treasury</button>
-            <button class="ghost-btn" id="founderWithdrawFeesBtn" type="button">Send Accrued Fees</button>
+            <button class="primary-btn" id="founderSaveTreasuryBtn" type="button">Propose FeePolicy Treasury</button>
+            <button class="ghost-btn" id="founderWithdrawFeesBtn" type="button">Send Legacy Accrued Fees</button>
           </div>
         </div>
       </div>
@@ -850,6 +870,7 @@
 
   <script src="./relicforge-config.js?v=11.1.6"></script>
 
+  <script src="./relicforge-v2-addresses.js?v=r12v2-r1"></script>
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>

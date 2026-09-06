@@ -21,6 +21,8 @@
   const FEE_POLICY_ABI = [
     'function platformAdmin() view returns(address)',
     'function treasury() view returns(address)',
+    'function pendingTreasury() view returns(address)',
+    'function pendingPlatformAdmin() view returns(address)',
     'function sponsoredFeeCents() view returns(uint32)',
     'function minterFeeCents() view returns(uint32)',
     'function MAX_DEFAULT_FEE_CENTS() view returns(uint32)',
@@ -36,7 +38,17 @@
     'function waiveCollection(address collection)',
     'function setDefaultFeeCents(uint32 sponsoredCents,uint32 minterCents)',
     'function setTreasury(address treasury)',
+    'function acceptTreasury()',
+    'function transferPlatformAdmin(address newAdmin)',
+    'function acceptPlatformAdmin()',
     'function withdrawFees()'
+  ];
+
+  const RESERVE_ABI = [
+    'function revenueTreasury() view returns(address)',
+    'function pendingRevenueTreasury() view returns(address)',
+    'function requiredReserveWei() view returns(uint256)',
+    'function availableRevenueWei() view returns(uint256)'
   ];
 
   let founderIdentity = null;
@@ -72,7 +84,7 @@
     const raw = Number($(id)?.value || 0);
     if (!Number.isFinite(raw) || raw < 0) throw new Error('Fee must be a valid non-negative dollar amount.');
     const cents = Math.round(raw * 100);
-    if (cents > Number(capCents)) throw new Error(`V1 fee ceiling is ${dollars(capCents)}.`);
+    if (cents > Number(capCents)) throw new Error(`R12-v2 fee ceiling is ${dollars(capCents)}.`);
     return cents;
   }
 
@@ -82,9 +94,9 @@
   }
 
   function canonicalConfig() {
-    const cfg = window.RELICFORGE_V1_ADDRESSES?.[CHAIN_ID];
-    if (!cfg || !window.ethers?.isAddress(cfg.factory) || !window.ethers?.isAddress(cfg.feePolicy)) {
-      throw new Error('Canonical V1 Sepolia configuration is unavailable.');
+    const cfg = window.RELICFORGE_V2_ADDRESSES?.[CHAIN_ID];
+    if (!cfg || cfg.launchEnabled !== true || !window.ethers?.isAddress(cfg.factory) || !window.ethers?.isAddress(cfg.feePolicy) || !window.ethers?.isAddress(cfg.reserve)) {
+      throw new Error('Canonical R12-v2 Sepolia configuration is unavailable.');
     }
     return cfg;
   }
@@ -453,43 +465,37 @@
     const cfg = canonicalConfig();
     const provider = readProvider();
     const policy = new window.ethers.Contract(cfg.feePolicy, FEE_POLICY_ABI, provider);
-    const [admin, treasury, sponsored, minter, defaultCap, collectionCap, accrued] = await Promise.all([
-      policy.platformAdmin(),
-      policy.treasury(),
-      policy.sponsoredFeeCents(),
-      policy.minterFeeCents(),
-      policy.MAX_DEFAULT_FEE_CENTS(),
-      policy.MAX_COLLECTION_FEE_CENTS(),
-      policy.accruedFees()
+    const reserve = new window.ethers.Contract(cfg.reserve, RESERVE_ABI, provider);
+    const [admin, treasury, pendingTreasury, sponsored, minter, defaultCap, collectionCap, accrued, reserveTreasury] = await Promise.all([
+      policy.platformAdmin(), policy.treasury(), policy.pendingTreasury(), policy.sponsoredFeeCents(), policy.minterFeeCents(), policy.MAX_DEFAULT_FEE_CENTS(), policy.MAX_COLLECTION_FEE_CENTS(), policy.accruedFees(), reserve.revenueTreasury()
     ]);
-
     if ($('founderPolicyAddress')) $('founderPolicyAddress').textContent = cfg.feePolicy;
     if ($('founderPlatformAdmin')) $('founderPlatformAdmin').textContent = admin;
     if ($('founderTreasuryCurrent')) $('founderTreasuryCurrent').textContent = treasury;
-    if ($('founderAccruedFees')) $('founderAccruedFees').textContent = `${Number(window.ethers.formatEther(accrued)).toFixed(6)} ETH`;
+    if ($('founderTreasuryPending')) $('founderTreasuryPending').textContent = pendingTreasury === window.ethers.ZeroAddress ? 'None' : pendingTreasury;
+    if ($('founderReserveAddress')) $('founderReserveAddress').textContent = cfg.reserve;
+    if ($('founderReserveTreasury')) $('founderReserveTreasury').textContent = reserveTreasury;
+    if ($('founderAccruedFees')) $('founderAccruedFees').textContent = Number(window.ethers.formatEther(accrued)).toFixed(6) + ' ETH';
     if ($('founderDefaultSponsored')) $('founderDefaultSponsored').value = (Number(sponsored) / 100).toFixed(2);
     if ($('founderDefaultMinter')) $('founderDefaultMinter').value = (Number(minter) / 100).toFixed(2);
-    if ($('founderTreasuryInput')) $('founderTreasuryInput').value = treasury;
-    if ($('founderFeeCap')) $('founderFeeCap').textContent = `${dollars(collectionCap)} / NFT`;
+    if ($('founderTreasuryInput')) $('founderTreasuryInput').value = pendingTreasury !== window.ethers.ZeroAddress ? pendingTreasury : treasury;
+    if ($('founderFeeCap')) $('founderFeeCap').textContent = dollars(collectionCap) + ' / NFT';
     if ($('founderWithdrawFeesBtn')) $('founderWithdrawFeesBtn').disabled = accrued === 0n;
-
     const wallet = window.RelicForgeProjects?.getWallet?.();
     const isAdmin = wallet && String(wallet).toLowerCase() === String(admin).toLowerCase();
     const status = $('founderFeeAdminStatus');
     if (status) {
-      status.textContent = isAdmin
-        ? 'Connected founder wallet is also the onchain platformAdmin.'
-        : `Fee changes require platformAdmin ${admin}. Current founder session is read-only for onchain fee writes.`;
-      status.className = `forge-inline-status ${isAdmin ? 'success' : 'warning'}`;
+      const pendingText = pendingTreasury !== window.ethers.ZeroAddress ? ' Pending FeePolicy treasury proposal: ' + pendingTreasury + ' (not active until that wallet accepts).' : '';
+      status.textContent = (isAdmin ? 'Connected founder wallet is also the onchain FeePolicy platformAdmin.' : 'Fee changes require platformAdmin ' + admin + '. Current founder session is read-only for onchain fee writes.') + pendingText;
+      status.className = 'forge-inline-status ' + (isAdmin ? 'success' : 'warning');
     }
-
-    return { admin, treasury, sponsored: Number(sponsored), minter: Number(minter), defaultCap: Number(defaultCap), collectionCap: Number(collectionCap), accrued };
+    return { admin, treasury, pendingTreasury, sponsored:Number(sponsored), minter:Number(minter), defaultCap:Number(defaultCap), collectionCap:Number(collectionCap), accrued, reserveTreasury };
   }
 
   async function loadFeeCollection() {
     await requireFounder();
     const address = String($('founderCollectionAddress')?.value || '').trim();
-    if (!window.ethers?.isAddress(address)) throw new Error('Enter a valid V1 collection address.');
+    if (!window.ethers?.isAddress(address)) throw new Error('Enter a valid R12-v2 collection address.');
 
     founderStatus('Reading collection fee configuration...');
     const cfg = canonicalConfig();
@@ -509,7 +515,7 @@
 
     if (String(factory).toLowerCase() !== String(cfg.factory).toLowerCase() ||
         String(feePolicy).toLowerCase() !== String(cfg.feePolicy).toLowerCase()) {
-      throw new Error('This is not a collection from the canonical Relic Forge V1 Sepolia stack.');
+      throw new Error('This is not a collection from the canonical Relic Forge R12-v2 Sepolia stack.');
     }
 
     const policy = new window.ethers.Contract(cfg.feePolicy, FEE_POLICY_ABI, provider);
@@ -553,7 +559,7 @@
     host.innerHTML = `<div class="founder-fee-summary">
       <div><span>Collection</span><strong>${esc(s.name)} (${esc(s.symbol)})</strong></div>
       <div><span>Creator</span><code>${esc(s.creator)}</code></div>
-      <div><span>Mode</span><strong>${sponsored ? 'Sponsored - settled at launch' : 'Minter Supported'}</strong></div>
+      <div><span>Mode</span><strong>${sponsored ? 'Creator Covers Platform Fee' : 'Collector Covers Platform Fee'}</strong></div>
       <div><span>Supply</span><strong>${s.totalMinted.toLocaleString()} / ${s.maxSupply.toLocaleString()}</strong></div>
       <div><span>Locked base</span><strong>${dollars(s.lockedCents)} / NFT</strong></div>
       <div><span>Current fee</span><strong>${sponsored ? '$0.00 minter fee' : `${dollars(s.currentCents)} / NFT`}</strong></div>
@@ -644,24 +650,23 @@
   async function saveTreasury() {
     const treasury = String($('founderTreasuryInput')?.value || '').trim();
     if (!window.ethers.isAddress(treasury)) throw new Error('Treasury address is invalid.');
-    if (!window.confirm(`Change the Relic Forge platform treasury to ${treasury}?`)) return;
+    if (!window.confirm('Propose ' + treasury + ' as the new FeePolicy treasury? This does NOT make it active. The target wallet must separately call acceptTreasury().')) return;
     const { policy } = await platformAdminSigner();
-    founderStatus('Updating platform treasury...');
-    const tx = await policy.setTreasury(treasury);
-    await tx.wait();
+    founderStatus('Submitting FeePolicy treasury proposal...');
+    const tx = await policy.setTreasury(treasury); await tx.wait();
     await refreshFeePolicySummary();
-    founderStatus('Platform treasury updated.', 'success');
+    founderStatus('FeePolicy treasury proposed. The target wallet must accept onchain before it becomes active.', 'success');
   }
 
   async function withdrawAccruedFees() {
     const summary = await refreshFeePolicySummary();
     if (summary.accrued === 0n) throw new Error('There are no accrued platform fees to forward.');
     const { policy } = await platformAdminSigner();
-    founderStatus('Forwarding accrued platform fees to the configured treasury...');
+    founderStatus('Forwarding legacy FeePolicy accrued fees to the active FeePolicy treasury...');
     const tx = await policy.withdrawFees();
     await tx.wait();
     await refreshFeePolicySummary();
-    founderStatus('Accrued platform fees forwarded to treasury.', 'success');
+    founderStatus('Legacy FeePolicy accrued fees forwarded to the active FeePolicy treasury. R12-v2 operational reveal funding remains hopper/Reserve based.', 'success');
   }
 
   function bind() {
