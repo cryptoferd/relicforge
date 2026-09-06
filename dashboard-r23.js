@@ -99,10 +99,16 @@
     return BigInt(a)<=BigInt(b)?window.ethers.keccak256(window.ethers.concat([a,b])):window.ethers.keccak256(window.ethers.concat([b,a]));
   }
 
+  function normalizeAddress(value) {
+    const raw=String(value||'').trim();
+    if(!/^0x[0-9a-fA-F]{40}$/.test(raw))throw new Error(`Invalid EVM wallet address: ${raw||'(blank)'}`);
+    return window.ethers.getAddress(raw.toLowerCase());
+  }
+
   function normalizeEntries(entries) {
     const map=new Map();
     for(const raw of entries||[]){
-      const address=window.ethers.getAddress(String(raw.address||raw.wallet||'').trim());
+      const address=normalizeAddress(raw.address||raw.wallet||'');
       const allowance=Math.floor(Number(raw.allowance||0));
       if(!Number.isInteger(allowance)||allowance<1||allowance>4294967295)throw new Error(`Allowance for ${short(address)} must be 1-4,294,967,295.`);
       map.set(address.toLowerCase(),{address,allowance});
@@ -217,8 +223,8 @@
       ${!state.listPublished?'<div class="r23-warning bad"><strong>Proof table missing</strong><span>If this stage came from a pre-R2 Studio launch, open that saved Studio project and use <b>Repair / Sync Mint Proofs</b> to restore the original list without changing the onchain root. If you save a new list here, it replaces the stage root.</span></div>':''}
       <div class="r23-add-wallet"><label class="field"><span>Wallet</span><input id="r23WalletAddress" placeholder="0x..."/></label><label class="field"><span>Allowance</span><input id="r23WalletAllowance" type="number" min="1" value="1"/></label><button class="ghost-btn" id="r23AddWalletBtn" type="button">Add Wallet</button></div>
       <div class="r23-wallet-list" id="r23WalletList"></div>
-      <label class="field"><span>Bulk replace / import</span><textarea id="r23BulkWallets" rows="4" placeholder="0xWallet, allowance&#10;0xWallet, allowance"></textarea><small>Import updates the editor only. Nothing changes onchain until Save & Publish.</small></label>
-      <div class="launched-actions"><button class="ghost-btn" id="r23ImportWalletsBtn" type="button">Import into Editor</button><button class="primary-btn" id="r23SaveWalletsBtn" type="button">Save & Publish Eligibility</button></div>
+      <label class="field"><span>Bulk wallet list</span><textarea id="r23BulkWallets" rows="4" placeholder="0xWallet, allowance&#10;0xWallet, allowance"></textarea><small>Paste one wallet per line. Save & Publish automatically applies this list when the editor is empty; use Apply Bulk List to preview it first.</small></label>
+      <div class="launched-actions"><button class="ghost-btn" id="r23ImportWalletsBtn" type="button">Apply Bulk List</button><button class="primary-btn" id="r23SaveWalletsBtn" type="button">Save & Publish Eligibility</button></div>
     </div>`;
     renderWalletRows();
     $('r23AddWalletBtn')?.addEventListener('click',()=>{
@@ -228,8 +234,22 @@
       }catch(error){setStatus(error.message,'bad');}
     });
     $('r23ImportWalletsBtn')?.addEventListener('click',()=>{
-      try{state.entries=parseBulk($('r23BulkWallets').value);renderWalletRows();setStatus(`Imported ${state.entries.length} wallet${state.entries.length===1?'':'s'} into the editor.`,'warn');}
-      catch(error){setStatus(error.message,'bad');}
+      try{
+        state.entries=parseBulk($('r23BulkWallets').value);
+        renderWalletRows();
+        setStatus(`Applied ${state.entries.length} wallet${state.entries.length===1?'':'s'} to the editor. Review, then Save & Publish Eligibility.`,'warn');
+      } catch(error){setStatus(error.message,'bad');}
+    });
+    $('r23BulkWallets')?.addEventListener('paste',()=>{
+      setTimeout(()=>{
+        try{
+          const text=String($('r23BulkWallets')?.value||'').trim();
+          if(!text)return;
+          state.entries=parseBulk(text);
+          renderWalletRows();
+          setStatus(`Applied ${state.entries.length} pasted wallet${state.entries.length===1?'':'s'} to the editor. Nothing is onchain until Save & Publish Eligibility.`,'warn');
+        } catch(error){setStatus(error.message,'bad');}
+      },0);
     });
     $('r23SaveWalletsBtn')?.addEventListener('click',()=>saveWalletList().catch(error=>setStatus(`Allowlist update: ${error.shortMessage||error.message}`,'bad')));
   }
@@ -258,7 +278,13 @@
   async function saveWalletList(){
     if(state.busy)return;
     const phase=state.phases.find(p=>p.id===state.listPhaseId);if(!phase)throw new Error('Choose an Approved Wallet stage first.');
-    const entries=normalizeEntries(state.entries);if(!entries.length)throw new Error('Approved Wallet stages cannot have an empty list. Disable the stage if no wallets should mint.');
+    const bulkText=String($('r23BulkWallets')?.value||'').trim();
+    if(!state.entries.length&&bulkText){
+      state.entries=parseBulk(bulkText);
+      renderWalletRows();
+      setStatus(`Applied ${state.entries.length} wallet${state.entries.length===1?'':'s'} from the bulk list. Preparing eligibility update…`,'warn');
+    }
+    const entries=normalizeEntries(state.entries);if(!entries.length)throw new Error('No wallets are loaded. Paste a wallet list or use Add Wallet before Save & Publish Eligibility.');
     if(!state.listPublished){
       const ok=window.confirm('No published source list exists for this stage. Saving will replace the current onchain Merkle root with the wallets shown in this editor. The old root cannot be reverse-engineered into its prior wallet list. Continue?');
       if(!ok)return;
