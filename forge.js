@@ -1220,7 +1220,7 @@ ${await file.text()}`;
     try {
       const studio = bridge().getState();
       if (!studio.compiledTokens?.length) throw new Error('Build the collection in Step 4 first.');
-      if (studio.compilerReport?.compilerVersion !== '11.0.0') throw new Error('This collection was compiled with an older collection compiler. Rebuild it in Step 4 before forging.');
+      if (studio.compilerReport?.compilerVersion !== '11.0.1') throw new Error('This collection was compiled with an incompatible collection compiler. Rebuild it in Step 4 before forging.');
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
       if (!studio.layers?.length) throw new Error('Upload artwork in Step 1 first.');
       const revealMode = currentRevealMode();
