@@ -29,6 +29,7 @@
     config:null, provider:null, browserProvider:null, signer:null, wallet:null,
     collection:null, mintPhases:null, mintPhasesAddress:null, state:null, phases:[],
     walletRows:new Map(), proofs:new Map(),
+    chainTimeOffsetMs:0, countdownTimer:null, openingPhaseWatchers:new Map(),
   };
 
   const apiBase = () => String(window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
@@ -50,8 +51,94 @@
     if (!Number(seconds)) return fallback;
     return new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(Number(seconds)*1000));
   }
+  function chainNowSeconds() {
+    return Math.floor((Date.now()+Number(app.chainTimeOffsetMs||0))/1000);
+  }
+  function formatPhaseCountdown(targetSeconds) {
+    let total=Math.max(0,Number(targetSeconds)-chainNowSeconds());
+    const days=Math.floor(total/86400); total%=86400;
+    const hours=Math.floor(total/3600); total%=3600;
+    const minutes=Math.floor(total/60);
+    const seconds=Math.floor(total%60);
+    const hh=String(hours).padStart(2,'0'), mm=String(minutes).padStart(2,'0'), ss=String(seconds).padStart(2,'0');
+    return days>0 ? `${days}d ${hh}h ${mm}m ${ss}s` : `${hh}h ${mm}m ${ss}s`;
+  }
+  function stopPhaseOpeningWatch(phaseId) {
+    const current=app.openingPhaseWatchers.get(Number(phaseId));
+    if(current)clearTimeout(current);
+    app.openingPhaseWatchers.delete(Number(phaseId));
+  }
+  async function checkPhaseOpening(phaseId) {
+    const id=Number(phaseId);
+    if(!app.openingPhaseWatchers.has(id))return;
+    let delay=1800;
+    try {
+      const [open,raw,masterMintEnabled,latestBlock]=await Promise.all([
+        app.mintPhases.phaseIsOpen(id).catch(()=>false),
+        app.mintPhases.phases(id),
+        app.mintPhases.masterMintEnabled().catch(()=>app.state?.masterMintEnabled||false),
+        app.provider?.getBlock('latest').catch(()=>null),
+      ]);
+      if(latestBlock?.timestamp)app.chainTimeOffsetMs=(Number(latestBlock.timestamp)*1000)-Date.now();
+      const enabled=Boolean(raw.enabled??raw[9]);
+      const endTime=Number(raw.endTime??raw[2]);
+      const node=document.querySelector(`[data-v2-phase-countdown="${id}"]`);
+      const strong=node?.querySelector('strong');
+      if(open){
+        stopPhaseOpeningWatch(id);
+        await readState();
+        await render();
+        return;
+      }
+      if(!enabled || (endTime&&chainNowSeconds()>=endTime)){
+        stopPhaseOpeningWatch(id);
+        await readState();
+        await render();
+        return;
+      }
+      if(strong)strong.textContent=masterMintEnabled?'Opening…':'Waiting for minting…';
+      delay=masterMintEnabled?1800:5000;
+    } catch(error) {
+      console.warn(`Mint phase ${id} live-open watcher:`,error);
+      delay=3500;
+    }
+    if(app.openingPhaseWatchers.has(id)){
+      const timer=setTimeout(()=>checkPhaseOpening(id),delay);
+      app.openingPhaseWatchers.set(id,timer);
+    }
+  }
+  function watchPhaseOpening(phaseId) {
+    const id=Number(phaseId);
+    if(!id||app.openingPhaseWatchers.has(id))return;
+    app.openingPhaseWatchers.set(id,0);
+    checkPhaseOpening(id);
+  }
+  function updatePhaseCountdowns() {
+    document.querySelectorAll('[data-v2-phase-countdown]').forEach(node=>{
+      const start=Number(node.dataset.start||0);
+      const phaseId=Number(node.getAttribute('data-v2-phase-countdown')||0);
+      const strong=node.querySelector('strong');
+      if(!start||!strong)return;
+      const remaining=start-chainNowSeconds();
+      if(remaining<=0){
+        strong.textContent='Opening…';
+        node.classList.add('opening');
+        watchPhaseOpening(phaseId);
+      }else{
+        strong.textContent=formatPhaseCountdown(start);
+        node.classList.remove('opening');
+      }
+    });
+  }
+  function startPhaseCountdowns() {
+    if(app.countdownTimer){clearInterval(app.countdownTimer);app.countdownTimer=null;}
+    const nodes=[...document.querySelectorAll('[data-v2-phase-countdown]')];
+    if(!nodes.length)return;
+    updatePhaseCountdowns();
+    app.countdownTimer=setInterval(updatePhaseCountdowns,1000);
+  }
   function timingLabel(phase) {
-    const now=Math.floor(Date.now()/1000);
+    const now=chainNowSeconds();
     if (phase.open) return phase.endTime ? `LIVE · ends ${dateLabel(phase.endTime,'')}` : 'LIVE · no automatic end';
     if (!phase.enabled) return 'Disabled by creator';
     if (phase.endTime && now >= phase.endTime) return `Ended ${dateLabel(phase.endTime,'')}`;
@@ -103,6 +190,8 @@
 
   async function readState() {
     const provider=await getReadProvider(app.config.chainId);
+    const latestBlock=await provider.getBlock('latest').catch(()=>null);
+    if(latestBlock?.timestamp) app.chainTimeOffsetMs=(Number(latestBlock.timestamp)*1000)-Date.now();
     app.collection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,provider);
     const [name,description,maxSupply,totalCommitted,totalMinted,revealMode,mintPhasesAddress]=await Promise.all([
       app.collection.name(), app.collection.description().catch(()=>''), app.collection.maxSupply(),
@@ -236,8 +325,12 @@
                   : 'Wallet is not on this Approved Wallet stage')
           : 'Connect to check eligibility')
         : timingLabel(phase);
+      const countdown=phase.enabled&&phase.startTime>chainNowSeconds()
+        ? `<div class="phase-countdown" data-v2-phase-countdown="${phase.id}" data-start="${phase.startTime}"><span>OPENS IN</span><strong>${esc(formatPhaseCountdown(phase.startTime))}</strong><small>${esc(dateLabel(phase.startTime,'Scheduled start'))}</small></div>`
+        : '';
       return `<div class="access-card ${usable||!app.wallet?'':'disabled'}" data-v2-mint-stage="${phase.id}">
         <div class="access-top"><strong>${esc(phaseLabel(phase))}</strong><span>${esc(fmtEth(phase.price))}</span></div>
+        ${countdown}
         <small class="qtyhint">${esc(timingLabel(phase))} · ${phase.maxPerWallet?`${phase.maxPerWallet} max/wallet`:'No wallet cap'}${phase.phaseSupply?` · ${phase.minted}/${phase.phaseSupply} stage minted`:''}</small>
         <div class="qtyrow"><input id="v2Qty-${phase.id}" min="1" max="${Math.max(1,remaining||50)}" step="1" type="number" value="1" ${app.wallet&&remaining<1?'disabled':''}/><button class="btn ${phase.accessType===1?'secondary':''}" data-v2-mint="${phase.id}" ${app.wallet&&usable?'':'disabled'}>Mint Stage ${phase.id}</button></div>
         <small class="qtyhint" id="v2Hint-${phase.id}">${esc(status)}</small>
@@ -245,6 +338,7 @@
     }).join('');
 
     access.querySelectorAll('[data-v2-mint]').forEach(button=>button.addEventListener('click',()=>mintPhase(Number(button.dataset.v2Mint)).catch(error=>setStatus(`Mint error: ${error.shortMessage||error.message}`,true))));
+    startPhaseCountdowns();
     const totalMintedByWallet=[...walletRows.values()].reduce((sum,row)=>sum+Number(row.minted||0),0);
     if($('walletMintsStat')) $('walletMintsStat').textContent=app.wallet?String(totalMintedByWallet):'Connect wallet';
     if($('walletAllotment')) $('walletAllotment').classList.add('hidden');

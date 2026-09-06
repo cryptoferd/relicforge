@@ -18,6 +18,7 @@
     collection:null, mintPhasesAddress:null, controller:null, phases:[], provider:null,
     listPhaseId:null, entries:[], listPublished:false, listInSync:false, storedRoot:null,
     retryPayload:null, scanTimer:null, busy:false,
+    countdownTimer:null, countdownBoundaryRefreshing:false, chainTimeOffsetMs:0,
   };
 
   const apiBase = () => String(window.RelicForgeCloud?.apiBase?.() || window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
@@ -27,6 +28,49 @@
   function setStatus(message,tone='') {
     const node=$('r23ManagerStatus'); if(!node)return;
     node.textContent=message; node.className=`r23-status ${tone}`.trim();
+  }
+
+  function dashboardChainNow() {
+    return Math.floor((Date.now()+Number(state.chainTimeOffsetMs||0))/1000);
+  }
+  function dashboardCountdown(targetSeconds) {
+    let total=Math.max(0,Number(targetSeconds)-dashboardChainNow());
+    const days=Math.floor(total/86400); total%=86400;
+    const hours=Math.floor(total/3600); total%=3600;
+    const minutes=Math.floor(total/60);
+    const seconds=Math.floor(total%60);
+    const hh=String(hours).padStart(2,'0'),mm=String(minutes).padStart(2,'0'),ss=String(seconds).padStart(2,'0');
+    return days>0?`${days}d ${hh}h ${mm}m ${ss}s`:`${hh}h ${mm}m ${ss}s`;
+  }
+  function dashboardStartLabel(seconds) {
+    if(!Number(seconds))return '';
+    return new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(Number(seconds)*1000));
+  }
+  function updateDashboardCountdowns() {
+    let crossed=false;
+    document.querySelectorAll('[data-r25-dashboard-countdown]').forEach(node=>{
+      const start=Number(node.dataset.start||0);
+      const value=node.querySelector('b');
+      if(!start||!value)return;
+      if(start<=dashboardChainNow()){
+        value.textContent='Opening…';
+        crossed=true;
+      }else value.textContent=dashboardCountdown(start);
+    });
+    if(crossed && !state.countdownBoundaryRefreshing && state.collection){
+      state.countdownBoundaryRefreshing=true;
+      setTimeout(async()=>{
+        try{await loadOnchain(state.collection);renderPanel();}
+        catch(error){console.warn('Dashboard phase countdown refresh:',error);}
+        finally{state.countdownBoundaryRefreshing=false;}
+      },1200);
+    }
+  }
+  function startDashboardCountdowns() {
+    if(state.countdownTimer){clearInterval(state.countdownTimer);state.countdownTimer=null;}
+    if(!document.querySelector('[data-r25-dashboard-countdown]'))return;
+    updateDashboardCountdowns();
+    state.countdownTimer=setInterval(updateDashboardCountdowns,1000);
   }
 
   async function readProvider() {
@@ -75,7 +119,8 @@
     const collection=new window.ethers.Contract(address,COLLECTION_ABI,provider);
     const mpAddress=window.ethers.getAddress(await collection.mintPhases());
     const mp=new window.ethers.Contract(mpAddress,MINT_PHASES_ABI,provider);
-    const [controller,countRaw]=await Promise.all([mp.controller(),mp.phaseCount()]);
+    const [controller,countRaw,latestBlock]=await Promise.all([mp.controller(),mp.phaseCount(),provider.getBlock('latest').catch(()=>null)]);
+    if(latestBlock?.timestamp) state.chainTimeOffsetMs=(Number(latestBlock.timestamp)*1000)-Date.now();
     const count=Number(countRaw),rows=[];
     for(let start=1;start<=count;start+=25){
       const ids=Array.from({length:Math.min(25,count-start+1)},(_,i)=>start+i);
@@ -167,7 +212,10 @@
 
   function phaseSummary(p){
     const type=p.accessType===1?'Approved Wallets':'Public';
-    return `<div class="r23-stage-row"><div><strong>Stage ${p.id} · ${type}</strong><small>${esc(window.ethers.formatEther(p.price))} ETH · ${p.minted}${p.phaseSupply?` / ${p.phaseSupply}`:''} minted · priority ${p.priority}</small></div>${p.accessType===1?`<button class="ghost-btn" data-r23-manage="${p.id}" type="button">Manage Wallets</button>`:'<span class="r23-public-pill">PUBLIC</span>'}</div>`;
+    const countdown=p.enabled&&p.startTime>dashboardChainNow()
+      ? `<small class="r25-phase-countdown" data-r25-dashboard-countdown="${p.id}" data-start="${p.startTime}"><span>Opens in</span><b>${dashboardCountdown(p.startTime)}</b><em>${esc(dashboardStartLabel(p.startTime))}</em></small>`
+      : '';
+    return `<div class="r23-stage-row"><div><strong>Stage ${p.id} · ${type}</strong><small>${esc(window.ethers.formatEther(p.price))} ETH · ${p.minted}${p.phaseSupply?` / ${p.phaseSupply}`:''} minted · priority ${p.priority}</small>${countdown}</div>${p.accessType===1?`<button class="ghost-btn" data-r23-manage="${p.id}" type="button">Manage Wallets</button>`:'<span class="r23-public-pill">PUBLIC</span>'}</div>`;
   }
 
   function renderPanel(){
@@ -203,6 +251,7 @@
     $('r23NewNoEnd')?.addEventListener('change',()=>{if($('r23NewEnd')){$('r23NewEnd').disabled=$('r23NewNoEnd').checked;if($('r23NewNoEnd').checked)$('r23NewEnd').value='';}});
     $('r23CreateStageBtn')?.addEventListener('click',()=>createStage().catch(error=>setStatus(`Create stage: ${error.shortMessage||error.message}`,'bad')));
     if(state.retryPayload)renderRetry();
+    startDashboardCountdowns();
   }
 
   function parseBulk(text){

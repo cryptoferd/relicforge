@@ -8,3 +8,7 @@
 .r23-retry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;margin-top:12px;padding:12px;border:1px solid #754545;background:#170d0d;border-radius:10px}.r23-retry strong,.r23-retry span{grid-column:1}.r23-retry span{font-size:10px;color:#cba3a3}.r23-retry button{grid-column:2;grid-row:1/3}
 .r23-new-wallets{margin-top:10px}.r23-manager textarea{width:100%;resize:vertical;min-height:90px;background:#080808;color:#eee;border:1px solid #333;border-radius:9px;padding:10px}
 @media(max-width:760px){.r23-create-grid,.r23-add-wallet{grid-template-columns:1fr}.r23-stage-row{align-items:flex-start;flex-direction:column}.r23-wallet-row{grid-template-columns:1fr 90px auto}.r23-retry{grid-template-columns:1fr}.r23-retry button{grid-column:1;grid-row:auto}}
+.r25-phase-countdown{display:grid!important;grid-template-columns:auto auto;justify-content:start;gap:2px 8px!important;align-items:baseline;margin-top:7px!important;padding:6px 8px;border:1px solid #313131;border-radius:7px;background:#0d0d0d;color:#8c8c8c!important}
+.r25-phase-countdown span{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#777}
+.r25-phase-countdown b{font-size:11px;font-variant-numeric:tabular-nums;color:#d2d2d2}
+.r25-phase-countdown em{grid-column:1/-1;font-style:normal;font-size:8px;color:#666}
