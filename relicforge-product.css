@@ -1,0 +1,63 @@
+:root{--rf26-line:rgba(255,255,255,.1);--rf26-muted:#999;--rf26-text:#e9e9e9;--rf26-surface:#101010;--rf26-accent:#ee9922}
+.rf26-network-control{display:flex;align-items:center;gap:10px;min-width:0}
+.rf26-network-control label{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--rf26-muted);white-space:nowrap}
+.rf26-network-control select{appearance:auto;max-width:240px;min-width:0;background:#111;color:#e6e6e6;border:1px solid var(--rf26-line);border-radius:8px;padding:9px 12px;font:inherit;font-size:12px;cursor:pointer}
+.rf26-network-control select:focus-visible{outline:2px solid var(--rf26-accent);outline-offset:2px}
+.rf26-network-status{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px;margin-bottom:18px;border:1px solid var(--rf26-line);background:var(--rf26-surface);border-radius:12px}
+.rf26-network-status>div{min-width:0}
+.rf26-eyebrow{font-size:10px;letter-spacing:.14em;color:var(--rf26-muted)}
+.rf26-network-status strong{display:block;margin-top:5px;font-size:16px;color:var(--rf26-text)}
+.rf26-network-status p{margin:7px 0 0;font-size:13px;line-height:1.55;color:var(--rf26-muted);max-width:58ch}
+.rf26-network-status button{flex-shrink:0}
+.rf-shell-drawer .rf26-network-control{padding:14px 18px;display:flex;flex-direction:column;align-items:stretch;border-bottom:1px solid var(--rf26-line)}
+.rf-shell-drawer .rf26-network-control select{max-width:none;width:100%}
+@media(max-width:860px){.site-nav .rf26-network-control{order:3;width:100%;justify-content:space-between}.site-nav .rf26-network-control select{flex:1;max-width:none}.topbar>.rf26-network-control{display:none}.rf26-network-status{flex-direction:column;align-items:stretch}.rf26-network-status button{align-self:flex-start}}
+/* Shared restrained presentation layer; native components keep their existing layout. */
+.site-page-body,.studio-page-body,.dashboard-page-body{background-color:#080808}
+.site-main{color:#e8e8e8}
+.site-nav,.topbar{border-bottom-color:var(--rf26-line)}
+.site-eyebrow{letter-spacing:.16em}
+.site-primary-link,.primary-btn{transition:background-color .15s ease,border-color .15s ease}
+.site-primary-link:focus-visible,.primary-btn:focus-visible,.ghost-btn:focus-visible{outline:2px solid #ee9922;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.site-primary-link,.primary-btn{transition:none}}
+
+.rf26-permanence{padding:72px 0 76px;border-top:1px solid var(--rf26-line);border-bottom:1px solid var(--rf26-line);margin:8px 0 72px}
+.rf26-permanence h2{font-size:clamp(28px,4.2vw,52px);line-height:1.12;letter-spacing:-.04em;margin:17px 0 24px;color:#ededed}
+.rf26-permanence>p:not(.site-eyebrow){max-width:690px;color:#a0a0a0;line-height:1.8;font-size:15px}
+.rf26-permanence>a{display:inline-flex;gap:12px;margin-top:20px;color:#e7e7e7;text-decoration:none;border-bottom:1px solid #777;padding-bottom:9px;font-size:13px}
+.rf26-permanence>a:hover{color:#ee9922;border-color:#ee9922}
+.site-hero{min-height:0}
+.site-lead{max-width:610px}
+.site-note{max-width:560px}
+.site-control-section>div:first-child>p:not(.site-eyebrow){color:#999;line-height:1.7;max-width:440px}
+@media(max-width:700px){.rf26-permanence{padding:46px 0;margin-bottom:46px}}
+
+.rf26-availability{border-top:1px solid var(--rf26-line);padding:15px 0 24px;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+.rf26-availability span{font-size:10px;letter-spacing:.12em;color:#777;white-space:nowrap}
+.rf26-availability p{margin:0;color:#999;font-size:12px;line-height:1.5}
+.rf26-drawer-network{padding:14px 18px;border-bottom:1px solid var(--rf26-line);flex-direction:column;align-items:flex-start}
+.rf26-network-control strong{font-size:12px;font-weight:500;color:#d8d8d8;white-space:nowrap}
+.rf26-mint-network{color:#999;font-size:12px;letter-spacing:.04em;margin-bottom:10px}
+.site-nav{flex-wrap:wrap;column-gap:20px}
+.site-nav .rf26-network-control{flex:0 1 240px;min-width:180px}
+@media(max-width:860px){.site-nav .rf26-network-control{flex:1 1 100%}}
+
+/* Phase 2A Studio network selection and pre-launch guidance */
+.rf26-studio-network{display:block;padding:0;overflow:hidden}
+.rf26-studio-network-main{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.9fr);gap:24px;align-items:start;padding:22px}
+.rf26-studio-network h4{margin:7px 0 9px;color:#ededed;font-size:17px;font-weight:600;line-height:1.35}
+.rf26-studio-network-main p{max-width:56ch;margin:0;color:#999;line-height:1.65;font-size:13px}
+.rf26-network-field{min-width:0;display:flex;flex-direction:column;gap:8px}
+.rf26-network-field label{color:#c8c8c8;font-size:12px;font-weight:600}
+.rf26-network-field select{width:100%;max-width:none;min-width:0;background:#111;color:#e6e6e6;border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:11px 12px;font:inherit;font-size:13px}
+.rf26-network-field select:focus-visible{outline:2px solid #ee9922;outline-offset:2px}
+.rf26-network-field small{color:#888;font-size:11px;line-height:1.55}
+.rf26-test-recommendation{padding:20px 22px 22px;border-top:1px solid var(--rf26-line);background:#0c0c0c}
+.rf26-test-recommendation-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px 18px;margin-bottom:11px}
+.rf26-test-recommendation-heading .rf26-eyebrow{color:#ee9922}
+.rf26-test-recommendation-heading strong{font-size:14px;color:#e5e5e5;font-weight:600}
+.rf26-test-recommendation p{max-width:78ch;color:#a3a3a3;font-size:12px;line-height:1.7;margin:0 0 10px}
+.rf26-test-recommendation p:last-of-type{margin-bottom:0}
+.rf26-test-recommendation a{display:inline-flex;align-items:center;gap:8px;margin-top:15px;color:#d7d7d7;font-size:12px;text-decoration:none;border-bottom:1px solid #666;padding-bottom:5px}
+.rf26-test-recommendation a:hover{color:#ee9922;border-color:#ee9922}
+@media(max-width:700px){.rf26-studio-network-main{grid-template-columns:minmax(0,1fr);gap:18px;padding:18px}.rf26-test-recommendation{padding:18px}}
