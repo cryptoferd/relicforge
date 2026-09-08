@@ -74,36 +74,17 @@
   }
 
   async function readProvider() {
-    if(state.provider)return state.provider;
-    const base=apiBase(); if(!base)throw new Error('RelicForge Cloud API is not configured.');
-    const provider=new window.ethers.JsonRpcProvider(`${base}/api/public/rpc/${CHAIN_ID}`,CHAIN_ID,{staticNetwork:true,batchMaxCount:20});
-    await provider.getBlockNumber();
+    const scope=await window.RelicForgeForgeNetwork.requireReady();
+    if(scope.chainId!==CHAIN_ID)throw new Error('This R12-v2 Stage Manager is restricted to verified Sepolia deployments.');
+    const provider=window.RelicForgeNetworks.readProvider(CHAIN_ID);
+    await window.RelicForgeNetworks.assertProvider(provider,CHAIN_ID);
     state.provider=provider;
     return provider;
   }
 
   async function creatorSigner() {
-    let injected=window.RelicForgeWallets?.getProvider?.()||window.ethereum;
-    if(!injected?.request&&window.RelicForgeWallets?.getProviderAsync) injected=await window.RelicForgeWallets.getProviderAsync({allowChooser:true});
-    if(!injected?.request)throw new Error('No EVM wallet provider is available.');
-    let accounts=await injected.request({method:'eth_accounts'});
-    if(!accounts?.[0]&&window.RelicForgeWallets?.requestAccount){
-      const selected=await window.RelicForgeWallets.requestAccount({forceChooser:false});
-      accounts=selected?[selected]:[];
-    }
-    if(!accounts?.[0])accounts=await injected.request({method:'eth_requestAccounts'});
-    if(!accounts?.[0])throw new Error('Connect the collection controller wallet.');
-    const desired=`0x${CHAIN_ID.toString(16)}`;
-    const current=String(await injected.request({method:'eth_chainId'})).toLowerCase();
-    if(current!==desired.toLowerCase()){
-      try{await injected.request({method:'wallet_switchEthereumChain',params:[{chainId:desired}]});}
-      catch{throw new Error('Switch the creator wallet to Sepolia and try again.');}
-    }
-    const browser=new window.ethers.BrowserProvider(injected);
-    const signer=await browser.getSigner();
-    const wallet=window.ethers.getAddress(await signer.getAddress());
-    if(state.controller&&wallet.toLowerCase()!==state.controller.toLowerCase())throw new Error(`Connected wallet ${short(wallet)} is not the active MintPhases controller.`);
-    return signer;
+    if(!state.collection)throw new Error('Select a verified R12-v2 collection first.');
+    return window.RF26CreatorGuard.signer(state.collection,{controller:state.controller,chainId:CHAIN_ID});
   }
 
   function currentR12Address() {
@@ -115,6 +96,8 @@
   }
 
   async function loadOnchain(address) {
+    const ticket=state.readSerial=(state.readSerial||0)+1;
+    const bound=await window.RF26CreatorGuard.read(address,{chainId:CHAIN_ID});
     const provider=await readProvider();
     const collection=new window.ethers.Contract(address,COLLECTION_ABI,provider);
     const mpAddress=window.ethers.getAddress(await collection.mintPhases());
@@ -134,6 +117,10 @@
         };
       })));
     }
+    await bound.assert();
+    if(ticket!==state.readSerial)throw new Error('A newer collection selection replaced this dashboard read.');
+    if(window.ethers.getAddress(controller).toLowerCase()!==bound.identity.controller||mpAddress.toLowerCase()!==bound.identity.phases)
+      throw new Error('Collection controller or MintPhases binding changed during refresh.');
     state.collection=window.ethers.getAddress(address);
     state.mintPhasesAddress=mpAddress;
     state.controller=window.ethers.getAddress(controller);
@@ -189,20 +176,32 @@
 
   async function cloudAuth(){
     if(!window.RelicForgeCloud?.enabled?.())throw new Error('RelicForge Cloud is unavailable.');
-    const signer=await creatorSigner(),wallet=window.ethers.getAddress(await signer.getAddress());
-    await window.RelicForgeCloud.ensureSignedIn(wallet);
-    return wallet;
+    if(!state.collection)throw new Error('Select a verified collection first.');
+    const session=await window.RF26CreatorGuard.account(state.collection,{role:'controller',chainId:CHAIN_ID});
+    if(state.controller&&session.identity.controller!==state.controller.toLowerCase())
+      throw new Error('The displayed MintPhases controller is stale. Refresh the collection.');
+    await session.assert();
+    await window.RelicForgeCloud.ensureSignedIn(session.wallet);
+    return session;
   }
 
   async function getCloudList(phaseId){
-    await cloudAuth();
-    return window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(state.collection)}/v2/whitelist/${Number(phaseId)}`,{},true);
+    const session=await cloudAuth(),collection=session.identity.collection;
+    await session.assert();
+    return window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,{},true);
   }
 
   async function publishCloudList(phaseId,tree){
-    await cloudAuth();
+    const session=await cloudAuth(),collection=session.identity.collection;
+    const provider=await readProvider();
+    const mp=new window.ethers.Contract(session.identity.phases,MINT_PHASES_ABI,provider);
+    const phase=await mp.phases(Number(phaseId));
+    if(Number(phase.accessType??phase[7])!==1||
+       String(phase.merkleRoot??phase[6]).toLowerCase()!==String(tree.root).toLowerCase())
+      throw new Error('The onchain Approved Wallet root differs from this proof list. Refresh before publishing.');
+    await session.assert();
     return window.RelicForgeCloud.json(
-      `/api/collections/${CHAIN_ID}/${encodeURIComponent(state.collection)}/v2/whitelist/${Number(phaseId)}`,
+      `/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,
       {method:'PUT',body:JSON.stringify({
         projectId:null,merkleRoot:tree.root,sourceType:2,sourceChainId:CHAIN_ID,sourceContract:null,snapshotBlock:0,
         entries:tree.entries.map(row=>({address:row.address,allowance:row.allowance,proof:row.proof}))
@@ -401,6 +400,14 @@
     try{await loadOnchain(address);renderPanel();}catch(error){console.warn('R2.3 dashboard stage manager:',error);}
   }
   function scheduleScan(){clearTimeout(state.scanTimer);state.scanTimer=setTimeout(scan,120);}
+  for(const event of ['relicforge:launch-network-changed','relicforge:forge-session-invalidated']){
+    window.addEventListener(event,()=>{
+      state.collection=null;state.mintPhasesAddress=null;state.controller=null;state.phases=[];state.provider=null;
+      state.retryPayload=null;state.entries=[];state.busy=false;state.readSerial=(state.readSerial||0)+1;
+      if(state.countdownTimer){clearInterval(state.countdownTimer);state.countdownTimer=null;}
+      $('r23StageManager')?.remove();
+    });
+  }
   const detail=$('launchedCollectionDetail');if(detail)new MutationObserver(scheduleScan).observe(detail,{childList:true,subtree:true});
   window.addEventListener('relicforge:wallet-connected',scheduleScan);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleScan);else scheduleScan();
