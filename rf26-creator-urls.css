@@ -1,0 +1,51 @@
+.rf26-url-trigger{position:fixed;right:18px;bottom:18px;z-index:1050;border:1px solid rgba(255,255,255,.16);background:#171717;color:#f4f4f4;border-radius:999px;padding:10px 15px;font:700 12px/1.1 Inter,system-ui,sans-serif;letter-spacing:.04em;box-shadow:0 12px 32px rgba(0,0,0,.38);cursor:pointer}
+.rf26-url-trigger:hover{background:#222;border-color:rgba(255,255,255,.28)}
+.rf26-url-trigger-inline{position:static;right:auto;bottom:auto;box-shadow:none;margin-left:8px}
+.rf26-url-backdrop{position:fixed;inset:0;z-index:1090;background:rgba(0,0,0,.58);backdrop-filter:blur(2px)}
+.rf26-url-drawer{position:fixed;z-index:1100;top:0;right:0;width:min(470px,100vw);height:100dvh;background:#0d0d0d;color:#ececec;border-left:1px solid rgba(255,255,255,.12);box-shadow:-22px 0 60px rgba(0,0,0,.52);transform:translateX(102%);transition:transform .2s ease;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.rf26-url-drawer.is-open{transform:translateX(0)}
+.rf26-url-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:22px 22px 16px;border-bottom:1px solid rgba(255,255,255,.09);background:linear-gradient(180deg,#151515,#0d0d0d)}
+.rf26-url-head h2{margin:3px 0 0;color:#fff;font-size:23px;line-height:1.1;letter-spacing:-.02em}
+.rf26-url-kicker{font-size:10px;letter-spacing:.16em;color:#969696;font-weight:800}
+.rf26-url-icon{border:1px solid rgba(255,255,255,.12);background:#181818;color:#d7d7d7;border-radius:10px;width:36px;height:36px;font-size:24px;line-height:1;cursor:pointer}
+.rf26-url-icon:hover{background:#242424;color:#fff}
+.rf26-url-body{padding:16px 16px 34px;overflow:auto}
+.rf26-url-card{border:1px solid rgba(255,255,255,.1);background:#121212;border-radius:16px;padding:17px;margin-bottom:14px;box-shadow:inset 0 1px rgba(255,255,255,.02)}
+.rf26-url-card h3{margin:6px 0 8px;font-size:17px;color:#f5f5f5}
+.rf26-url-card p{margin:7px 0 13px;color:#a9a9a9;font-size:13px;line-height:1.55}
+.rf26-url-card-title{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#f1f1f1;font-size:14px;font-weight:800;margin-bottom:8px}
+.rf26-url-badge{display:inline-flex;align-items:center;min-height:23px;border:1px solid rgba(255,255,255,.11);border-radius:999px;padding:3px 8px;color:#bdbdbd;background:#191919;font-size:10px;font-weight:800;letter-spacing:.04em}
+.rf26-url-badge-warn{border-color:rgba(238,153,34,.34);background:rgba(238,153,34,.08);color:#e9b76f}
+.rf26-url-contract{font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;color:#d7d7d7!important}
+.rf26-url-subtle{font-size:11px!important;color:#777!important;overflow-wrap:anywhere}
+.rf26-url-label{display:block;margin:12px 0 6px;color:#bdbdbd;font-size:11px;font-weight:700;letter-spacing:.03em}
+.rf26-url-input{width:100%;min-width:0;box-sizing:border-box;border:1px solid rgba(255,255,255,.12);background:#090909;color:#ededed;border-radius:10px;padding:10px 11px;font:500 13px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}
+.rf26-url-input:focus{border-color:rgba(238,153,34,.6);box-shadow:0 0 0 3px rgba(238,153,34,.08)}
+.rf26-url-input[readonly]{color:#aaa;background:#0b0b0b}
+.rf26-url-copyrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.rf26-url-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.rf26-url-button{border:1px solid rgba(255,255,255,.13);border-radius:10px;padding:9px 12px;font:800 11px/1.2 Inter,system-ui,sans-serif;letter-spacing:.025em;cursor:pointer;transition:background .15s,border-color .15s,opacity .15s}
+.rf26-url-button:disabled{cursor:not-allowed;opacity:.38}
+.rf26-url-primary{background:#e99222;color:#0c0c0c;border-color:#e99222}
+.rf26-url-primary:hover:not(:disabled){background:#f1a339;border-color:#f1a339}
+.rf26-url-secondary{background:#1a1a1a;color:#ddd}
+.rf26-url-secondary:hover:not(:disabled){background:#242424;border-color:rgba(255,255,255,.22)}
+.rf26-url-status{margin-top:11px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:#0d0d0d;padding:9px 10px;color:#999;font-size:12px;line-height:1.45}
+.rf26-url-status[data-tone="good"]{color:#b9dab9;border-color:rgba(121,190,121,.25);background:rgba(63,119,63,.08)}
+.rf26-url-status[data-tone="bad"]{color:#e1a7a7;border-color:rgba(200,91,91,.25);background:rgba(126,48,48,.08)}
+.rf26-url-status[data-tone="warn"]{color:#ddbd8b;border-color:rgba(238,153,34,.25);background:rgba(238,153,34,.06)}
+.rf26-url-status[data-tone="info"]{color:#abbdd4;border-color:rgba(105,143,190,.22);background:rgba(76,111,155,.06)}
+.rf26-url-preview{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin:10px 0 12px;padding:10px 11px;border:1px solid rgba(238,153,34,.17);background:#0b0b0b;border-radius:10px;color:#8f8f8f;font:500 12px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.rf26-url-preview strong{color:#e99222}
+.rf26-url-hint{margin:6px 0 0!important;color:#747474!important;font-size:11px!important}
+.rf26-url-confirm{display:flex;align-items:flex-start;gap:9px;margin:12px 0 2px;padding:10px;border:1px solid rgba(238,153,34,.14);border-radius:10px;background:rgba(238,153,34,.035);color:#bcbcbc;font-size:12px;line-height:1.4}
+.rf26-url-confirm input,.rf26-url-toggle input{accent-color:#e99222;margin-top:2px}
+.rf26-url-claimed{margin-top:13px}
+.rf26-url-rule{border:0;border-top:1px solid rgba(255,255,255,.08);margin:18px 0}
+.rf26-url-toggle{display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:#0e0e0e;color:#d2d2d2;font-size:12px}
+.rf26-url-toggle span{display:grid;gap:3px}
+.rf26-url-toggle strong{font-size:12px}
+.rf26-url-toggle small{color:#777;line-height:1.35}
+.rf26-url-toggle:has(input:disabled){opacity:.55}
+@media(max-width:600px){.rf26-url-drawer{width:100vw}.rf26-url-head{padding:18px 16px 14px}.rf26-url-body{padding:12px 12px 28px}.rf26-url-trigger:not(.rf26-url-trigger-inline){right:12px;bottom:12px}}
+@media(prefers-reduced-motion:reduce){.rf26-url-drawer{transition:none}}
