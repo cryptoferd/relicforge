@@ -1,6 +1,7 @@
 // Server-owned network release policy. The public Alchemy catalog is a read
 // catalog, not permission to deploy or publish a Relic Forge collection.
 import { one } from './db.js';
+import { normalizeSlug as canonicalSlug } from './rf26-slug-core.js';
 
 export function networkId(value) {
   const id=Number(value);
@@ -37,10 +38,5 @@ export function assertNoTestnetPromotion(policy,settings={}) {
   return true;
 }
 export function normalizeSlug(value) {
-  const slug=String(value??'').trim().toLowerCase();
-  if(!/^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])?$/.test(slug)||slug.includes('--'))
-    throw Object.assign(new Error('Use 3–48 lowercase letters, numbers, or single hyphens; no leading or trailing hyphen.'),{statusCode:400});
-  const reserved=new Set(['admin','api','assets','auth','dashboard','docs','help','home','index','mint','new','reliquary','settings','studio','support','testnet','upcoming','www','relicforge','ethereum','sepolia']);
-  if(reserved.has(slug))throw Object.assign(new Error('This slug is reserved.'),{statusCode:400});
-  return slug;
+  return canonicalSlug(value);
 }

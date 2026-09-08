@@ -2,8 +2,9 @@ import { Contract, getAddress } from 'ethers';
 import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
 import { verifyCollectionOwner, providerFor } from '../lib/rpc.js';
-import { networkPolicy, networkId, assertProductionPublication, assertDeploymentEnabled, normalizeSlug } from '../lib/rf26-networks.js';
+import { networkPolicy, networkId, assertDeploymentEnabled } from '../lib/rf26-networks.js';
 import { splitLegacyProject, launchDraft } from '../lib/rf26-project-model.js';
+import { registerRf26SlugRoutes } from './rf26-slug-routes.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FACTORY_ABI=['function isRelicForgeCollection(address) view returns(bool)'];
@@ -175,71 +176,5 @@ export default async function rf26Routes(app){
     return {deployment:await deployment(request.params.chainId,request.params.contract,request.user.wallet)};
   });
 
-  app.get('/api/public/mint-slugs/:slug/available',async request=>{
-    const slug=normalizeSlug(request.params.slug);
-    const row=await one('SELECT 1 FROM rf26_publications WHERE slug=$1',[slug]);
-    const {rows}=await db.query("SELECT chain_id FROM rf26_networks WHERE kind='production' AND public_enabled=TRUE");
-    return {slug,available:!row&&rows.length>0,productionAvailable:rows.length>0};
-  });
-
-  app.put('/api/rc26/deployments/:chainId/:contract/slug',{preHandler:authenticate},async request=>{
-    const id=networkId(request.params.chainId),contract=address(request.params.contract);
-    const policy=assertProductionPublication(await networkPolicy(id));
-    const row=await deployment(id,contract,request.user.wallet);
-    if(row.project_id && request.body?.projectId && String(row.project_id)!==String(request.body.projectId))
-      throw fail('Deployment project mismatch.',409);
-    if(row.architecture!=='v2')throw fail('Custom slugs require a registered V2 production collection.',409);
-    await verifyV2(id,contract,policy);
-    if(address(row.factory_address)!==address(policy.factory_address))throw fail('Collection Factory is not the active production Factory.',409);
-    const slug=normalizeSlug(request.body?.slug);
-    const client=await db.connect();
-    try{
-      await client.query('BEGIN');
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',['rf26:slug:'+slug]);
-      const current=await client.query('SELECT slug FROM rf26_publications WHERE chain_id=$1 AND contract_address=$2 FOR UPDATE',[id,contract]);
-      if(current.rows[0]?.slug&&current.rows[0].slug!==slug)throw fail('This collection already has a permanent slug.',409);
-      const result=await client.query(`INSERT INTO rf26_publications(chain_id,contract_address,owner_wallet,slug)
-        VALUES($1,$2,$3,$4) ON CONFLICT(chain_id,contract_address) DO UPDATE
-        SET slug=EXCLUDED.slug RETURNING slug`,[id,contract,address(request.user.wallet),slug]);
-      await client.query('COMMIT');
-      return {slug:result.rows[0].slug,chainId:id,contract:getAddress(contract),
-        mintPage:`/mint/${slug}`,permanent:true};
-    }catch(error){
-      await client.query('ROLLBACK');
-      if(error.code==='23505')throw fail('This slug has already been claimed.',409);
-      throw error;
-    }finally{client.release();}
-  });
-
-  app.put('/api/rc26/deployments/:chainId/:contract/publication',{preHandler:authenticate},async request=>{
-    const id=networkId(request.params.chainId),contract=address(request.params.contract);
-    const policy=assertProductionPublication(await networkPolicy(id));
-    const row=await deployment(id,contract,request.user.wallet);
-    if(row.architecture!=='v2'||address(row.factory_address)!==address(policy.factory_address))
-      throw fail('This deployment is not registered under the active production Factory.',409);
-    await verifyV2(id,contract,policy);
-    if(typeof request.body?.listed!=='boolean'||typeof request.body?.featureRequested!=='boolean')
-      throw fail('listed and featureRequested must be booleans.');
-    const listed=request.body.listed,featureRequested=listed&&request.body.featureRequested;
-    const result=await one(`INSERT INTO rf26_publications(chain_id,contract_address,owner_wallet,listed,feature_requested)
-      VALUES($1,$2,$3,$4,$5)
-      ON CONFLICT(chain_id,contract_address) DO UPDATE
-      SET listed=EXCLUDED.listed,feature_requested=EXCLUDED.feature_requested,
-          featured=CASE WHEN EXCLUDED.listed AND EXCLUDED.feature_requested THEN rf26_publications.featured ELSE FALSE END
-      RETURNING *`,[id,contract,address(request.user.wallet),listed,featureRequested]);
-    return {publication:{chainId:id,contract:getAddress(contract),listed:result.listed,featureRequested:result.feature_requested,
-      featured:result.featured,slug:result.slug}};
-  });
-
-  app.get('/api/public/mint-slugs/:slug',async(request,reply)=>{
-    const slug=normalizeSlug(request.params.slug);
-    const row=await one(`SELECT c.chain_id,c.contract_address,p.slug,p.listed,p.featured
-      FROM rf26_publications p JOIN collections c USING(chain_id,contract_address)
-      JOIN rf26_networks n ON n.chain_id=c.chain_id
-      WHERE p.slug=$1 AND n.kind='production' AND n.public_enabled=TRUE
-        AND c.owner_wallet=p.owner_wallet`,[slug]);
-    reply.header('Cache-Control','public, s-maxage=60');
-    if(!row)return reply.code(404).send({error:'Mint page not found.'});
-    return publicDeployment(row);
-  });
+  registerRf26SlugRoutes(app,{verifyV2});
 }
