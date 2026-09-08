@@ -82,6 +82,7 @@
         throw fail('Journal creator or release identity mismatch.');
     }
     const out={...clone(record),...i,schema:SCHEMA,steps:{}};
+    if(record.launchSpecHash!=null)out.launchSpecHash=hash(record.launchSpecHash);
     for(const field of BINDINGS)out[field]=optionalAddress(record[field]);
     for(const field of ['publicPhaseId','whitelistPhaseId']){
       const n=record[field]==null?null:Number(record[field]);
@@ -107,7 +108,7 @@
   }
   function assertSame(previous,next){
     const fields=['chainId','factory','wallet','provenance','releaseId','manifestHash','projectId',...BINDINGS,
-      'publicPhaseId','whitelistPhaseId'];
+      'publicPhaseId','whitelistPhaseId','launchSpecHash'];
     for(const field of fields){
       if(previous[field]!=null&&next[field]!=null&&
          String(previous[field]).toLowerCase()!==String(next[field]).toLowerCase())
@@ -120,7 +121,7 @@
     const out={...previous,...next,steps:{...previous.steps},startedAt:previous.startedAt||next.startedAt};
     // Partial updates never clear a previously established immutable binding.
     for(const field of ['chainId','factory','wallet','provenance','releaseId','manifestHash','projectId',
-      ...BINDINGS,'publicPhaseId','whitelistPhaseId'])
+      ...BINDINGS,'publicPhaseId','whitelistPhaseId','launchSpecHash'])
       if(previous[field]!=null&&next[field]==null)out[field]=previous[field];
     for(const [name,step] of Object.entries(next.steps||{})){
       const prior=previous.steps?.[name];

@@ -1990,201 +1990,11 @@ ${await file.text()}`;
   }
 
   async function forgeCollection() {
-    const forgeButton = $('forgeCollectionBtn');
-    const collectionBeforeForge = forgeState.collectionAddress || null;
-    try {
-    await requireForgeWrite(false);
-
-      if (forgeButton) {
-        forgeButton.disabled = true;
-        forgeButton.textContent = 'Preparing Forge...';
-      }
-      log('forgeTestStatus', 'Preparing R12-v2 forge...', true);
-      if (!forgeState.compiled) throw new Error('Compile the collection for onchain first.');
-      if (currentRevealMode() !== forgeState.compiled.core.revealMode) throw new Error('Reveal mode changed after compilation. Recompile first.');
-      if (!forgeState.signer) await connectWallet();
-      const c = forgeState.compiled;
-      const cfg = canonicalV1Config();
-      const network = await forgeState.provider.getNetwork();
-      if (Number(network.chainId) !== 11155111) throw new Error('Switch the connected creator wallet to Ethereum Sepolia.');
-      const factoryCode = await forgeState.provider.getCode(cfg.factory);
-      if (!factoryCode || factoryCode === '0x') throw new Error('Configured R12-v2 Factory has no code on Sepolia.');
-
-      const payoutWallet = $('payoutWallet')?.value.trim() || forgeState.wallet;
-      const royaltyWallet = $('royaltyWallet')?.value.trim() || forgeState.wallet;
-      if (!window.ethers.isAddress(payoutWallet) || !window.ethers.isAddress(royaltyWallet)) throw new Error('Payout and royalty wallets must be valid EVM addresses.');
-      const royaltyBps = Math.round(Math.max(0, Number($('royalty')?.value || 0)) * 100);
-      if (!Number.isInteger(royaltyBps) || royaltyBps < 0 || royaltyBps > 1000) throw new Error('Royalty must be between 0% and 10% in Studio.');
-
-      const publicEnabled = !!$('publicMintEnabled')?.checked;
-      const whitelistEnabled = !!$('whitelistEnabled')?.checked;
-      if (whitelistEnabled && !forgeState.whitelist?.entries?.length) throw new Error('Build or snapshot the approved-wallet list before forging.');
-      const publicPrice = window.ethers.parseEther(String(Math.max(0, Number($('mintPrice')?.value || 0))));
-      const whitelistPrice = window.ethers.parseEther(String(Math.max(0, Number($('whitelistMintPrice')?.value || 0))));
-      const maxPerWallet = Math.max(0, Math.floor(Number($('maxPerWallet')?.value || 0)));
-      if (maxPerWallet > 4294967295) throw new Error('Max mints per wallet is too large.');
-      const publicSchedule = phaseScheduleFromInputs('publicMintStart', 'publicMintEnd', 'Public phase');
-      const whitelistSchedule = phaseScheduleFromInputs('whitelistMintStart', 'whitelistMintEnd', 'Approved Wallet phase');
-      const enabledSchedules = [...(publicEnabled ? [publicSchedule] : []), ...(whitelistEnabled ? [whitelistSchedule] : [])];
-      const autoArmScheduledMint = enabledSchedules.length > 0 && enabledSchedules.every(schedule => schedule.startTime > 0);
-
-      const holderRenderEnabled = !!$('holderRenderModeEnabled')?.checked;
-      const defaultRenderMode = Number($('defaultRenderMode')?.value || 0);
-      if (![0,1].includes(defaultRenderMode)) throw new Error('Default render mode is invalid.');
-      if (defaultRenderMode === 1 && !window.RelicForgeCloud?.enabled?.()) throw new Error('Offchain rendering cannot be the default until RelicForge Cloud is configured.');
-
-      const feeMode = currentPlatformFeeMode();
-      const factory = new window.ethers.Contract(cfg.factory, V2_FACTORY_ABI, forgeState.signer);
-      const [lockedFeeCents, upfrontFeeWei, oracleHealthy, feeActive] = await factory.quoteCollectionFeeTerms(c.recipeCount, feeMode);
-      if (feeMode === V1_FEE_MODE_SPONSORED && Number(lockedFeeCents) > 0 && !oracleHealthy) throw new Error('Creator Covers Platform Fee launch requires a healthy ETH/USD quote when the rate is nonzero.');
-      const randomnessQuote = await refreshVrfQuote();
-      if (!randomnessQuote) throw new Error('Could not establish the current Chainlink request quote and launch ceiling.');
-
-      const validationBatch = Math.max(1, Math.min(500, Math.floor(4096 / c.layerDefs.length)));
-      const validationBatches = Math.ceil(c.recipeCount / validationBatch);
-      const traitBatches = Math.ceil(c.traits.length / 30);
-      const oneOfOneMetadataCount = (c.oneOfOneMetadataInputs || []).length;
-      const phaseCount = (publicEnabled ? 1 : 0) + (whitelistEnabled ? 1 : 0);
-      const steps = [
-        { label: 'Create R12-v2 Collection + ProjectData + MintPhases', status: 'pending' },
-        ...c.artShards.map((_,i) => ({ label:'Write artwork shard ' + (i+1) + '/' + c.artShards.length, status:'pending' })),
-        { label:'Register layer names', status:'pending' },
-        { label:'Configure metadata visibility', status:'pending' },
-        ...(c.oneOfOneLayerIndex >= 0 ? [{ label:'Configure standalone 1/1 layer', status:'pending' }] : []),
-        ...Array.from({length:oneOfOneMetadataCount},(_,i)=>({label:'Store 1/1 metadata ' + (i+1) + '/' + oneOfOneMetadataCount,status:'pending'})),
-        ...Array.from({length:traitBatches},(_,i)=>({label:'Register trait batch ' + (i+1) + '/' + traitBatches,status:'pending'})),
-        ...c.dnaShards.map((_,i)=>({label:'Write DNA shard ' + (i+1) + '/' + c.dnaShards.length,status:'pending'})),
-        { label:'Configure DNA', status:'pending' },
-        { label:'Store forging placeholder', status:'pending' },
-        { label:'Configure renderer policy', status:'pending' },
-        ...Array.from({length:validationBatches},(_,i)=>({label:'Validate recipe batch ' + (i+1) + '/' + validationBatches,status:'pending'})),
-        { label:'Seal immutable collection content', status:'pending' },
-        ...Array.from({length:phaseCount},(_,i)=>({label:'Create MintPhases stage ' + (i+1) + '/' + phaseCount,status:'pending'})),
-        ...(autoArmScheduledMint ? [{ label:'Enable scheduled minting', status:'pending' }] : []),
-      ];
-      renderDeployProgress(steps);
-      let si = 0;
-
-      steps[si].status = 'active'; renderDeployProgress(steps);
-      const launchConfig = [
-        c.core.name, c.core.symbol, c.core.description, c.recipeCount, c.core.canvas[0], c.core.canvas[1], c.layerDefs.length,
-        payoutWallet, royaltyWallet, royaltyBps, feeMode, currentRevealMode(), randomnessQuote.batchWindowSeconds, randomnessQuote.ceiling
-      ];
-      beginDeploymentJournal(c, cfg.factory);
-      if (forgeButton) forgeButton.textContent = 'Confirm Forge in Wallet...';
-      const createTx = await factory.createCollectionV2(launchConfig, { value: feeMode === V1_FEE_MODE_SPONSORED ? upfrontFeeWei : 0n });
-      if (forgeButton) forgeButton.textContent = 'Forging on Sepolia...';
-      steps[si].label = steps[si].label + ' - ' + createTx.hash.slice(0,10) + '...'; renderDeployProgress(steps);
-      const createReceipt = await createTx.wait();
-      if (createReceipt.status !== 1) throw new Error('R12-v2 collection creation transaction failed.');
-      let collectionAddress = null, dataAddress = null;
-      for (const entry of createReceipt.logs) {
-        try { const parsed = factory.interface.parseLog(entry); if (parsed?.name === 'CollectionCreated') { collectionAddress = parsed.args.collection; dataAddress = parsed.args.dataContract; break; } } catch (_) {}
-      }
-      if (!collectionAddress || !dataAddress) throw new Error('CollectionCreated event did not include both clone addresses.');
-      forgeState.collectionAddress = window.ethers.getAddress(collectionAddress);
-      forgeState.dataAddress = window.ethers.getAddress(dataAddress);
-      forgeState.mintPhasesAddress = window.ethers.getAddress(await factory.mintPhasesForCollection(forgeState.collectionAddress));
-      forgeState.publicPhaseId = null; forgeState.whitelistPhaseId = null; forgeState.masterMintArmed = false;
-      bindDeploymentJournal(forgeState.collectionAddress, forgeState.dataAddress, forgeState.mintPhasesAddress, createTx.hash);
-      const collection = collectionContract();
-      const boundMintPhases = window.ethers.getAddress(await collection.mintPhases());
-      if (boundMintPhases.toLowerCase() !== forgeState.mintPhasesAddress.toLowerCase()) throw new Error('Factory/Collection MintPhases binding mismatch.');
-      steps[si].status = 'done'; steps[si].label = 'Create R12-v2 Collection + ProjectData + MintPhases'; si++; renderDeployProgress(steps);
-
-      $('forgedCollectionAddress').textContent = forgeState.collectionAddress;
-      $('forgedEtherscanLink').href = 'https://sepolia.etherscan.io/address/' + forgeState.collectionAddress;
-      $('forgeResult').classList.remove('hidden');
-      if ($('viewerCollectionAddress')) $('viewerCollectionAddress').value = forgeState.collectionAddress;
-      const data = v1ProjectDataContract();
-      const mintPhases = mintPhasesContract();
-
-      const artPointers = [];
-      for (let i=0;i<c.artShards.length;i++,si++) { await sendV1Step('Write artwork shard ' + (i+1) + '/' + c.artShards.length, () => data.addArtShard(window.ethers.hexlify(c.artShards[i])), steps, si); artPointers[i] = await data.artShards(i); }
-      await sendV1Step('Register layer names', () => data.setLayerNames(c.layerDefs.map(layer=>layer.name)), steps, si++);
-      await sendV1Step('Configure metadata visibility', () => data.setLayerMetadataVisibility(c.layerDefs.map(layer=>!!layer.metadataHidden)), steps, si++);
-      if (c.oneOfOneLayerIndex >= 0) await sendV1Step('Configure standalone 1/1 layer', () => data.setOneOfOneLayer(c.oneOfOneLayerIndex), steps, si++);
-      for (let i=0;i<(c.oneOfOneMetadataInputs||[]).length;i++,si++) {
-        const row = c.oneOfOneMetadataInputs[i]; const attrs = parseOneOfOneAttributes(row[3]);
-        await sendV1Step('Store 1/1 metadata ' + (i+1) + '/' + c.oneOfOneMetadataInputs.length, () => data.setOneOfOneMetadata(row[0], row[1], row[2], attrs.traitTypes, attrs.values), steps, si);
-      }
-      for (let start=0,batch=1;start<c.traits.length;start+=30,batch++,si++) {
-        const items = c.traits.slice(start,start+30);
-        const inputs = items.map(t => { const pointer = artPointers[Number(t.shard)]; if (!pointer) throw new Error('Artwork pointer missing for ' + t.layerName + ' / ' + t.name + '.'); return [t.layerIndex,t.traitIndex,t.name,pointer,t.offset,t.length,t.encodingCode,!!t.metadataHidden]; });
-        await sendV1Step('Register trait batch ' + batch + '/' + traitBatches, () => data.addTraits(inputs), steps, si);
-      }
-      for (let i=0;i<c.dnaShards.length;i++,si++) await sendV1Step('Write DNA shard ' + (i+1) + '/' + c.dnaShards.length, () => data.addDnaShard(window.ethers.hexlify(c.dnaShards[i])), steps, si);
-      await sendV1Step('Configure DNA', () => data.setDNAConfig(c.recipeCount, c.recipesPerShard), steps, si++);
-      await sendV1Step('Store forging placeholder', () => data.setPlaceholder(window.ethers.hexlify(c.placeholderBytes)), steps, si++);
-      const renderHost = String(window.RELICFORGE_CONFIG?.renderBase || window.RelicForgeCloud?.apiBase?.() || '').replace(/\/$/,'');
-      const renderBase = renderHost ? renderHost + '/api/public/render/11155111/' + forgeState.collectionAddress + '/' : '';
-      await sendV1Step('Configure renderer policy', () => collection.setRenderConfig(renderBase, holderRenderEnabled && !!renderBase, defaultRenderMode), steps, si++);
-      let remaining = c.recipeCount;
-      for (let batch=1;remaining>0;batch++,si++) { const quantity = Math.min(validationBatch, remaining); await sendV1Step('Validate recipe batch ' + batch + '/' + validationBatches, () => data.validateNextRecipes(quantity), steps, si); remaining -= quantity; }
-      await sendV1Step('Seal immutable collection content', () => data.sealContent(c.provenance), steps, si++);
-
-      let nextPhaseId = 1;
-      if (publicEnabled) {
-        forgeState.publicPhaseId = nextPhaseId++;
-        await sendV1Step('Create public mint stage', () => mintPhases.createPhase(publicPrice, publicSchedule.startTime, publicSchedule.endTime, 0, maxPerWallet, window.ethers.ZeroHash, 0, 100, true), steps, si++);
-      }
-      if (whitelistEnabled) {
-        forgeState.whitelistPhaseId = nextPhaseId++;
-        const sourceMeta = forgeState.whitelist;
-        const finalTree = buildMerkleWhitelistV1(sourceMeta.entries, forgeState.collectionAddress, forgeState.whitelistPhaseId);
-        forgeState.whitelist = { ...sourceMeta, ...finalTree, root:finalTree.root, proofByAddress:finalTree.proofByAddress };
-        renderWhitelistSummary();
-        if ($('whitelistStatus')) $('whitelistStatus').textContent = 'Approved-wallet list bound to ' + shortAddr(forgeState.collectionAddress) + ' - phase ' + forgeState.whitelistPhaseId + ' - ' + finalTree.entries.length.toLocaleString() + ' wallets';
-        await sendV1Step('Create approved-wallet mint stage', () => mintPhases.createPhase(whitelistPrice, whitelistSchedule.startTime, whitelistSchedule.endTime, 0, 0, finalTree.root, 1, 200, true), steps, si++);
-      }
-      if (autoArmScheduledMint) { await sendV1Step('Enable scheduled minting', () => mintPhases.setMasterMintEnabled(true), steps, si++); forgeState.masterMintArmed = true; }
-
-      const masterMintEnabled = Boolean(await mintPhases.masterMintEnabled());
-      const publicPhaseOpen = forgeState.publicPhaseId ? Boolean(await mintPhases.phaseIsOpen(forgeState.publicPhaseId)) : false;
-      const whitelistPhaseOpen = forgeState.whitelistPhaseId ? Boolean(await mintPhases.phaseIsOpen(forgeState.whitelistPhaseId)) : false;
-      if ($('forgeArmMintBtn')) { $('forgeArmMintBtn').disabled = masterMintEnabled; $('forgeArmMintBtn').textContent = masterMintEnabled ? 'Minting Enabled (Scheduled)' : 'Enable Minting'; }
-      if ($('forgeMintTestBtn')) $('forgeMintTestBtn').disabled = !publicPhaseOpen;
-      if ($('forgeWhitelistMintBtn')) $('forgeWhitelistMintBtn').disabled = !whitelistPhaseOpen;
-      if ($('forgeCreatorMintBtn')) $('forgeCreatorMintBtn').disabled = false;
-      if ($('forgeDeferredRevealBtn')) $('forgeDeferredRevealBtn').disabled = currentRevealMode() !== 0;
-      ['forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn'].forEach(id => { if ($(id)) $(id).disabled = currentRevealMode() !== 1; });
-      if ($('forgeInspectBtn')) $('forgeInspectBtn').disabled = false;
-      if ($('openMintPageBtn')) { $('openMintPageBtn').disabled = false; $('openMintPageBtn').textContent = 'Open Mint Page'; }
-      if ($('publishMintPageBtn')) { $('publishMintPageBtn').disabled = !window.RelicForgeCloud?.enabled?.(); $('publishMintPageBtn').textContent = 'Sync Mint Page'; }
-      if ($('downloadMintPageBtn')) $('downloadMintPageBtn').disabled = true;
-      if ($('mintPageStatus')) $('mintPageStatus').textContent = 'R12-v2 collection forged. Open the collector page now; Approved Wallet proofs sync after all configured MintPhases transactions confirm.';
-
-      log('forgeTestStatus',
-        'R12-v2 collection forged.\nCollection: ' + forgeState.collectionAddress + '\nProjectData: ' + forgeState.dataAddress + '\nMintPhases: ' + forgeState.mintPhasesAddress + '\nReveal: ' + (currentRevealMode() === 0 ? 'Deferred Reveal' : 'Forge Reveal') + '\nPlatform fee: ' + (feeMode === V1_FEE_MODE_SPONSORED ? 'Creator Covers Platform Fee' : 'Collector Covers Platform Fee') + ' - base ' + (Number(lockedFeeCents)/100) + ' USD/NFT\nRandomness quote: ' + window.ethers.formatEther(randomnessQuote.price) + ' ETH; ceiling: ' + window.ethers.formatEther(randomnessQuote.ceiling) + ' ETH\nMinting: ' + (masterMintEnabled ? 'ON (phase timestamps still enforced)' : 'OFF (manual enable required)'),
-        true
-      );
-      setDeploymentStatus('base-complete');
-      if (forgeButton) {
-        forgeButton.disabled = true;
-        forgeButton.textContent = 'Collection Forged';
-      }
-      bridge().showStatus?.('R12-v2 base collection deployment confirmed on Sepolia.', 'success');
-    } catch (error) {
-      const partial = forgeState.collectionAddress ? '\nPartial R12-v2 collection: ' + forgeState.collectionAddress : '';
-      const message = error.shortMessage || error.message;
-      log('forgeTestStatus', 'FORGE ERROR: ' + message + partial, true);
-      const createdThisAttempt = !!forgeState.collectionAddress &&
-        String(forgeState.collectionAddress).toLowerCase() !== String(collectionBeforeForge || '').toLowerCase();
-      if (createdThisAttempt) {
-        if (forgeButton) {
-          forgeButton.disabled = true;
-          forgeButton.textContent = 'Deployment Interrupted - Resume Below';
-        }
-        setDeploymentStatus('partial', message);
-        bridge().showStatus?.('Forge paused after the R12-v2 collection was created. Use Resume Deployment to continue from confirmed Sepolia state; do not create a duplicate.', 'error');
-      } else {
-        if (forgeButton) {
-          forgeButton.disabled = false;
-          forgeButton.textContent = 'Forge Collection on Sepolia';
-        }
-        bridge().showStatus?.('Forge error: ' + message, 'error');
-      }
-    }
+    if(!window.RF26FreshForge?.run)throw new Error('R3D-B2 R3 fresh Forge runtime is unavailable. Reload Studio.');
+    return window.RF26FreshForge.run({
+      quoteRandomness:()=>refreshVrfQuote(),
+      attach:rf26AttachFreshDeployment
+    });
   }
 
   function requestedMintQuantity() {
@@ -4063,6 +3873,53 @@ ${await file.text()}`;
     return rf26OriginalOpenLaunch(...args);
   };
   window.addEventListener('relicforge:forge-session-invalidated',()=>resetWalletSessionUi('Wallet session changed. Reconnect to authorize deployment.'));
+
+
+  /* R3D-B2 R3: attach only an independently verified collection binding. */
+  function rf26AttachFreshDeployment(bindings,txHash=null){
+    const compiled=forgeState.compiled,scope=rf26Network().scope();
+    if(!compiled||!scope||scope.chainId!==11155111)
+      throw new Error('A verified Sepolia build is required before attaching a fresh deployment.');
+    const equal=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
+    const addr=value=>{
+      if(!window.ethers.isAddress(value)||equal(value,window.ethers.ZeroAddress))
+        throw new Error('Invalid fresh-deployment contract address.');
+      return window.ethers.getAddress(value);
+    };
+    const target={
+      collectionAddress:addr(bindings.collection),dataAddress:addr(bindings.data),
+      mintPhasesAddress:addr(bindings.phases)
+    };
+    if(Number(bindings.chainId)!==11155111||!equal(bindings.factory,scope.factory)||
+       !equal(bindings.creator,forgeState.wallet))
+      throw new Error('Fresh-deployment network, Factory, or creator mismatch.');
+    const loaded=forgeState.deploymentJournal;
+    if(loaded?.provenance&&!equal(loaded.provenance,compiled.provenance))
+      throw new Error('A different deployment journal is loaded. Save and reopen the intended project.');
+    const prior=loaded||findLocalDeploymentJournal(compiled.provenance);
+    if(prior){
+      if(prior.provenance&&!equal(prior.provenance,compiled.provenance))throw new Error('Deployment fingerprint mismatch.');
+      if(prior.chainId!=null&&Number(prior.chainId)!==11155111)throw new Error('Deployment network mismatch.');
+      if(prior.factory&&!equal(prior.factory,scope.factory))throw new Error('Deployment Factory mismatch.');
+      for(const field of ['collectionAddress','dataAddress','mintPhasesAddress'])
+        if(prior[field]&&!equal(prior[field],target[field]))throw new Error('Existing deployment binding mismatch: '+field);
+      if(txHash&&prior.steps?.factoryCreate?.txHash&&!equal(prior.steps.factoryCreate.txHash,txHash))
+        throw new Error('A different Factory transaction is already recorded.');
+    }
+    const steps={...(prior?.steps||{})};
+    if(txHash){
+      if(!/^0x[0-9a-f]{64}$/i.test(txHash))throw new Error('Invalid Factory transaction hash.');
+      steps.factoryCreate={...steps.factoryCreate,
+        label:'Create R12-v2 Collection + ProjectData + MintPhases',txHash,
+        status:'confirmed',confirmedAt:steps.factoryCreate?.confirmedAt||new Date().toISOString()};
+    }
+    adoptDeploymentJournal({
+      provenance:compiled.provenance,chainId:11155111,factory:scope.factory,
+      ...target,status:prior?.status||'partial',steps
+    });
+    applyResumeBindings(target);
+    return getResumeContext();
+  }
 
   window.RelicForgeForge = { version: '11.1.6-r3d-b1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
