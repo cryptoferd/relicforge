@@ -32,6 +32,10 @@
       network: 'Ethereum Mainnet',
       environment: 'not-deployed',
       launchEnabled: false,
+      // R3D production release identity remains deliberately blank until an
+      // independently verified Ethereum Mainnet deployment is certified.
+      releaseId: '',
+      deploymentManifestHash: '',
       factory: '',
       feePolicy: '',
       collectionImplementation: '',

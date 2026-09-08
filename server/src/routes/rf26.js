@@ -5,6 +5,7 @@ import { verifyCollectionOwner, providerFor } from '../lib/rpc.js';
 import { networkPolicy, networkId, assertDeploymentEnabled } from '../lib/rf26-networks.js';
 import { splitLegacyProject, launchDraft } from '../lib/rf26-project-model.js';
 import { registerRf26SlugRoutes } from './rf26-slug-routes.js';
+import { publicForgeNetwork } from '../lib/rf26-release-preflight.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FACTORY_ABI=['function isRelicForgeCollection(address) view returns(bool)'];
@@ -75,15 +76,18 @@ async function verifyV2(id,contract,policy){
   return {creator:address(creator),factory:factoryAddress,sealed:Boolean(sealed),provenance:String(provenance).toLowerCase()};
 }
 export default async function rf26Routes(app){
-  app.get('/api/public/forge-networks',async()=>{
-    const {rows}=await db.query(`SELECT chain_id,label,kind,launch_enabled,public_enabled,configuration
+  app.get('/api/public/forge-networks',async(request,reply)=>{
+    const {rows}=await db.query(`SELECT chain_id,label,kind,launch_enabled,public_enabled,
+      factory_address,release_id,release_manifest_hash,configuration
       FROM rf26_networks ORDER BY CASE WHEN chain_id=1 THEN 0 WHEN chain_id=11155111 THEN 1 ELSE 2 END,label`);
-    return {networks:rows.map(row=>({
-      chainId:Number(row.chain_id),name:row.label,kind:row.kind,
-      launchEnabled:Boolean(row.launch_enabled),publicEnabled:Boolean(row.public_enabled),
-      // Public configuration must be explicitly curated. No RPC credentials or secrets.
-      currency:'ETH'
-    }))};
+    reply.header('Cache-Control','no-store');
+    return {networks:rows.map(publicForgeNetwork)};
+  });
+
+  app.get('/api/public/forge-networks/:chainId/preflight',async(request,reply)=>{
+    const policy=await networkPolicy(request.params.chainId);
+    reply.header('Cache-Control','no-store');
+    return {network:publicForgeNetwork(policy)};
   });
 
   app.get('/api/rc26/projects/:id', {preHandler:authenticate},async request=>{
