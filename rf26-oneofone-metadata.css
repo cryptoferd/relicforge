@@ -1,0 +1,10 @@
+/* Scoped to the standalone 1/1 metadata editor. */
+.oneofone-metadata-row .rf26-meta-category-field { min-width: 0; flex: 1 1 180px; }
+.oneofone-metadata-row .oneofone-meta-category { width: 100%; min-width: 0; }
+.oneofone-metadata-row .rf26-meta-create:not(.hidden) { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.oneofone-metadata-row .rf26-meta-create input { flex: 1 1 140px; min-width: 0; }
+.oneofone-metadata-row .rf26-meta-create.hidden { display: none !important; }
+.oneofone-meta-errors { margin-top: 8px; color: #e9a27c; font-size: 12px; line-height: 1.5; }
+.oneofone-meta-errors:empty { display: none; }
+.oneofone-meta-errors [data-meta-error] { display: block; }
+.oneofone-metadata-row .oneofone-meta-category { font: inherit; color: inherit; background: #101010; border: 1px solid #414141; border-radius: 6px; padding: 9px; min-height: 38px; }

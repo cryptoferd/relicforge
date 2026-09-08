@@ -1,6 +1,10 @@
 (() => {
   'use strict';
 
+  const oneOfOneMetadata = window.RF26OneOfOneMetadata;
+  const oneOfOneMetadataUI = window.RF26OneOfOneMetadataUI;
+  if (!oneOfOneMetadata || !oneOfOneMetadataUI) throw new Error('The 1/1 metadata category modules did not load.');
+
   const rarityWeights = {
     common: 100,
     uncommon: 45,
@@ -35,6 +39,7 @@
     draggedTrait: null,
     draggedLayer: null,
     oneOfOnes: [],
+    oneOfOneMetadataCategories: [],
     categoryPendingFiles: [],
     hideNoneMetadata: false,
     previewPage: 1,
@@ -348,13 +353,14 @@
           metadataHidden: !!trait.metadataHidden,
         })),
       })),
+      oneOfOneMetadataCategories: [...state.oneOfOneMetadataCategories],
       oneOfOnes: state.oneOfOnes.map(item => ({
         id: item.id,
         name: item.name,
         tokenName: item.tokenName || '',
         description: item.description || '',
         includeDefaultAttribute: item.includeDefaultAttribute !== false,
-        metadata: (item.metadata || []).map(row => [row.traitType || '', row.value || '']),
+        metadata: oneOfOneMetadata.draftRows(item.metadata, oneOfOneMetadataCatalog()).map(row => [row.traitType || '', row.value || '']),
         file: fileSignature(item.file),
       })),
       rulesEnabled: !!state.rulesEnabled,
@@ -678,7 +684,7 @@
   function updateBuildContinueState() {
     const button = $('.next-btn[data-next="3"]');
     if (!button) return;
-    const errors = [...validatePercentageLayers(), ...validateExactLayers()];
+    const errors = [...validatePercentageLayers(), ...validateExactLayers(), ...oneOfOneMetadataErrors().map(error => `${error.name}: ${error.message}`)];
     if (state.oneOfOnes.length > getSupply()) errors.push(`Full 1/1 count exceeds the collection supply.`);
     button.disabled = errors.length > 0;
     button.title = errors.length ? errors[0] : '';
@@ -2319,6 +2325,7 @@
 
   function compileCollection() {
     if (!state.layers.length) throw new Error('Upload artwork first.');
+    validateOneOfOneMetadata();
     state.rules = normalizeRuleList(state.rules);
     const totalSupply = getSupply();
     const supply = getGenerativeSupply();
@@ -2758,7 +2765,36 @@
     return trait.svgFragment;
   }
 
+
+  // RF26: project-scoped, persistence-safe metadata category catalog.
+  function oneOfOneMetadataCatalog() {
+    return oneOfOneMetadata.catalog(state.layers, state.oneOfOnes, state.oneOfOneMetadataCategories);
+  }
+
+  function oneOfOneMetadataErrors() {
+    return oneOfOneMetadata.validateProject(state.layers, state.oneOfOnes, state.oneOfOneMetadataCategories);
+  }
+
+  function validateOneOfOneMetadata() {
+    const errors = oneOfOneMetadataErrors();
+    if (errors.length) throw new Error(errors.map(error => `${error.name || '1/1'}: ${error.message}`).join(' '));
+    // Canonicalize category labels only after validation. Never silently deduplicate
+    // or discard existing rows; the original draft is retained in project backups.
+    const names = oneOfOneMetadataCatalog();
+    for (const item of state.oneOfOnes) {
+      item.metadata = oneOfOneMetadata.draftRows(item.metadata, names);
+    }
+    return true;
+  }
+
+  function oneOfOneMetadataRows(item) {
+    const names = oneOfOneMetadataCatalog();
+    const implicit = item.includeDefaultAttribute !== false ? { traitType: '1/1', value: item.name || '' } : null;
+    return oneOfOneMetadata.serializeRows(item.metadata, names, implicit);
+  }
+
   function renderOneOfOnes() {
+    const metadataCatalog = oneOfOneMetadataCatalog();
     if (!el.oneOfOnePanel) return;
     const enabled = !!el.oneOfOneToggle?.checked;
     el.oneOfOnePanel.classList.toggle('hidden', !enabled);
@@ -2782,12 +2818,9 @@
           <label class="field compact-field"><span>Token name override</span><input class="oneofone-token-name" value="${escapeHtml(item.tokenName || '')}" maxlength="120" placeholder="e.g. The First Relic"/></label>
           <label class="field compact-field"><span>Description override</span><textarea class="oneofone-description" rows="2" maxlength="1000" placeholder="Optional custom description">${escapeHtml(item.description || '')}</textarea></label>
           <div class="oneofone-metadata-list">
-            ${(item.metadata || []).map((row, index) => `<div class="oneofone-metadata-row" data-meta-index="${index}">
-              <input class="oneofone-meta-type" value="${escapeHtml(row.traitType || '')}" maxlength="80" placeholder="Trait type"/>
-              <input class="oneofone-meta-value" value="${escapeHtml(row.value || '')}" maxlength="120" placeholder="Value"/>
-              <button type="button" class="icon-btn" data-remove-oneofone-meta="${index}" title="Remove metadata field">×</button>
-            </div>`).join('')}
+            ${oneOfOneMetadata.renderRows(item, metadataCatalog)}
           </div>
+          <div class="oneofone-meta-errors" aria-live="polite">${oneOfOneMetadata.renderErrors(item, metadataCatalog)}</div>
           <button class="ghost-btn small-btn" type="button" data-add-oneofone-meta="${escapeHtml(item.id)}">Add metadata field</button>
         </div>
       </div>`).join('');
@@ -2982,7 +3015,8 @@
         })),
       })),
       hideNoneMetadata: !!state.hideNoneMetadata,
-      oneOfOnes: state.oneOfOnes.map(item => ({ name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType, value: row.value })), includeDefaultAttribute: item.includeDefaultAttribute !== false, file: item.filename })),
+      oneOfOneMetadataCategories: [...state.oneOfOneMetadataCategories],
+      oneOfOnes: state.oneOfOnes.map(item => ({ name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: oneOfOneMetadataRows(item), includeDefaultAttribute: item.includeDefaultAttribute !== false, file: item.filename })),
       rules: state.rulesEnabled ? state.rules.map(rule => ({
         type: rule.type,
         sources: rule.sources.map(id => ({ layer: getLayer(getTrait(id)?.layerId)?.name, trait: getTrait(id)?.name })),
@@ -3031,6 +3065,7 @@
         }))
       })),
       hideNoneMetadata: !!state.hideNoneMetadata,
+      oneOfOneMetadataCategories: [...state.oneOfOneMetadataCategories],
       oneOfOnes: state.oneOfOnes.map(item => ({ name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType, value: row.value })), includeDefaultAttribute: item.includeDefaultAttribute !== false, file: item.filename })),
       rules: state.rules.map(rule => ({
         type: rule.type,
@@ -3084,6 +3119,7 @@
             metadataHidden: !!trait.metadataHidden,
           })),
         })),
+        oneOfOneMetadataCategories: [...state.oneOfOneMetadataCategories],
         oneOfOnes: state.oneOfOnes.map(item => ({
           id: item.id, name: item.name, tokenName: item.tokenName || '', description: item.description || '', includeDefaultAttribute: item.includeDefaultAttribute !== false,
           metadata: (item.metadata || []).map(row => ({ traitType: row.traitType || '', value: row.value || '' })),
@@ -3145,10 +3181,13 @@
         };
       }),
     }));
+    state.oneOfOneMetadataCategories = Array.isArray(saved.oneOfOneMetadataCategories)
+      ? saved.oneOfOneMetadataCategories.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()) : [];
     state.oneOfOnes = (saved.oneOfOnes || []).map(item => {
       const file = item.file || null;
       return { id: item.id, name: item.name, tokenName: item.tokenName || '', description: item.description || '', metadata: (item.metadata || []).map(row => ({ traitType: row.traitType || '', value: row.value || '' })), includeDefaultAttribute: item.includeDefaultAttribute !== false, filename: item.filename, file, url: file ? URL.createObjectURL(file) : '', width: Number(item.width || saved.imageWidth || 0), height: Number(item.height || saved.imageHeight || 0), svgFragment: null, svgStats: null, isOneOfOne: true };
     });
+    state.oneOfOneMetadataCategories = oneOfOneMetadata.catalog([], state.oneOfOnes, state.oneOfOneMetadataCategories);
     state.hideNoneMetadata = !!saved.hideNoneMetadata;
     if (el.hideNoneMetadata) el.hideNoneMetadata.checked = state.hideNoneMetadata;
     if (el.oneOfOneToggle) el.oneOfOneToggle.checked = state.oneOfOnes.length > 0;
@@ -3289,6 +3328,9 @@
     version: '11.1.6',
     getState: () => state,
     getManifest: manifestObject,
+    getOneOfOneMetadataCatalog: oneOfOneMetadataCatalog,
+    getOneOfOneMetadataRows: oneOfOneMetadataRows,
+    validateOneOfOneMetadata,
     getProjectConfig: projectConfig,
     getStudioProjectSnapshot: studioProjectSnapshot,
     restoreStudioProjectSnapshot,
@@ -3450,39 +3492,23 @@
     addOneOfOneFiles(e.target.files || []).catch(error => showStatus(error.message, 'error'));
     e.target.value = '';
   });
-  el.oneOfOneList?.addEventListener('input', e => {
-    const item = getOneOfOne(e.target.closest('[data-oneofone-id]')?.dataset.oneofoneId);
-    if (!item) return;
-    if (e.target.classList.contains('oneofone-name')) item.name = e.target.value.trim() || item.name;
-    if (e.target.classList.contains('oneofone-token-name')) item.tokenName = e.target.value;
-    if (e.target.classList.contains('oneofone-description')) item.description = e.target.value;
-    if (e.target.classList.contains('oneofone-default-attribute')) item.includeDefaultAttribute = e.target.checked;
-    const row = e.target.closest('[data-meta-index]');
-    if (row) {
-      const index = Number(row.dataset.metaIndex);
-      if (!item.metadata) item.metadata = [];
-      if (!item.metadata[index]) item.metadata[index] = { traitType: '', value: '' };
-      if (e.target.classList.contains('oneofone-meta-type')) item.metadata[index].traitType = e.target.value;
-      if (e.target.classList.contains('oneofone-meta-value')) item.metadata[index].value = e.target.value;
-    }
-    resetCompiledForArtworkChange();
-  });
-  el.oneOfOneList?.addEventListener('click', e => {
-    const removeBtn = e.target.closest('[data-remove-oneofone]');
-    if (removeBtn) { removeOneOfOne(removeBtn.dataset.removeOneofone); return; }
-    const item = getOneOfOne(e.target.closest('[data-oneofone-id]')?.dataset.oneofoneId);
-    if (!item) return;
-    const addBtn = e.target.closest('[data-add-oneofone-meta]');
-    if (addBtn) {
-      if (!item.metadata) item.metadata = [];
-      item.metadata.push({ traitType: '', value: '' });
-      renderOneOfOnes(); resetCompiledForArtworkChange(); return;
-    }
-    const metaRemove = e.target.closest('[data-remove-oneofone-meta]');
-    if (metaRemove) {
-      item.metadata?.splice(Number(metaRemove.dataset.removeOneofoneMeta), 1);
-      renderOneOfOnes(); resetCompiledForArtworkChange();
-    }
+  // RF26 shared-category editor; artwork name, overrides, add/remove and metadata
+  // events remain supported by the same delegated controller.
+  oneOfOneMetadataUI.bind(el.oneOfOneList, {
+    core: oneOfOneMetadata,
+    getItem: getOneOfOne,
+    layers: () => state.layers,
+    items: () => state.oneOfOnes,
+    catalog: oneOfOneMetadataCatalog,
+    saved: () => state.oneOfOneMetadataCategories,
+    setSaved: categories => { state.oneOfOneMetadataCategories = categories; },
+    render: renderOneOfOnes,
+    remove: removeOneOfOne,
+    status: showStatus,
+    invalidate: () => {
+      resetCompiledForArtworkChange();
+      window.dispatchEvent(new CustomEvent('relicforge:oneofone-metadata-changed'));
+    },
   });
 
   // Navigation and mode

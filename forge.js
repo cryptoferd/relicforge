@@ -1101,6 +1101,8 @@ ${await file.text()}`;
     if ($('forgeCompiledSummary')) $('forgeCompiledSummary').textContent = 'Compile for onchain before deployment.';
   }
 
+  window.addEventListener('relicforge:oneofone-metadata-changed', () => invalidateCompile('1/1 metadata changed — recompile for onchain.'));
+
   function bytesToBase64(bytes) {
     let binary = '';
     const chunk = 0x8000;
@@ -1291,6 +1293,8 @@ ${await file.text()}`;
   async function compileForOnchain() {
     try {
       const studio = bridge().getState();
+      if (typeof bridge().validateOneOfOneMetadata !== 'function' || typeof bridge().getOneOfOneMetadataRows !== 'function') throw new Error('The shared 1/1 metadata editor is unavailable. Reload Studio before compiling.');
+      bridge().validateOneOfOneMetadata();
       if (!studio.compiledTokens?.length) throw new Error('Build the collection in Step 4 first.');
       if (studio.compilerReport?.compilerVersion !== '11.0.1') throw new Error('This collection was compiled with an incompatible collection compiler. Rebuild it in Step 4 before forging.');
       if (!studio.compilerReport || studio.compilerReport.ruleViolations || studio.compilerReport.exactIssues?.length || studio.compilerReport.distributionIssues?.length) throw new Error('The Step 4 collection compiler still has rule, exact-count, or rarity-distribution issues.');
@@ -1378,7 +1382,7 @@ ${await file.text()}`;
           const item = studio.oneOfOnes[i];
           const tokenName = item.tokenName?.trim() ? cleanMetadataString(item.tokenName, `1/1 ${i + 1} token name`, true) : '';
           const tokenDescription = item.description?.trim() ? cleanMetadataString(item.description, `1/1 ${i + 1} description`, true) : '';
-          const rows = (item.metadata || []).filter(row => String(row.traitType || '').trim() && String(row.value || '').trim());
+          const rows = bridge().getOneOfOneMetadataRows(item);
           const attributeParts = [];
           if (item.includeDefaultAttribute !== false) {
             const defaultValue = cleanMetadataString(item.name, `1/1 ${i + 1} artwork label`);
