@@ -14,9 +14,11 @@ export const RESOLVE_SQL=`SELECT c.chain_id,c.contract_address,c.owner_wallet,
   n.kind,n.public_enabled,n.launch_enabled,n.factory_address,n.release_id,n.release_manifest_hash,
   d.architecture,d.status,d.provenance,d.factory_address AS deployment_factory
   FROM rf26_publications p
-  JOIN collections c USING(chain_id,contract_address)
+  JOIN collections c
+    ON c.chain_id=p.chain_id AND c.contract_address=p.contract_address
   JOIN rf26_networks n ON n.chain_id=c.chain_id
-  JOIN rf26_deployments d USING(chain_id,contract_address)
+  JOIN rf26_deployments d
+    ON d.chain_id=c.chain_id AND d.contract_address=c.contract_address
   WHERE p.slug=$1`;
 
 function publication(row,id,contract) {
