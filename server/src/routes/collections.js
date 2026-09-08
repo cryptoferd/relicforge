@@ -3,6 +3,8 @@ import { authenticate } from '../lib/auth.js';
 import { verifyCollectionOwner, collectionFor, providerFor } from '../lib/rpc.js';
 import { Contract, getAddress } from 'ethers';
 import { deleteObjects } from '../lib/storage.js';
+import { networkPolicy } from '../lib/rf26-networks.js';
+import { normalizeLegacyMintPage } from '../lib/rf26-mint-page-policy.js';
 
 const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const V2_COLLECTION_PHASES_ABI = ['function mintPhases() view returns(address)'];
@@ -29,7 +31,7 @@ export default async function collectionRoutes(app) {
     const contract = normAddress(request.params.contract);
     try { await verifyCollectionOwner(chainId, contract, request.user.wallet); }
     catch (error) { return reply.code(403).send({ error: error.message }); }
-    const config = request.body?.config || {};
+    const config = normalizeLegacyMintPage(request.body?.config || {}, await networkPolicy(chainId));
     const previous = await one('SELECT mint_page FROM collections WHERE chain_id=$1 AND contract_address=$2 AND owner_wallet=$3', [chainId, contract, request.user.wallet]);
     for (const assetId of [config.collectionImageAssetId, config.bannerImageAssetId].filter(Boolean)) {
       const asset = await one('SELECT id,object_key,content_type,size_bytes,purpose FROM assets WHERE id=$1 AND owner_wallet=$2 AND status=$3', [assetId, request.user.wallet, 'ready']);

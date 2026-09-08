@@ -11,6 +11,8 @@ import rc47bRoutes from './routes/rc47b.js';
 import reliquaryRoutes from './routes/reliquary.js';
 import { db } from './lib/db.js';
 import { ALCHEMY_EVM_NETWORKS } from './lib/alchemy-networks.js';
+import rf26Routes from './routes/rf26.js';
+import { installRf26PublicGuards } from './lib/rf26-public-guards.js';
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 25 * 1024 * 1024 });
 
@@ -74,12 +76,24 @@ app.get('/health', async () => {
   await db.query('SELECT 1');
   return { ok: true, service: 'relicforge-cloud-api', version: 'rc4.7b', alchemy: { configured: Boolean(process.env.ALCHEMY_API_KEY), catalogedEvmNetworks: ALCHEMY_EVM_NETWORKS.length } };
 });
+// Public privacy enforcement activates whenever the complete Phase 2B
+// schema exists. The new management API has a separate opt-in release flag.
+const rf26Schema = await db.query("SELECT to_regclass('public.rf26_networks') AS networks, to_regclass('public.rf26_publications') AS publications, to_regclass('public.rf26_public_collections') AS public_collections");
+const rf26Ready = Boolean(rf26Schema.rows[0]?.networks && rf26Schema.rows[0]?.publications && rf26Schema.rows[0]?.public_collections);
+if (Object.values(rf26Schema.rows[0] || {}).some(Boolean) && !rf26Ready) {
+  throw new Error('Phase 2B schema is incomplete. Finish the reviewed migration before starting Cloud.');
+}
+if (process.env.RF26_ENABLED === 'true' && !rf26Ready) {
+  throw new Error('Phase 2B schema is missing. Apply the reviewed 007 migration before enabling RF26.');
+}
+if (rf26Ready) installRf26PublicGuards(app);
 await app.register(authRoutes);
 await app.register(projectRoutes);
 await app.register(assetRoutes);
 await app.register(founderRoutes);
 await app.register(collectionRoutes);
 await app.register(publicRoutes);
+if (process.env.RF26_ENABLED === 'true') await app.register(rf26Routes);
 await app.register(rc47bRoutes);
 await app.register(reliquaryRoutes);
 
