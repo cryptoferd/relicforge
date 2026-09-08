@@ -32,6 +32,26 @@
   function optionalAddress(v){return v==null||v===''?null:address(v);}
   function optionalHash(v){return v==null||v===''?null:hash(v);}
   function same(a,b){return address(a)===address(b);}
+  function intent(value){
+    if(!object(value))throw fail('A durable transaction intent is required.','RF26_INTENT_MISMATCH');
+    const dataLength=Number(value.dataLength),nonce=Number(value.nonce);
+    if(!Number.isSafeInteger(dataLength)||dataLength<0||dataLength>16777216)
+      throw fail('Invalid transaction calldata length.','RF26_INTENT_MISMATCH');
+    if(!Number.isSafeInteger(nonce)||nonce<0)
+      throw fail('Invalid transaction nonce.','RF26_INTENT_MISMATCH');
+    let amount;
+    try{amount=BigInt(value.value??0);}catch{throw fail('Invalid transaction value.','RF26_INTENT_MISMATCH');}
+    if(amount<0n)throw fail('Invalid transaction value.','RF26_INTENT_MISMATCH');
+    return Object.freeze({
+      chainId:chain(value.chainId),wallet:address(value.wallet),to:address(value.to),
+      dataHash:hash(value.dataHash),dataLength,value:String(amount),nonce
+    });
+  }
+  function sameIntent(a,b){
+    const x=intent(a),y=intent(b);
+    return x.chainId===y.chainId&&x.wallet===y.wallet&&x.to===y.to&&
+      x.dataHash===y.dataHash&&x.dataLength===y.dataLength&&x.value===y.value&&x.nonce===y.nonce;
+  }
   function identity(scope,wallet,provenance){
     if(!scope||!object(scope))throw fail('A verified release scope is required.');
     const chainId=chain(scope.chainId),factory=address(scope.factory),owner=address(wallet);
@@ -79,6 +99,7 @@
       if(!TX_STATES.has(status))throw fail('Invalid transaction checkpoint status.');
       out.steps[name]={...clone(step),status};
       if(step.txHash!=null)out.steps[name].txHash=hash(step.txHash);
+      if(step.intent!=null)out.steps[name].intent=intent(step.intent);
       if(status==='confirmed'&&!out.steps[name].txHash)
         throw fail('A confirmed transaction checkpoint requires a transaction hash.');
     }
@@ -105,6 +126,8 @@
       const prior=previous.steps?.[name];
       if(prior?.txHash&&step.txHash&&prior.txHash!==step.txHash)
         throw fail('A checkpoint already has a different transaction hash: '+name+'.','RF26_PENDING_TRANSACTION');
+      if(prior?.intent&&step.intent&&!sameIntent(prior.intent,step.intent))
+        throw fail('A checkpoint already has a different durable transaction intent: '+name+'.','RF26_INTENT_MISMATCH');
       if(prior?.status==='confirmed'&&step.status!=='confirmed')
         throw fail('A confirmed checkpoint cannot be downgraded.');
       if(prior?.status==='submitted'&&step.status==='prepared')
@@ -170,6 +193,8 @@
     const previous=journal.steps?.[keyName];
     if(previous?.txHash&&step.txHash&&hash(previous.txHash)!==hash(step.txHash))
       throw fail('A different transaction is already recorded for this step.','RF26_PENDING_TRANSACTION');
+    if(previous?.intent&&step.intent&&!sameIntent(previous.intent,step.intent))
+      throw fail('A different transaction intent is already recorded for this step.','RF26_INTENT_MISMATCH');
     if(previous?.status==='confirmed'&&step.status!=='confirmed')throw fail('Confirmed checkpoint cannot be downgraded.');
     if(previous?.status==='submitted'&&step.status==='prepared')throw fail('Submitted checkpoint cannot be reset.');
     return {...clone(journal),steps:{...clone(journal.steps||{}),[keyName]:{...previous,...clone(step),txHash:step.txHash?hash(step.txHash):previous?.txHash||null}}};
@@ -225,6 +250,134 @@
     journal=store.save(checkpoint(journal,stepKey,{status:'confirmed',label,txHash,confirmedAt:new Date().toISOString()}));
     return {journal,receipt:result.receipt,alreadyConfirmed:false};
   }
+  async function inspectIntentTransaction({provider,journal,stepKey,hashData}){
+    const step=journal?.steps?.[stepKey];
+    if(!step?.txHash)throw fail('No transaction hash is recorded for this step.');
+    if(!step.intent)throw Object.assign(
+      fail('This historical transaction has no durable intent record. Its onchain state must be reconciled instead of replayed.','RF26_LEGACY_TRANSACTION_UNVERIFIED'),
+      {transactionHash:step.txHash});
+    if(typeof hashData!=='function')throw fail('Transaction data hashing is unavailable.','RF26_INTENT_MISMATCH');
+    const expected=intent(step.intent);
+    const network=await provider.getNetwork();
+    if(chain(network.chainId)!==expected.chainId||chain(journal.chainId)!==expected.chainId)
+      throw fail('Recovery RPC network mismatch.');
+    const tx=await provider.getTransaction(step.txHash);
+    const receipt=await provider.getTransactionReceipt(step.txHash);
+    if(!tx&&!receipt)return {state:'submitted',transactionHash:step.txHash,receipt:null,intent:expected};
+    if(!tx&&receipt)throw Object.assign(
+      fail('Confirmed transaction details are unavailable; the durable intent cannot be verified.','RF26_INTENT_MISMATCH'),
+      {transactionHash:step.txHash});
+    if(tx){
+      if(!same(tx.from,expected.wallet))throw fail('Transaction sender does not match the durable intent.','RF26_INTENT_MISMATCH');
+      if(!tx.to||!same(tx.to,expected.to))throw fail('Transaction destination does not match the durable intent.','RF26_INTENT_MISMATCH');
+      if(tx.chainId!=null&&chain(tx.chainId)!==expected.chainId)throw fail('Transaction chain does not match the durable intent.','RF26_INTENT_MISMATCH');
+      if(Number(tx.nonce)!==expected.nonce)throw fail('Transaction nonce does not match the durable intent.','RF26_INTENT_MISMATCH');
+      const txData=String(tx.data||'0x').toLowerCase();
+      const bytes=/^0x(?:[0-9a-f]{2})*$/i.test(txData)?(txData.length-2)/2:-1;
+      if(bytes!==expected.dataLength||hashData(txData).toLowerCase()!==expected.dataHash)
+        throw fail('Transaction calldata does not match the durable intent.','RF26_INTENT_MISMATCH');
+      let amount;try{amount=BigInt(tx.value??0);}catch{throw fail('Transaction value is unavailable.','RF26_INTENT_MISMATCH');}
+      if(String(amount)!==expected.value)throw fail('Transaction value does not match the durable intent.','RF26_INTENT_MISMATCH');
+    }
+    if(!receipt)return {state:'submitted',transactionHash:step.txHash,receipt:null,intent:expected,transaction:tx};
+    if(receipt.hash&&receipt.hash.toLowerCase()!==step.txHash.toLowerCase())throw fail('Transaction receipt hash mismatch.','RF26_INTENT_MISMATCH');
+    if(Number(receipt.status)!==1)return {state:'failed',transactionHash:step.txHash,receipt,intent:expected,transaction:tx};
+    return {state:'confirmed',transactionHash:step.txHash,receipt,intent:expected,transaction:tx};
+  }
+  async function executeIntentStep({store,journal,stepKey,label,intentValue,assertWrite,submitIntent,provider,hashData,verifyReceipt}){
+    if(typeof assertWrite!=='function'||typeof submitIntent!=='function'||typeof hashData!=='function')
+      throw fail('Guarded durable transaction callbacks are required.','RF26_INTENT_MISMATCH');
+    const durable=store.read(journal.provenance);
+    if(durable)journal=merge(durable,journal);
+    const prior=journal.steps?.[stepKey];
+    let expected=prior?.intent?intent(prior.intent):(intentValue?intent(intentValue):null);
+    if(prior?.intent&&intentValue&&!sameIntent(prior.intent,intentValue))
+      throw fail('The requested transaction no longer matches the saved durable intent.','RF26_INTENT_MISMATCH');
+    if(prior?.txHash){
+      const result=await inspectIntentTransaction({provider,journal,stepKey,hashData});
+      if(result.state==='submitted')throw Object.assign(
+        fail('A transaction is pending or its receipt is unavailable. It will not be replayed.','RF26_PENDING_TRANSACTION'),
+        {transactionHash:result.transactionHash});
+      if(result.state==='failed')throw Object.assign(
+        fail('The recorded transaction failed. A new explicit recovery decision is required.','RF26_TRANSACTION_FAILED'),
+        {transactionHash:result.transactionHash});
+      if(typeof verifyReceipt==='function'){
+        try{await verifyReceipt(result);}
+        catch(error){throw Object.assign(
+          fail('The transaction succeeded, but its intended onchain postcondition could not be verified. It will not be replayed.','RF26_POSTCONDITION_FAILED'),
+          {transactionHash:result.transactionHash,cause:error});}
+      }
+      journal=store.save(checkpoint(journal,stepKey,{
+        status:'confirmed',txHash:result.transactionHash,intent:expected,
+        confirmedAt:prior.confirmedAt||new Date().toISOString(),postconditionVerifiedAt:new Date().toISOString()
+      }));
+      return {journal,receipt:result.receipt,transactionHash:result.transactionHash,alreadyConfirmed:true};
+    }
+    if(prior?.status==='prepared'&&prior.intent)
+      throw fail('A prepared transaction intent exists without a recorded hash. Check the wallet history before making any new recovery decision.','RF26_PREPARED_INTENT');
+    if(!expected)throw fail('A durable transaction intent is required before submission.','RF26_INTENT_MISMATCH');
+    await assertWrite(expected);
+    journal=store.save(checkpoint(journal,stepKey,{
+      status:'prepared',label,intent:expected,preparedAt:new Date().toISOString()
+    }));
+    let sent;
+    try{sent=await submitIntent(expected);}
+    catch(error){
+      if(error?.transactionHash){
+        const submittedHash=hash(error.transactionHash);
+        try{
+          journal=store.save(checkpoint(journal,stepKey,{
+            status:'submitted',label,intent:expected,txHash:submittedHash,
+            submittedAt:new Date().toISOString(),submissionCheckpointError:true
+          }));
+        }catch(saveError){
+          throw Object.assign(
+            fail('A transaction was submitted and its hash is known, but the durable checkpoint also failed. Preserve the hash and recover before retrying.','RF26_CHECKPOINT_FAILED'),
+            {transactionHash:submittedHash,cause:saveError,submissionError:error});
+        }
+        throw Object.assign(error,{transactionHash:submittedHash});
+      }
+      const rejected=error?.code==='ACTION_REJECTED'||error?.code===4001||error?.info?.error?.code===4001;
+      if(rejected){
+        journal=store.save(checkpoint(journal,stepKey,{
+          status:'failed',label,intent:expected,rejectionConfirmedAt:new Date().toISOString()
+        }));
+      }
+      throw error;
+    }
+    if(!sent?.hash)throw fail('Wallet did not return a transaction hash.');
+    const txHash=hash(sent.hash);
+    try{journal=store.save(checkpoint(journal,stepKey,{
+      status:'submitted',label,intent:expected,txHash,submittedAt:new Date().toISOString()
+    }));}
+    catch(error){throw Object.assign(
+      fail('Transaction submitted, but its durable checkpoint could not be saved. Preserve the hash and recover before retrying.','RF26_CHECKPOINT_FAILED'),
+      {transactionHash:txHash,cause:error});}
+    try{await sent.wait();}catch(error){
+      if(error?.code!=='CALL_EXCEPTION'&&error?.code!=='TRANSACTION_REPLACED')
+        throw Object.assign(
+          fail('Transaction confirmation is unavailable. Inspect the saved hash before retrying.','RF26_PENDING_TRANSACTION'),
+          {transactionHash:txHash,cause:error});
+    }
+    const result=await inspectIntentTransaction({provider,journal,stepKey,hashData});
+    if(result.state==='failed')throw Object.assign(
+      fail('The recorded transaction failed. A new explicit recovery decision is required.','RF26_TRANSACTION_FAILED'),
+      {transactionHash:txHash});
+    if(result.state!=='confirmed')throw Object.assign(
+      fail('Transaction is not confirmed. Inspect its recorded hash before retrying.','RF26_PENDING_TRANSACTION'),
+      {transactionHash:txHash});
+    if(typeof verifyReceipt==='function'){
+      try{await verifyReceipt(result);}
+      catch(error){throw Object.assign(
+        fail('The transaction succeeded, but its intended onchain postcondition could not be verified. It will not be replayed.','RF26_POSTCONDITION_FAILED'),
+        {transactionHash:txHash,cause:error});}
+    }
+    journal=store.save(checkpoint(journal,stepKey,{
+      status:'confirmed',label,intent:expected,txHash,confirmedAt:new Date().toISOString(),
+      postconditionVerifiedAt:new Date().toISOString()
+    }));
+    return {journal,receipt:result.receipt,transactionHash:txHash,alreadyConfirmed:false};
+  }
   function publicationTarget(detail,scope,verified){
     if(!object(detail)||!object(scope)||!object(verified))throw fail('Verified publication context is required.');
     const chainId=chain(scope.chainId);
@@ -235,6 +388,6 @@
     if(detail.factory&& !same(detail.factory,scope.factory))throw fail('Publication Factory mismatch.');
     return Object.freeze({chainId,contract:address(verified.collection||verified.collectionAddress),factory:address(scope.factory)});
   }
-  return Object.freeze({SCHEMA,chain,address,hash,identity,key,normalize,merge,createStore,checkpoint,
-    inspectTransaction,executeStep,publicationTarget});
+  return Object.freeze({SCHEMA,chain,address,hash,intent,sameIntent,identity,key,normalize,merge,createStore,checkpoint,
+    inspectTransaction,executeStep,inspectIntentTransaction,executeIntentStep,publicationTarget});
 });
