@@ -1872,6 +1872,8 @@ ${await file.text()}`;
 
   async function deployInfrastructure() {
     try {
+    await requireForgeWrite(false);
+
       if (!forgeState.signer) await connectWallet();
       await compileContracts();
       log('forgeInfraStatus', 'Deploying shared Sepolia TEST infrastructure…', true);
@@ -1907,6 +1909,8 @@ ${await file.text()}`;
   }
 
   async function sendStep(label, call, steps, index) {
+    await requireForgeWrite(true);
+
     steps[index].status = 'active'; renderDeployProgress(steps);
     const tx = await call();
     steps[index].label = `${label} · ${tx.hash.slice(0, 10)}…`; renderDeployProgress(steps);
@@ -1953,6 +1957,8 @@ ${await file.text()}`;
   }
 
   async function sendV1Step(label, call, steps, index) {
+    await requireForgeWrite(true);
+
     steps[index].status = 'active';
     renderDeployProgress(steps);
     const tx = await call();
@@ -1987,6 +1993,8 @@ ${await file.text()}`;
     const forgeButton = $('forgeCollectionBtn');
     const collectionBeforeForge = forgeState.collectionAddress || null;
     try {
+    await requireForgeWrite(false);
+
       if (forgeButton) {
         forgeButton.disabled = true;
         forgeButton.textContent = 'Preparing Forge...';
@@ -2187,6 +2195,8 @@ ${await file.text()}`;
 
   async function armMasterMint() {
     try {
+    await requireForgeWrite(true);
+
       const phases = mintPhasesContract();
       log('forgeTestStatus','Enabling Minting through MintPhases...',true);
       const tx = await phases.setMasterMintEnabled(true); await tx.wait();
@@ -2206,6 +2216,8 @@ ${await file.text()}`;
 
   async function mintTest() {
     try {
+    await requireForgeWrite(true);
+
       if (!forgeState.publicPhaseId) throw new Error('This project did not create a public MintPhases stage.');
       const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
       const quote = await phases.quoteMint(forgeState.publicPhaseId, quantity); const minimumValue = quote.minimumValue ?? quote[2];
@@ -2225,6 +2237,8 @@ ${await file.text()}`;
 
   async function whitelistMintTest() {
     try {
+    await requireForgeWrite(true);
+
       if (!forgeState.whitelistPhaseId) throw new Error('This project did not create an Approved Wallet stage.');
       const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
       if (!forgeState.wallet) await connectWallet();
@@ -2240,6 +2254,8 @@ ${await file.text()}`;
 
   async function creatorMintTest() {
     try {
+    await requireForgeWrite(true);
+
       const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
       if (!forgeState.wallet) await connectWallet();
       const quote = await phases.creatorTeamFeeQuote(quantity); const feeWei = BigInt(quote.feeWei ?? quote[0] ?? 0n); const healthy = Boolean(quote.oracleHealthy ?? quote[1]); const active = Boolean(quote.feeActive ?? quote[2]);
@@ -2259,6 +2275,8 @@ ${await file.text()}`;
 
   async function requestDeferredReveal() {
     try {
+    await requireForgeWrite(true);
+
       if (currentRevealMode() !== 0) throw new Error('This Studio project uses Forge Reveal, not Deferred Reveal.');
       const cfg = canonicalV1Config(); const collection = collectionContract();
       log('forgeTestStatus','Requesting Deferred Reveal with explicit request gas...',true);
@@ -2270,12 +2288,16 @@ ${await file.text()}`;
   }
 
   async function lockTimedOutForgeBatch() {
-    try { const collection = collectionContract(); const tx = await collection.lockTimedOutBatch(); await tx.wait(); log('forgeTestStatus','Timed-out partial Forge batch locked.'); }
+    try {
+    await requireForgeWrite(true);
+ const collection = collectionContract(); const tx = await collection.lockTimedOutBatch(); await tx.wait(); log('forgeTestStatus','Timed-out partial Forge batch locked.'); }
     catch (error) { log('forgeTestStatus','LOCK BATCH: ' + (error.shortMessage || error.message),true); }
   }
 
   async function requestForgeBatchRandomness() {
     try {
+    await requireForgeWrite(true);
+
       const cfg = canonicalV1Config(); const collection = collectionContract(); const batchId = BigInt(Math.max(1, Number($('forgeBatchId')?.value || 1)));
       const quote = await refreshVrfQuote(); if (!quote) throw new Error('Randomness quote unavailable.');
       if (!quote.within) throw new Error('Current randomness quote is above the collection launch ceiling.');
@@ -2289,6 +2311,8 @@ ${await file.text()}`;
 
   async function replayVerifiedWord() {
     try {
+    await requireForgeWrite(true);
+
       const cfg = canonicalV1Config(); const localRequestId = BigInt(String($('forgeLocalRequestId')?.value || forgeState.latestRequestId || '').trim());
       if (localRequestId <= 0n) throw new Error('Enter a valid local request ID.');
       const adapter = v1RandomnessContract(forgeState.signer);
@@ -2302,7 +2326,9 @@ ${await file.text()}`;
   }
 
   async function settleReadyForge() {
-    try { const collection = collectionContract(); const maxTokens = Math.max(1, Math.floor(Number($('forgeSettleMaxTokens')?.value || 100))); const tx = await collection.settleReady(maxTokens); await tx.wait(); log('forgeTestStatus','settleReady(' + maxTokens + ') confirmed. Ready batches were settled in order up to the requested cap.'); }
+    try {
+    await requireForgeWrite(true);
+ const collection = collectionContract(); const maxTokens = Math.max(1, Math.floor(Number($('forgeSettleMaxTokens')?.value || 100))); const tx = await collection.settleReady(maxTokens); await tx.wait(); log('forgeTestStatus','settleReady(' + maxTokens + ') confirmed. Ready batches were settled in order up to the requested cap.'); }
     catch (error) { log('forgeTestStatus','SETTLE ERROR: ' + (error.shortMessage || error.message),true); }
   }
 
@@ -2855,6 +2881,8 @@ ${await file.text()}`;
   }
 
   async function saveV1PhaseSchedule(snap, phaseId) {
+    await requireForgeWrite();
+
     if (!forgeState.signer) await connectWallet();
     if (String(snap.owner).toLowerCase() !== String(forgeState.wallet).toLowerCase()) throw new Error('Connected wallet is not the collection creator.');
     if (!snap.controllerActive) throw new Error('V1 controller has been renounced; phase schedules can no longer be changed.');
@@ -2952,6 +2980,8 @@ ${await file.text()}`;
 
   async function handleV1LaunchedAction(action, snap) {
     try {
+    if(action!=='mintpage')await requireForgeWrite();
+
       if (!forgeState.signer) await connectWallet();
       const isOwner = String(snap.owner).toLowerCase() === String(forgeState.wallet).toLowerCase();
       const contract = new window.ethers.Contract(snap.address, V1_COLLECTION_ABI, forgeState.signer);
@@ -3214,6 +3244,8 @@ ${await file.text()}`;
 
   async function handleV2LaunchedAction(action, snap) {
     try {
+    if(action!=='mintpage')await requireForgeWrite(snap.address);
+
       if (action === 'mintpage') {
         window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
         return;
@@ -3252,9 +3284,9 @@ ${await file.text()}`;
       '<div class="launched-section"><h4>MintPhases stages</h4>'+v2PhaseRows(snap,canControl)+'<div class="prototype-note"><strong>Create new stages in Studio R1</strong><p>Existing stages can be updated, enabled, or disabled here. Initial Public / Approved Wallet stage creation is handled during the R12-v2 Studio launch flow in R1.</p></div></div>'+
       '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">R12-v2 MintPhases-aware collector page is available at a permanent collection URL. Approved Wallet proof tables are synced from the saved Studio project.</div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/'+esc(snap.address)+'" rel="noreferrer" target="_blank">View on Etherscan</a></div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
     detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button=>button.addEventListener('click',()=>handleV2LaunchedAction(button.dataset.v2DashboardAction,snap)));
-    detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button=>button.addEventListener('click',async()=>{try{const id=Number(button.dataset.v2PhaseToggle);const p=snap.phases.find(x=>x.id===id);const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);const tx=await mp.setPhaseEnabled(id,!p.enabled);await tx.wait();await openLaunchedCollection(snap.address);}catch(error){launchedStatus('Stage toggle: '+(error.shortMessage||error.message));}}));
+    detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button=>button.addEventListener('click',async()=>{try{await requireForgeWrite(snap.address);const id=Number(button.dataset.v2PhaseToggle);const p=snap.phases.find(x=>x.id===id);const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);const tx=await mp.setPhaseEnabled(id,!p.enabled);await tx.wait();await openLaunchedCollection(snap.address);}catch(error){launchedStatus('Stage toggle: '+(error.shortMessage||error.message));}}));
     detail.querySelectorAll('[data-v2-no-end]').forEach(toggle=>toggle.addEventListener('change',()=>{const id=Number(toggle.dataset.v2NoEnd);const endInput=$('v2PhaseEnd-'+id);if(endInput){endInput.disabled=toggle.checked||!canControl;if(toggle.checked)endInput.value='';}}));
-    detail.querySelectorAll('[data-v2-phase-save]').forEach(button=>button.addEventListener('click',async()=>{try{
+    detail.querySelectorAll('[data-v2-phase-save]').forEach(button=>button.addEventListener('click',async()=>{try{await requireForgeWrite(snap.address);
       const id=Number(button.dataset.v2PhaseSave);
       const p=snap.phases.find(row=>row.id===id);
       if(!p)throw new Error('Stage was not found.');
@@ -3276,7 +3308,7 @@ ${await file.text()}`;
   async function openLaunchedCollection(address) {
     try {
       if (!forgeState.signer) await connectWallet();
-      const snap = await collectionDashboardSnapshot(address, forgeState.signer);
+      const snap = await collectionDashboardSnapshot(address, forgeState.signer || readProvider(11155111));
       if (snap.isV2) { await openV2LaunchedCollection(snap); return; }
       if (snap.isV1) { await openV1LaunchedCollection(snap); return; }
       forgeState.launchedSelected = snap.address;
@@ -3418,6 +3450,8 @@ ${await file.text()}`;
 
   async function handleLaunchedAction(action, snap) {
     try {
+    if(['saverendering','creatormint','savesettings','reveal','seal'].includes(action))await requireForgeWrite();
+
       if (!forgeState.signer) await connectWallet();
       const contract = new window.ethers.Contract(snap.address, COLLECTION_DASHBOARD_ABI, forgeState.signer);
       if (action === 'mintpage') {
@@ -3874,7 +3908,163 @@ ${await file.text()}`;
     }
   }
 
-  window.RelicForgeForge = { version: '11.1.6-r24-resume', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings };
+  /* RF26 R3D-B R1: explicit network and guarded signing integration */
+/* RF26 R3D-B R1: source-preserving, fail-closed launch-network integration. */
+  const rf26Network=()=>{
+    if(!window.RelicForgeForgeNetwork)throw new Error('R3D-B network runtime is unavailable. Reload Studio.');
+    return window.RelicForgeForgeNetwork;
+  };
+  function activeChainId(){return rf26Network().selectedChainId();}
+  async function requireForgeWrite(verifyV2=false){
+    if(activeChainId()!==11155111)throw new Error('Mainnet transaction execution remains locked until R3D-B recovery certification.');
+    let authorized=null;
+    try{authorized=rf26Network().writeSigner();}catch{}
+    if(!authorized||forgeState.signer!==authorized)await connectWallet({requireLaunch:true});
+    const scope=await rf26Network().assertWrite();
+    forgeState.signer=rf26Network().writeSigner();
+    forgeState.provider=forgeState.signer.provider;
+    const address=typeof verifyV2==='string'?verifyV2:(verifyV2?forgeState.collectionAddress:null);
+    if(address)await rf26Network().verifyCollection(address,{chainId:scope.chainId});
+    return scope;
+  }
+  connectWallet=async function({forceChooser=false,requireLaunch=!!document.body?.classList?.contains('dashboard-page-body')}={}){
+    try{
+      if(!window.ethers)throw new Error('ethers.js is unavailable.');
+      const session=await rf26Network().connect({forceChooser,requireLaunch});
+      forgeState.provider=session.signer?session.provider:null;
+      forgeState.signer=session.signer;
+      forgeState.wallet=window.ethers.getAddress(session.wallet);
+      const id=activeChainId(),label=id==null?'Account connected':window.RelicForgeNetworks.metadata(id).name;
+      const status=$('forgeWalletStatus');
+      if(status)status.textContent=shortAddr(forgeState.wallet)+' · '+label+(session.signer?' · Verified launch':' · Account only');
+      window.dispatchEvent(new CustomEvent('relicforge:wallet-connected',{detail:{address:forgeState.wallet}}));
+      if(window.RelicForgeCloud?.enabled?.()){
+        try{await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);if(status)status.textContent+=' · Cloud';}
+        catch{if(status)status.textContent+=' · Cloud sign-in pending';}
+      }
+      if($('connectForgeWalletBtn'))$('connectForgeWalletBtn').textContent='Wallet Connected';
+      if($('royaltyWallet')&&!$('royaltyWallet').value.trim())$('royaltyWallet').value=forgeState.wallet;
+      if($('payoutWallet')&&!$('payoutWallet').value.trim())$('payoutWallet').value=forgeState.wallet;
+      if($('launchedConnectBtn'))$('launchedConnectBtn').textContent=shortAddr(forgeState.wallet);
+      $('launchedChangeWalletBtn')?.classList.remove('hidden');
+      $('launchedDisconnectBtn')?.classList.remove('hidden');
+      renderCanonicalV1();
+      if(session.signer){
+        await refreshPlatformFeeQuote();await refreshVrfQuote();
+        if($('forgeCostEstimate'))await refreshCostEstimate();
+      }
+      return forgeState.wallet;
+    }catch(error){
+      if($('forgeWalletStatus'))$('forgeWalletStatus').textContent='Wallet error: '+error.message;
+      if($('launchedDashboardStatus'))$('launchedDashboardStatus').textContent='Wallet error: '+error.message;
+      throw error;
+    }
+  };
+  const rf26OriginalConfig=canonicalV1Config;
+  canonicalV1Config=function(){
+    if(activeChainId()!==11155111)throw new Error('Mainnet launch execution is locked. Select Sepolia to use the existing Forge.');
+    return rf26OriginalConfig();
+  };
+  const rf26OriginalRender=renderCanonicalV1;
+  renderCanonicalV1=function(){
+    if(activeChainId()!==11155111){
+      for(const id of ['canonicalFactoryAddress','canonicalFeePolicyAddress','canonicalRandomnessAddress','canonicalRendererAddress','canonicalReserveAddress','canonicalMintPhasesAddress']){
+        const node=$(id);if(node){node.textContent='—';node.removeAttribute('title');const link=node.closest('a');if(link){link.removeAttribute('href');link.removeAttribute('title');}}
+      }
+      for(const id of ['platformFeeRate','platformFeeUpfront'])if($(id))$(id).textContent='—';
+      if($('platformFeePolicyLabel'))$('platformFeePolicyLabel').textContent='Unavailable';
+      if($('platformFeeQuoteStatus'))$('platformFeeQuoteStatus').textContent='Choose an enabled, verified launch network to obtain a fee quote.';
+      if($('canonicalV1Status'))$('canonicalV1Status').textContent='No executable Mainnet release is installed. Sepolia infrastructure is not a Mainnet Factory.';
+      return null;
+    }
+    return rf26OriginalRender();
+  };
+  const rf26OriginalFeeQuote=refreshPlatformFeeQuote;
+  refreshPlatformFeeQuote=async function(...args){if(activeChainId()!==11155111)return null;return rf26OriginalFeeQuote(...args);};
+  const rf26OriginalVrfQuote=refreshVrfQuote;
+  refreshVrfQuote=async function(...args){if(activeChainId()!==11155111)return null;return rf26OriginalVrfQuote(...args);};
+  const rf26OriginalCost=refreshCostEstimate;
+  refreshCostEstimate=async function(){
+    if(activeChainId()!==11155111){
+      if($('forgeEstimatedCost'))$('forgeEstimatedCost').textContent='—';
+      if($('forgeEstimatedGas'))$('forgeEstimatedGas').textContent='Mainnet estimator is pending network-aware deployment integration.';
+      if($('forgeCurrentGwei'))$('forgeCurrentGwei').textContent='Current: unavailable';
+      if($('forgeCostBreakdown'))$('forgeCostBreakdown').innerHTML='';
+      return;
+    }
+    return rf26OriginalCost();
+  };
+  function rf26RefreshLaunchAction(){
+    const button=$('forgeCollectionBtn');if(!button)return;
+    if(activeChainId()!==11155111){button.disabled=true;button.textContent='Mainnet Deployment Locked';return;}
+    if(!forgeState.compiled){button.disabled=true;button.textContent='Compile for Onchain First';return;}
+    if(!rf26Network().scope()){button.disabled=true;button.textContent='Verify Network Before Forging';return;}
+    if(!forgeState.collectionAddress){button.disabled=false;button.textContent='Forge Collection on Sepolia';}
+  }
+  const rf26OriginalCompile=compileForOnchain;
+  compileForOnchain=async function(){const result=await rf26OriginalCompile();rf26RefreshLaunchAction();return result;};
+  const rf26OriginalForge=forgeCollection;
+  forgeCollection=async function(){
+    const leave=rf26Network().enter();
+    try{return await rf26OriginalForge();}
+    finally{leave();rf26RefreshLaunchAction();}
+  };
+  function rf26ClearDeploymentBindings(){
+    if(forgeState.deploymentJournal)persistDeploymentJournal(forgeState.deploymentJournal);
+    for(const key of ['collectionAddress','dataAddress','mintPhasesAddress','publicPhaseId','whitelistPhaseId','latestRequestId','latestTokenId','latestCreatorRevealRequestId','deploymentJournal'])forgeState[key]=null;
+    forgeState.masterMintArmed=false;
+    $('forgeResult')?.classList.add('hidden');
+    if($('forgedCollectionAddress'))$('forgedCollectionAddress').textContent='';
+    if($('forgedEtherscanLink'))$('forgedEtherscanLink').removeAttribute('href');
+    if($('viewerCollectionAddress'))$('viewerCollectionAddress').value='';
+    for(const id of ['forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgeDeferredRevealBtn','forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn','forgeInspectBtn','openMintPageBtn','publishMintPageBtn','downloadMintPageBtn'])if($(id))$(id).disabled=true;
+  }
+  const rf26OriginalGetState=getForgeProjectState;
+  getForgeProjectState=function(){return {...rf26OriginalGetState(),launchChainId:activeChainId()};};
+  const rf26OriginalRestore=restoreForgeProjectState;
+  restoreForgeProjectState=function(saved,options={}){
+    if(!saved||!['relic-forge/forge-settings@1','relic-forge/forge-settings@2','relic-forge/forge-settings@3','relic-forge/forge-settings@4','relic-forge/forge-settings@5','relic-forge/forge-settings@6'].includes(saved.schema))return;
+    const journal=saved.deploymentJournal||null;
+    const bound=!!(saved.collectionAddress||journal?.collectionAddress||journal?.provenance);
+    const explicit=journal?.chainId??saved.chainId??saved.launchChainId??null;
+    const target=bound?(explicit??11155111):(explicit??activeChainId());
+    if(target!=null)window.RelicForgeNetworks.chainId(target);
+    if(bound&&Number(target)!==11155111)throw new Error('This deployment is not a certified legacy Sepolia record. The R3D-B R1 legacy engine cannot restore it.');
+    if(bound&&journal?.chainId!=null&&Number(journal.chainId)!==Number(target))throw new Error('Saved deployment network mismatch.');
+    if(bound&&journal?.factory&&saved.factory&&String(journal.factory).toLowerCase()!==String(saved.factory).toLowerCase())throw new Error('Saved deployment Factory mismatch.');
+    rf26ClearDeploymentBindings();
+    if(target!=null&&activeChainId()!==Number(target))rf26Network().select(target);
+    const result=rf26OriginalRestore(saved,options);
+    rf26RefreshLaunchAction();return result;
+  };
+  function rf26GuardLegacyAction(event){
+    if(activeChainId()===11155111)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const message='Mainnet transaction execution remains locked until R3D-B recovery certification.';
+    if($('forgeTestStatus'))$('forgeTestStatus').textContent=message;
+    if($('forgeWalletStatus'))$('forgeWalletStatus').textContent=message;
+  }
+  for(const id of ['forgeCollectionBtn','forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgeDeferredRevealBtn','forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn','r24ResumeDeploymentBtn'])
+    $(id)?.addEventListener('click',rf26GuardLegacyAction,true);
+  window.addEventListener('relicforge:launch-network-changed',()=>{
+    resetWalletSessionUi('Launch network changed. Reconnect for deployment.');
+    renderCanonicalV1();refreshPlatformFeeQuote().catch(()=>{});refreshVrfQuote().catch(()=>{});
+    refreshCostEstimate().catch(()=>{});rf26RefreshLaunchAction();
+  });
+  window.addEventListener('relicforge:forge-preflight-complete',rf26RefreshLaunchAction);
+  const rf26OriginalLoadLaunches=loadLaunchedProjects;
+  loadLaunchedProjects=async function(...args){
+    if(activeChainId()!==11155111)throw new Error('The legacy Creator Dashboard is Sepolia-only in R3D-B R1. Select Sepolia to manage historical collections.');
+    return rf26OriginalLoadLaunches(...args);
+  };
+  const rf26OriginalOpenLaunch=openLaunchedCollection;
+  openLaunchedCollection=async function(...args){
+    if(activeChainId()!==11155111)throw new Error('The legacy Creator Dashboard is Sepolia-only in R3D-B R1.');
+    return rf26OriginalOpenLaunch(...args);
+  };
+  window.addEventListener('relicforge:forge-session-invalidated',()=>resetWalletSessionUi('Wallet session changed. Reconnect to authorize deployment.'));
+
+  window.RelicForgeForge = { version: '11.1.6-r3d-b1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();

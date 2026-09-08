@@ -72,9 +72,13 @@
 
   async function publish(detail) {
     if(!window.RelicForgeCloud?.enabled?.())throw new Error('RelicForge Cloud is not configured. Public stages still work from the onchain mint page, but Approved Wallet proofs require Cloud sync.');
+    const launchScope=await window.RelicForgeForgeNetwork.requireReady();
+    if(launchScope.chainId!==11155111||detail?.chainId!=null&&Number(detail.chainId)!==11155111)
+      throw new Error('R3D-B R1 collector-page publishing is restricted to verified Sepolia deployments.');
     const collection=detail?.collectionAddress;
     if(!window.ethers?.isAddress(collection))throw new Error('Collection address is unavailable.');
     const wallet=await currentWallet();
+    await window.RelicForgeForgeNetwork.verifyCollection(collection,{creator:wallet,chainId:launchScope.chainId});
     await window.RelicForgeCloud.ensureSignedIn(wallet);
     const projectId=window.RelicForgeProjects?.getCurrentProjectId?.()||null;
     const state=window.RelicForgeForge?.getForgeProjectState?.()||{};

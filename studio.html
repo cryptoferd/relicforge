@@ -442,13 +442,21 @@
   <div class="panel-heading">
     <div>
       <div class="eyebrow">STEP 5</div>
-      <h2>Forge on Ethereum Sepolia</h2>
+      <h2>Forge on your selected network</h2>
       <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">CANONICAL V1 · SEPOLIA</div>
+    <div class="forge-test-badge">R12-v2 · NETWORK-AWARE PREPARATION</div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
+    <div class="launch-card rf26-forge-network-card">
+      <h3>Launch network</h3>
+      <p class="forge-footnote">Choose a network for this launch. Artwork and creative project saves remain independent of the selected chain. No wallet switch occurs until you explicitly connect for an enabled launch.</p>
+      <label class="field"><span>Deployment network</span><select id="rf26ForgeNetworkSelect"><option value="">Choose a network</option><option value="1">Ethereum Mainnet</option><option value="11155111">Ethereum Sepolia</option></select></label>
+      <div class="inline-actions"><button class="ghost-btn" id="rf26ForgePreflightBtn" type="button">Verify release &amp; infrastructure</button></div>
+      <div class="forge-inline-status" id="rf26ForgeNetworkStatus">Choose a network before preparing a launch.</div>
+      <small class="forge-footnote">Mainnet transaction execution remains locked in this checkpoint. A certified release and the network-aware recovery integration are required before real ETH can be spent through Studio.</small>
+    </div>
     <div class="launch-card">
       <h3>Collection</h3>
       <label class="field"><span>Name</span><input id="launchName" type="text"/></label>
@@ -633,7 +641,7 @@
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated Sepolia deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
+      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Deployment cost estimate</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
       <div class="forge-cost-total"><strong id="forgeEstimatedCost">—</strong><span id="forgeEstimatedGas">Compile first</span></div>
       <div class="forge-gwei-control">
         <div class="forge-gwei-head"><span>Gas price</span><strong id="forgeCurrentGwei">Current: —</strong></div>
@@ -882,7 +890,10 @@
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=save-reliability5" defer></script>
   <script src="./app.js?v=rules-symmetry1-1" defer></script>
-  <script src="./forge.js?v=stability1-resume-r24-1" defer></script>
+  <script src="./relicforge-networks.js?v=r26-p2a1"></script>
+  <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
+  <script src="./rf26-forge-network.js?v=r3d-b1" defer></script>
+  <script src="./forge.js?v=r3d-b1" defer></script>
   <script src="./project-storage.js?v=save-reliability6-textfix2" defer></script>
   <script src="./studio-collaboration.js?v=studio-collab-r1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>
@@ -893,7 +904,7 @@
   <script src="./studio-resume.js?v=r12v2-r24-1" defer></script>
   <script src="./creator-controls-complete.js?v=ux2-event1-encoding1"></script>
   <script src="./relicforge-language.js?v=ux2-encoding1"></script>
-  <script src="./relicforge-networks.js?v=r26-p2a1"></script>
+
   <script src="./relicforge-product-ui.js?v=r26-p2a1"></script>
 <!-- RF26 R3C-B creator URL controls: module -->
 <script type="module" src="./rf26-creator-urls.js?v=r3c-b-r1"></script>
