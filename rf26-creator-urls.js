@@ -13,7 +13,7 @@ const ids=Object.freeze({
   load:'rf26CreatorUrlLoad',production:'rf26CreatorUrlProduction',testnet:'rf26CreatorUrlTestnet',
   slug:'rf26CreatorUrlSlug',preview:'rf26CreatorUrlPreview',availability:'rf26CreatorUrlAvailability',
   check:'rf26CreatorUrlCheck',understand:'rf26CreatorUrlUnderstand',claim:'rf26CreatorUrlClaim',
-  claimed:'rf26CreatorUrlClaimed',claimedUrl:'rf26CreatorUrlClaimedUrl',copyClaimed:'rf26CreatorUrlCopyClaimed',
+  claimed:'rf26CreatorUrlClaimed',claimedUrl:'rf26CreatorUrlClaimedUrl',copyClaimed:'rf26CreatorUrlCopyClaimed',openClaimed:'rf26CreatorUrlOpenClaimed',
   listed:'rf26CreatorUrlListed',feature:'rf26CreatorUrlFeature',featured:'rf26CreatorUrlFeatured',
   save:'rf26CreatorUrlSave',publicationStatus:'rf26CreatorUrlPublicationStatus',
   project:'rf26CreatorUrlProject'
@@ -170,8 +170,9 @@ function installMarkup() {
           <div class="rf26-url-copyrow">
             <input id="${ids.claimedUrl}" class="rf26-url-input" type="text" readonly aria-label="Permanent custom mint link">
             <button id="${ids.copyClaimed}" class="rf26-url-button rf26-url-secondary" type="button">Copy</button>
+            <a id="${ids.openClaimed}" class="rf26-url-button rf26-url-secondary" target="_blank" rel="noopener noreferrer" href="#" aria-label="Open permanent mint URL">Open</a>
           </div>
-          <p class="rf26-url-hint">The short-link web route is finalized in the next R3C routing checkpoint. The claim itself is stored permanently by the backend.</p>
+          <p class="rf26-url-hint">The custom link opens the verified collection mint page. The contract-address link above remains available.</p>
         </div>
 
         <hr class="rf26-url-rule">
@@ -310,6 +311,7 @@ function renderPublication(data) {
     if(slugInput){slugInput.value=view.slug;slugInput.readOnly=true;}
     setText(ids.preview,view.slug);
     const claimed=byId(ids.claimedUrl);if(claimed)claimed.value=slugUrl(view.slug);
+    const open=byId(ids.openClaimed);if(open)open.href=slugUrl(view.slug);
     setHidden(ids.claimed,false);
     state.availability=true;state.availabilitySlug=view.slug;
     status('Permanent URL already claimed for this collection.','good',ids.availability);

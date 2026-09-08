@@ -1,4 +1,15 @@
 {
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "functions": {
+    "api/mint-link.mjs": {
+      "includeFiles": "mint.html"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/mint/:slug",
+      "destination": "/api/mint-link?slug=:slug"
+    }
+  ]
 }
