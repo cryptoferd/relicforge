@@ -12,7 +12,7 @@
     if (!list || !core) throw new Error('Shared 1/1 metadata editor is unavailable.');
     const itemFor = target => options.getItem(target.closest('[data-oneofone-id]')?.dataset.oneofoneId);
     const rowFor = target => {
-      const node = target.closest('[data-meta-index]');
+      const node = target.closest('.oneofone-metadata-row[data-meta-index]');
       const item = itemFor(target);
       const index = Number(node?.dataset.metaIndex);
       if (!item || !node || !Number.isSafeInteger(index) || index < 0 || index >= (item.metadata || []).length) return null;
