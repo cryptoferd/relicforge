@@ -7,8 +7,13 @@
     return;
   }
 
-  const PIPELINE_VERSION = '6e02-save1';
-  const HASH_CONCURRENCY = 4;
+  const PIPELINE_VERSION = '6e03-hash1';
+  const HASH_SMALL_FILE_BYTES = 512 * 1024;
+  const HASH_MEDIUM_FILE_BYTES = 2 * 1024 * 1024;
+  const HASH_LARGE_FILE_BYTES = 8 * 1024 * 1024;
+  const HASH_SMALL_MIN_WORKERS = 24;
+  const HASH_SMALL_MAX_WORKERS = 48;
+  const HASH_WORKERS_PER_CORE = 4;
   const UPLOAD_CONCURRENCY = 6;
   const DOWNLOAD_CONCURRENCY = 6;
   const PREPARE_BATCH_SIZE = 50;
@@ -273,10 +278,111 @@
     return out;
   }
 
-  async function fileSha256(file) {
-    if (fileHashCache.has(file)) return fileHashCache.get(file);
+  function chooseHashConcurrency(files) {
+    const cores = Math.max(1, Number(navigator.hardwareConcurrency || 8));
+    const maxBytes = files.length ? Math.max(...files.map(file => Number(file?.size || 0))) : 0;
+    if (maxBytes <= HASH_SMALL_FILE_BYTES) {
+      return Math.min(files.length || 1, HASH_SMALL_MAX_WORKERS, Math.max(HASH_SMALL_MIN_WORKERS, cores * HASH_WORKERS_PER_CORE));
+    }
+    if (maxBytes <= HASH_MEDIUM_FILE_BYTES) return Math.min(files.length || 1, 24);
+    if (maxBytes <= HASH_LARGE_FILE_BYTES) return Math.min(files.length || 1, 12);
+    return Math.min(files.length || 1, 4);
+  }
+
+  function createHashWorkerPool(size) {
+    if (typeof Worker !== 'function') return null;
+    const queue = [];
+    const slots = [];
+    const pending = new Map();
+    let nextId = 1;
+    let closed = false;
+
+    function pump() {
+      if (closed) return;
+      for (const slot of slots) {
+        if (slot.busy || !queue.length) continue;
+        const task = queue.shift();
+        const id = nextId++;
+        slot.busy = true;
+        pending.set(id, { task, slot });
+        try {
+          slot.worker.postMessage({ id, file: task.file });
+        } catch (error) {
+          pending.delete(id);
+          slot.busy = false;
+          task.reject(error);
+        }
+      }
+    }
+
+    for (let index = 0; index < size; index++) {
+      const worker = new Worker('./cloud-hash-worker.js?v=6e03-hash1');
+      const slot = { worker, busy: false };
+      worker.onmessage = event => {
+        const message = event.data || {};
+        const entry = pending.get(message.id);
+        if (!entry) return;
+        pending.delete(message.id);
+        entry.slot.busy = false;
+        if (message.ok && /^[0-9a-f]{64}$/.test(String(message.hash || ''))) {
+          entry.task.resolve(String(message.hash).toLowerCase());
+        } else {
+          entry.task.reject(new Error(message.error || 'Fingerprint worker failed.'));
+        }
+        pump();
+      };
+      worker.onerror = error => {
+        for (const [id, entry] of [...pending.entries()]) {
+          if (entry.slot !== slot) continue;
+          pending.delete(id);
+          entry.task.reject(new Error(error?.message || 'Fingerprint worker crashed.'));
+        }
+        slot.busy = false;
+        pump();
+      };
+      slots.push(slot);
+    }
+
+    return {
+      hash(file) {
+        if (closed) return Promise.reject(new Error('Fingerprint worker pool is closed.'));
+        return new Promise((resolve, reject) => {
+          queue.push({ file, resolve, reject });
+          pump();
+        });
+      },
+      close() {
+        closed = true;
+        for (const slot of slots) slot.worker.terminate();
+        slots.length = 0;
+      }
+    };
+  }
+
+  async function mainThreadFileSha256(file) {
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    const hash = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('');
+    return [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function fileSha256(file, workerPool) {
+    if (fileHashCache.has(file)) return fileHashCache.get(file);
+    const marker = decodedMarkerCache.get(file);
+    if (marker?.sha256 && /^[0-9a-f]{64}$/.test(String(marker.sha256))) {
+      const reused = String(marker.sha256).toLowerCase();
+      fileHashCache.set(file, reused);
+      return reused;
+    }
+    let hash;
+    if (workerPool) {
+      try {
+        hash = await workerPool.hash(file);
+      } catch (error) {
+        console.warn('RelicForge worker fingerprint failed; retrying locally.', error);
+        hash = await mainThreadFileSha256(file);
+      }
+    } else {
+      hash = await mainThreadFileSha256(file);
+    }
     fileHashCache.set(file, hash);
     return hash;
   }
@@ -306,15 +412,33 @@
     if (!files.length) return { markerByFile: new Map(), stats: { total: 0, cached: 0, uploaded: 0 } };
 
     let hashed = 0;
-    report({ phase: 'hash', completed: 0, cached: 0, uploaded: 0 });
+    let hashCacheHits = 0;
+    for (const file of files) {
+      if (fileHashCache.has(file) || decodedMarkerCache.get(file)?.sha256) hashCacheHits++;
+    }
+    const hashConcurrency = chooseHashConcurrency(files);
+    let hashWorkerPool = null;
+    try {
+      hashWorkerPool = createHashWorkerPool(hashConcurrency);
+    } catch (error) {
+      console.warn('RelicForge could not create fingerprint workers; using browser fallback.', error);
+    }
+    report({ phase: 'hash', completed: hashCacheHits, cached: 0, uploaded: 0, hashWorkers: hashWorkerPool ? hashConcurrency : 0, hashCacheHits });
 
-    const hashedFiles = await runPool(files, HASH_CONCURRENCY, async file => {
-      const marker = decodedMarkerCache.get(file);
-      const hash = String(marker?.sha256 || await fileSha256(file)).toLowerCase();
-      hashed++;
-      report({ phase: 'hash', completed: hashed, cached: 0, uploaded: 0 });
-      return { file, hash, fp: fingerprint(hash, file), decodedMarker: marker || null };
-    });
+    let hashedFiles;
+    try {
+      hashedFiles = await runPool(files, hashConcurrency, async file => {
+        const marker = decodedMarkerCache.get(file);
+        const wasCached = fileHashCache.has(file) || !!marker?.sha256;
+        const hash = String(marker?.sha256 || await fileSha256(file, hashWorkerPool)).toLowerCase();
+        if (!wasCached) hashed++;
+        const completed = Math.min(files.length, hashCacheHits + hashed);
+        report({ phase: 'hash', completed, cached: 0, uploaded: 0, hashWorkers: hashWorkerPool ? hashConcurrency : 0, hashCacheHits });
+        return { file, hash, fp: fingerprint(hash, file), decodedMarker: marker || null };
+      });
+    } finally {
+      hashWorkerPool?.close();
+    }
 
     const groups = new Map();
     for (const entry of hashedFiles) {
@@ -594,7 +718,8 @@
 
   cloud.largeProjectPipeline = Object.freeze({
     version: PIPELINE_VERSION,
-    hashConcurrency: HASH_CONCURRENCY,
+    hashWorkerMax: HASH_SMALL_MAX_WORKERS,
+    hashWorkersPerCore: HASH_WORKERS_PER_CORE,
     uploadConcurrency: UPLOAD_CONCURRENCY,
     prepareBatchSize: PREPARE_BATCH_SIZE,
     assetRequestIntervalMs: ASSET_REQUEST_INTERVAL_MS,

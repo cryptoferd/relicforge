@@ -407,7 +407,13 @@
     if (phase === 'scan') return total
       ? `Preparing ${total.toLocaleString()} artwork files for cloud save…`
       : 'Preparing project data for cloud save…';
-    if (phase === 'hash') return `Fingerprinting artwork ${amount}…`;
+    if (phase === 'hash') {
+      const workers = Math.max(0, Number(progress?.hashWorkers || 0));
+      const cacheHits = Math.max(0, Number(progress?.hashCacheHits || 0));
+      const workerText = workers ? ` · ${workers} parallel local workers` : '';
+      const cacheText = cacheHits ? ` · ${cacheHits.toLocaleString()} already fingerprinted` : '';
+      return `Fingerprinting locally ${amount}${workerText}${cacheText}…`;
+    }
     if (phase === 'prepare') return `Checking cloud artwork ${amount} · ${cached.toLocaleString()} already reusable…`;
     if (phase === 'upload') return `Uploading artwork ${amount} · ${cached.toLocaleString()} reused · ${uploaded.toLocaleString()} uploaded…`;
     if (phase === 'snapshot') return 'Artwork sync complete · saving project data…';
