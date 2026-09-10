@@ -13,8 +13,8 @@
     "check": "node --check src/index.js && node --check src/lib/auth.js && node --check src/lib/db.js && node --check src/lib/rpc.js && node --check src/lib/alchemy-networks.js && node --check src/lib/storage.js && node --check src/lib/project-diff.js && node --check src/routes/auth.js && node --check src/routes/projects.js && node --check src/routes/assets.js && node --check src/routes/collections.js && node --check src/routes/public.js && node --check src/routes/founder.js && node --check src/routes/rc47b.js && node --check src/routes/reliquary.js && node --check src/lib/reliquary-index.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.864.0",
-    "@aws-sdk/s3-request-presigner": "^3.864.0",
+    "@aws-sdk/client-s3": "3.864.0",
+    "@aws-sdk/s3-request-presigner": "3.864.0",
     "@fastify/cors": "^11.1.0",
     "@fastify/rate-limit": "^10.3.0",
     "ethers": "^6.15.0",
