@@ -20,6 +20,10 @@
   let saveReminderDismissedAt = null;
   let saveReminderTimer = null;
   let dirtyTrackingReady = false;
+  let largeProjectWarningTimer = null;
+  const LARGE_PROJECT_WARNING_THRESHOLD = 250;
+  const CLOUD_SAVE_TRAIT_BATCH_SIZE = 250;
+  const CLOUD_SAVE_BATCH_WINDOW_SECONDS = 65;
 
   const $ = id => document.getElementById(id);
 
@@ -188,6 +192,80 @@
     }
   }
 
+  function currentTraitArtworkCount() {
+    const state = window.RelicForgeStudioBridge?.getState?.();
+    let total = 0;
+
+    for (const layer of state?.layers || []) {
+      for (const trait of layer?.traits || []) {
+        if (trait?.file instanceof Blob) total += 1;
+      }
+    }
+
+    return total;
+  }
+
+  function largeProjectSaveEstimate(traitCount) {
+    const batches = Math.max(1, Math.ceil(Number(traitCount || 0) / CLOUD_SAVE_TRAIT_BATCH_SIZE));
+    const protectedWaitSeconds = Math.max(0, batches - 1) * CLOUD_SAVE_BATCH_WINDOW_SECONDS;
+    const minMinutes = Math.max(2, Math.ceil((protectedWaitSeconds + 10) / 60));
+    const maxMinutes = Math.max(minMinutes + 1, Math.ceil((protectedWaitSeconds + 70) / 60));
+    return { batches, minMinutes, maxMinutes };
+  }
+
+  function refreshLargeProjectSaveWarning() {
+    const warning = $('largeProjectSaveWarning');
+    const copy = $('largeProjectSaveWarningCopy');
+    if (!warning || !copy) return;
+
+    const traitCount = currentTraitArtworkCount();
+    if (traitCount <= LARGE_PROJECT_WARNING_THRESHOLD) {
+      warning.classList.add('hidden');
+      copy.textContent = '';
+      return;
+    }
+
+    const estimate = largeProjectSaveEstimate(traitCount);
+    copy.textContent =
+      `${traitCount.toLocaleString()} trait artwork files will be saved in ${estimate.batches} protected batches of up to ${CLOUD_SAVE_TRAIT_BATCH_SIZE}. ` +
+      `Estimated cloud save time: about ${estimate.minMinutes}–${estimate.maxMinutes} minutes. Keep this tab open until the save completes.`;
+    warning.classList.remove('hidden');
+  }
+
+  function scheduleLargeProjectSaveWarning() {
+    if (largeProjectWarningTimer) clearTimeout(largeProjectWarningTimer);
+    largeProjectWarningTimer = setTimeout(() => {
+      largeProjectWarningTimer = null;
+      refreshLargeProjectSaveWarning();
+    }, 250);
+  }
+
+  function cloudBatchProgressText(progress) {
+    const phase = String(progress?.phase || '');
+    const batchNumber = Math.max(1, Number(progress?.batchNumber || 1));
+    const batchCount = Math.max(1, Number(progress?.batchCount || 1));
+    const total = Math.max(0, Number(progress?.total || 0));
+    const completed = Math.max(0, Number(progress?.completed || 0));
+
+    if (phase === 'upload-batch') {
+      const start = Math.max(1, Number(progress?.batchStart || completed + 1));
+      const end = Math.max(start, Number(progress?.batchEnd || completed));
+      return `Saving cloud artwork batch ${batchNumber} of ${batchCount} · assets ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}…`;
+    }
+
+    if (phase === 'rate-limit-pause') {
+      const seconds = Math.max(1, Number(progress?.secondsRemaining || 1));
+      return `Batch ${batchNumber} of ${batchCount} complete · rate-limit safety pause · next batch in ${seconds}s…`;
+    }
+
+    if (phase === 'batch-complete') {
+      return `Cloud artwork ${Math.min(completed, total).toLocaleString()} / ${total.toLocaleString()} synchronized…`;
+    }
+
+    if (phase === 'snapshot') return 'Artwork synchronized · saving project data…';
+    return '';
+  }
+
   function saveReferenceTimeMs() {
     const savedMs = lastSavedAt ? new Date(lastSavedAt).getTime() : NaN;
     if (Number.isFinite(savedMs)) return savedMs;
@@ -256,6 +334,7 @@
   }
 
   function markDirty() {
+    scheduleLargeProjectSaveWarning();
     if (!dirtyTrackingReady) return;
     if (!hasUnsavedChanges) {
       hasUnsavedChanges = true;
@@ -396,37 +475,6 @@
     return message || name || 'Browser local cache write failed.';
   }
 
-  function cloudSaveProgressText(progress) {
-    const phase = String(progress?.phase || '');
-    const total = Math.max(0, Number(progress?.total || 0));
-    const completed = Math.max(0, Number(progress?.completed || 0));
-    const cached = Math.max(0, Number(progress?.cached || 0));
-    const uploaded = Math.max(0, Number(progress?.uploaded || 0));
-    const amount = total ? `${Math.min(completed, total).toLocaleString()} / ${total.toLocaleString()}` : '';
-
-    if (phase === 'scan') return total
-      ? `Preparing ${total.toLocaleString()} artwork files for cloud save…`
-      : 'Preparing project data for cloud save…';
-    if (phase === 'hash') {
-      const workers = Math.max(0, Number(progress?.hashWorkers || 0));
-      const cacheHits = Math.max(0, Number(progress?.hashCacheHits || 0));
-      const workerText = workers ? ` · ${workers} parallel local workers` : '';
-      const cacheText = cacheHits ? ` · ${cacheHits.toLocaleString()} already fingerprinted` : '';
-      return `Fingerprinting locally ${amount}${workerText}${cacheText}…`;
-    }
-    if (phase === 'prepare-direct') return `Preparing direct upload batches ${amount} · ${cached.toLocaleString()} already reusable…`;
-    if (phase === 'upload-direct') {
-      const workers = Math.max(0, Number(progress?.uploadConcurrency || 0));
-      const workerText = workers ? ` · ${workers} parallel uploads` : '';
-      return `Uploading directly to private storage ${amount}${workerText} · ${cached.toLocaleString()} reused…`;
-    }
-    if (phase === 'prepare') return `Checking cloud artwork ${amount} · ${cached.toLocaleString()} already reusable…`;
-    if (phase === 'upload') return `Uploading artwork ${amount} · ${cached.toLocaleString()} reused · ${uploaded.toLocaleString()} uploaded…`;
-    if (phase === 'snapshot') return 'Artwork sync complete · saving project data…';
-    if (phase === 'done') return 'Cloud project data saved · finalizing…';
-    return '';
-  }
-
   async function cloudMeta() {
     if (!window.RelicForgeCloud?.enabled?.()) return { projects: [], count: 0, limit: MAX_CLOUD_PROJECTS };
     await ensureCloudSession();
@@ -513,11 +561,12 @@
           studio,
           forge,
           onProgress(progress) {
-            const message = cloudSaveProgressText(progress);
+            const message = cloudBatchProgressText(progress);
             if (message) setStatus(message, '', 'saving');
           }
         });
         markSaved(now);
+        scheduleLargeProjectSaveWarning();
         if (localSaveError) {
           setStatus('Saved globally - browser cache unavailable, but your cloud project is safe.', 'warning');
         } else {
@@ -1017,6 +1066,7 @@
         const status = $('projectSaveStatus');
         if (status?.textContent?.includes('Studio core')) setStatus('Project saving is ready.', 'success');
       }
+      scheduleLargeProjectSaveWarning();
     });
     window.addEventListener('relicforge:wallet-connected', event => {
       const address = event.detail?.address;
@@ -1072,11 +1122,12 @@
       if (!wallet) setStatus('Wallet required to save', 'warning');
       else if (window.RelicForgeCloud?.enabled?.() && !cloudSessionReady()) setStatus('Wallet connected · sign in to enable global saves', 'warning');
       else setStatus('No unsaved changes', '');
+      scheduleLargeProjectSaveWarning();
     }, 0);
   }
 
   window.RelicForgeProjects = {
-    version: '11.1.6',
+    version: '11.1.7',
     connectWallet,
     changeWallet,
     disconnectWallet,

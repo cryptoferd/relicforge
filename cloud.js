@@ -3,6 +3,8 @@
   const TOKEN_KEY = 'relicforge_cloud_session_v1';
   const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
   const SESSION_REFRESH_SKEW_MS = 2 * 60 * 1000;
+  const CLOUD_SAVE_TRAIT_BATCH_SIZE = 250;
+  const CLOUD_SAVE_BATCH_WINDOW_MS = 65 * 1000;
   let session = null;
   let signInFlight = null;
   let authEpoch = 0;
@@ -190,6 +192,121 @@
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     return [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('');
   }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+  }
+
+  function collectUniqueProjectBlobs(value, out = [], seenObjects = new WeakSet(), seenBlobs = new Set()) {
+    if (value instanceof Blob) {
+      if (!seenBlobs.has(value)) {
+        seenBlobs.add(value);
+        out.push(value);
+      }
+      return out;
+    }
+
+    if (!value || typeof value !== 'object') return out;
+    if (seenObjects.has(value)) return out;
+    seenObjects.add(value);
+
+    if (Array.isArray(value)) {
+      for (const child of value) collectUniqueProjectBlobs(child, out, seenObjects, seenBlobs);
+    } else {
+      for (const child of Object.values(value)) collectUniqueProjectBlobs(child, out, seenObjects, seenBlobs);
+    }
+
+    return out;
+  }
+
+  async function waitForNextCloudSaveWindow({
+    batchNumber,
+    batchCount,
+    total,
+    completed,
+    startedAt,
+    onProgress
+  }) {
+    let remaining = Math.max(0, CLOUD_SAVE_BATCH_WINDOW_MS - (Date.now() - startedAt));
+
+    while (remaining > 0) {
+      const secondsRemaining = Math.max(1, Math.ceil(remaining / 1000));
+      try {
+        onProgress?.({
+          phase: 'rate-limit-pause',
+          batchNumber,
+          batchCount,
+          total,
+          completed,
+          secondsRemaining,
+          batchSize: CLOUD_SAVE_TRAIT_BATCH_SIZE
+        });
+      } catch {}
+
+      const step = Math.min(1000, remaining);
+      await sleep(step);
+      remaining = Math.max(0, CLOUD_SAVE_BATCH_WINDOW_MS - (Date.now() - startedAt));
+    }
+  }
+
+  async function uploadProjectAssetsPaced(value, context, onProgress = null) {
+    const files = collectUniqueProjectBlobs(value);
+    const total = files.length;
+    const batchCount = Math.max(1, Math.ceil(total / CLOUD_SAVE_TRAIT_BATCH_SIZE));
+    const cache = new Map();
+
+    if (!total) return cache;
+
+    for (let start = 0; start < total; start += CLOUD_SAVE_TRAIT_BATCH_SIZE) {
+      const batch = files.slice(start, start + CLOUD_SAVE_TRAIT_BATCH_SIZE);
+      const batchNumber = Math.floor(start / CLOUD_SAVE_TRAIT_BATCH_SIZE) + 1;
+      const startedAt = Date.now();
+
+      try {
+        onProgress?.({
+          phase: 'upload-batch',
+          batchNumber,
+          batchCount,
+          batchStart: start + 1,
+          batchEnd: start + batch.length,
+          batchSize: batch.length,
+          total,
+          completed: start
+        });
+      } catch {}
+
+      const markers = await Promise.all(batch.map(file => uploadAsset(file, context)));
+
+      for (let index = 0; index < batch.length; index++) {
+        cache.set(batch[index], Promise.resolve(markers[index]));
+      }
+
+      const completed = start + batch.length;
+      try {
+        onProgress?.({
+          phase: 'batch-complete',
+          batchNumber,
+          batchCount,
+          batchSize: batch.length,
+          total,
+          completed
+        });
+      } catch {}
+
+      if (completed < total) {
+        await waitForNextCloudSaveWindow({
+          batchNumber,
+          batchCount,
+          total,
+          completed,
+          startedAt,
+          onProgress
+        });
+      }
+    }
+
+    return cache;
+  }
   async function uploadAsset(file, { projectId = null, purpose = 'project' } = {}) {
     if (!(file instanceof Blob)) return null;
     const filename = file.name || 'asset.bin';
@@ -256,11 +373,24 @@
     return value;
   }
   async function listProjectsMeta() { return await json('/api/projects', {}, true); }
-  async function saveProject({ id, name, studio, forge }) {
+  async function saveProject({ id, name, studio, forge, onProgress = null }) {
     const meta = await listProjectsMeta();
     const exists = (meta.projects || []).some(project => String(project.id) === String(id));
     if (!exists && Number(meta.count ?? (meta.projects || []).length) >= Number(meta.limit || 10)) throw new Error(`Cloud project limit reached (${meta.limit || 10}/${meta.limit || 10}). Delete a project before saving another.`);
-    const snapshot = await encodeValue({ schema: 'relic-forge/cloud-project@1', studio, forge }, { projectId: id, purpose: 'project' });
+
+    const projectValue = { schema: 'relic-forge/cloud-project@1', studio, forge };
+    const context = { projectId: id, purpose: 'project' };
+    const uploadCache = await uploadProjectAssetsPaced(projectValue, context, onProgress);
+    const snapshot = await encodeValue(projectValue, context, uploadCache);
+
+    try {
+      onProgress?.({
+        phase: 'snapshot',
+        total: collectUniqueProjectBlobs(projectValue).length,
+        completed: collectUniqueProjectBlobs(projectValue).length
+      });
+    } catch {}
+
     return json(`/api/projects/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name, snapshot }) }, true);
   }
   async function listProjects() { return (await listProjectsMeta()).projects || []; }
@@ -306,6 +436,7 @@
 
   window.RelicForgeCloud = {
     version: '11.1.7', apiBase, enabled, signIn, ensureSignedIn, clearSession, loadSession, sessionIsUsable,
-    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob, uploadBinary
+    uploadAsset, encodeValue, decodeValue, saveProject, listProjectsMeta, listProjects, loadProject, deleteProject, publishMintPage, publicUrl, json, fetchBlob, uploadBinary,
+    cloudSavePolicy: Object.freeze({ traitBatchSize: CLOUD_SAVE_TRAIT_BATCH_SIZE, batchWindowMs: CLOUD_SAVE_BATCH_WINDOW_MS })
   };
 })();
