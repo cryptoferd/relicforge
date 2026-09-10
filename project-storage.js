@@ -414,6 +414,12 @@
       const cacheText = cacheHits ? ` · ${cacheHits.toLocaleString()} already fingerprinted` : '';
       return `Fingerprinting locally ${amount}${workerText}${cacheText}…`;
     }
+    if (phase === 'prepare-direct') return `Preparing direct upload batches ${amount} · ${cached.toLocaleString()} already reusable…`;
+    if (phase === 'upload-direct') {
+      const workers = Math.max(0, Number(progress?.uploadConcurrency || 0));
+      const workerText = workers ? ` · ${workers} parallel uploads` : '';
+      return `Uploading directly to private storage ${amount}${workerText} · ${cached.toLocaleString()} reused…`;
+    }
     if (phase === 'prepare') return `Checking cloud artwork ${amount} · ${cached.toLocaleString()} already reusable…`;
     if (phase === 'upload') return `Uploading artwork ${amount} · ${cached.toLocaleString()} reused · ${uploaded.toLocaleString()} uploaded…`;
     if (phase === 'snapshot') return 'Artwork sync complete · saving project data…';

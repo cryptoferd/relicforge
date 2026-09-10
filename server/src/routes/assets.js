@@ -8,12 +8,29 @@ const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
 const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const PROJECT_LIMIT = Math.max(1, Number(process.env.PROJECT_LIMIT || 10));
 const PROJECT_BATCH_PREPARE_MAX = 50;
+const PROJECT_DIRECT_BATCH_MAX = 100;
+const PROJECT_DIRECT_COMPLETE_CONCURRENCY = 12;
 const ALLOWED_PURPOSES = new Set(['project','mint-page']);
 
 function allowedType(contentType, purpose) {
   const type = String(contentType || '').toLowerCase();
   if (purpose === 'mint-page') return type.startsWith('image/');
   return type.startsWith('image/') || PROJECT_ALLOWED_TYPES.has(type);
+}
+
+async function mapBounded(items, concurrency, worker) {
+  const source = [...items];
+  const results = new Array(source.length);
+  let next = 0;
+  async function consume() {
+    while (true) {
+      const index = next++;
+      if (index >= source.length) return;
+      results[index] = await worker(source[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), Math.max(1, source.length)) }, () => consume()));
+  return results;
 }
 
 export default async function assetRoutes(app) {
@@ -53,6 +70,171 @@ export default async function assetRoutes(app) {
     );
     const uploadUrl = await presignPut(key, contentType, 900);
     return { reused: false, asset: { id, filename, contentType, size: bytes }, uploadUrl };
+  });
+
+  app.post('/api/assets/batch-presign', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const { projectId = null, assets = [] } = request.body || {};
+
+    if (!projectId) return reply.code(400).send({ error: 'projectId is required for batch direct upload.' });
+    if (!Array.isArray(assets) || !assets.length || assets.length > PROJECT_DIRECT_BATCH_MAX) {
+      return reply.code(400).send({ error: `Prepare between 1 and ${PROJECT_DIRECT_BATCH_MAX} assets per direct-upload batch.` });
+    }
+
+    const normalized = [];
+    for (let index = 0; index < assets.length; index++) {
+      const item = assets[index] || {};
+      const filename = String(item.filename || '').trim();
+      const contentType = String(item.contentType || 'application/octet-stream');
+      const bytes = Number(item.size || 0);
+
+      if (!filename || !allowedType(contentType, 'project')) {
+        return reply.code(400).send({ error: `Asset ${index + 1} has an unsupported project asset type.` });
+      }
+      if (!Number.isFinite(bytes) || bytes < 0 || bytes > PROJECT_MAX_BYTES) {
+        return reply.code(400).send({ error: `Asset ${index + 1} exceeds the 25 MB cloud upload limit.` });
+      }
+
+      normalized.push({ filename, contentType, bytes });
+    }
+
+    const existingProject = await one(
+      'SELECT id FROM projects WHERE id=$1 AND owner_wallet=$2',
+      [projectId, request.user.wallet]
+    );
+    if (!existingProject) {
+      const count = Number((await one(
+        'SELECT COUNT(*)::int AS count FROM projects WHERE owner_wallet=$1',
+        [request.user.wallet]
+      ))?.count || 0);
+
+      if (count >= PROJECT_LIMIT) {
+        return reply.code(409).send({
+          error: `Active cloud project limit reached (${PROJECT_LIMIT}). Delete a project before uploading another project's artwork.`
+        });
+      }
+    }
+
+    const rows = normalized.map((item, index) => ({
+      index,
+      id: crypto.randomUUID(),
+      objectKey: objectKey({
+        wallet: request.user.wallet,
+        purpose: 'project',
+        filename: item.filename
+      }),
+      ...item
+    }));
+
+    const values = [];
+    const tuples = [];
+    for (const row of rows) {
+      const base = values.length;
+      values.push(
+        row.id,
+        request.user.wallet,
+        projectId,
+        row.objectKey,
+        row.filename,
+        row.contentType,
+        row.bytes
+      );
+      tuples.push(
+        `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},NULL,'project')`
+      );
+    }
+
+    await db.query(
+      `INSERT INTO assets(id,owner_wallet,project_id,object_key,filename,content_type,size_bytes,sha256,purpose)
+       VALUES ${tuples.join(',')}`,
+      values
+    );
+
+    const prepared = await mapBounded(rows, 24, async row => ({
+      index: row.index,
+      asset: {
+        id: row.id,
+        filename: row.filename,
+        content_type: row.contentType,
+        size_bytes: row.bytes
+      },
+      uploadUrl: await presignPut(row.objectKey, row.contentType, 900)
+    }));
+
+    return {
+      mode: 'direct-bucket',
+      assets: prepared
+    };
+  });
+
+  app.post('/api/assets/batch-complete', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const { projectId = null, assetIds = [] } = request.body || {};
+    const uniqueIds = [...new Set((Array.isArray(assetIds) ? assetIds : []).map(value => String(value || '').trim()).filter(Boolean))];
+
+    if (!projectId) return reply.code(400).send({ error: 'projectId is required for batch completion.' });
+    if (!uniqueIds.length || uniqueIds.length > PROJECT_DIRECT_BATCH_MAX) {
+      return reply.code(400).send({ error: `Complete between 1 and ${PROJECT_DIRECT_BATCH_MAX} assets per batch.` });
+    }
+
+    const result = await db.query(
+      `SELECT id,object_key,size_bytes,content_type,status
+       FROM assets
+       WHERE owner_wallet=$1
+         AND project_id IS NOT DISTINCT FROM $2
+         AND id = ANY($3::uuid[])`,
+      [request.user.wallet, projectId, uniqueIds]
+    );
+
+    const rows = result.rows || [];
+    if (rows.length !== uniqueIds.length) {
+      return reply.code(404).send({ error: 'One or more prepared assets were not found for this project.' });
+    }
+
+    const checks = await mapBounded(rows, PROJECT_DIRECT_COMPLETE_CONCURRENCY, async asset => {
+      if (asset.status === 'ready') return { ok: true, id: asset.id };
+
+      try {
+        const remote = await headObject(asset.object_key);
+        const uploadedBytes = Number(remote.ContentLength || 0);
+        const expectedBytes = Number(asset.size_bytes || 0);
+
+        if (uploadedBytes !== expectedBytes) {
+          return {
+            ok: false,
+            id: asset.id,
+            error: `Expected ${expectedBytes} bytes, found ${uploadedBytes}.`
+          };
+        }
+
+        return { ok: true, id: asset.id };
+      } catch (error) {
+        request.log.warn({ err: error, assetId: asset.id }, 'Batch direct-upload verification pending');
+        return { ok: false, id: asset.id, error: 'Object is not yet verifiable in private storage.' };
+      }
+    });
+
+    const completed = checks.filter(item => item.ok).map(item => item.id);
+    const failed = checks.filter(item => !item.ok);
+
+    if (completed.length) {
+      await db.query(
+        `UPDATE assets
+         SET status='ready',completed_at=COALESCE(completed_at,now())
+         WHERE owner_wallet=$1 AND id = ANY($2::uuid[])`,
+        [request.user.wallet, completed]
+      );
+    }
+
+    return {
+      ok: failed.length === 0,
+      completed,
+      failed
+    };
   });
 
   app.post('/api/assets/batch-prepare', {
