@@ -1,0 +1,127 @@
+/* RelicForge Part 6E.0.1 — Build-tab layer stack ordering */
+.layer-stack-manager{
+  margin:22px 0;
+  padding:18px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:16px;
+  background:rgba(255,255,255,.025);
+}
+.layer-stack-manager-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:18px;
+  align-items:start;
+  margin-bottom:14px;
+}
+.layer-stack-manager-head h3{margin:3px 0 7px}
+.layer-stack-manager-head p{margin:0;max-width:760px;opacity:.78;line-height:1.5}
+.layer-stack-direction{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  padding:9px 12px;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;
+  text-align:center;
+  white-space:nowrap;
+  font-size:.72rem;
+  letter-spacing:.06em;
+}
+.layer-stack-direction strong:first-child{opacity:.74}
+.layer-stack-direction strong:last-child{font-weight:800}
+.layer-stack-direction span{opacity:.55;font-size:.66rem}
+.layer-stack-order-list{
+  display:grid;
+  gap:7px;
+  max-height:420px;
+  overflow:auto;
+  padding:4px;
+  border-radius:12px;
+  background:rgba(0,0,0,.13);
+}
+.layer-stack-row{
+  display:grid;
+  grid-template-columns:28px 34px minmax(0,1fr) minmax(112px,auto) 76px;
+  gap:9px;
+  align-items:center;
+  min-height:56px;
+  padding:8px 10px;
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+  cursor:grab;
+  user-select:none;
+}
+.layer-stack-row:active{cursor:grabbing}
+.layer-stack-row.is-back{border-left-width:4px}
+.layer-stack-row.is-front{border-right-width:4px}
+.layer-stack-row.dragging{opacity:.38}
+.layer-stack-row.drag-over-before{box-shadow:inset 0 3px 0 currentColor}
+.layer-stack-row.drag-over-after{box-shadow:inset 0 -3px 0 currentColor}
+.layer-stack-grip{font-size:1.25rem;opacity:.6;text-align:center}
+.layer-stack-number{
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+}
+.layer-stack-name{min-width:0}
+.layer-stack-name strong,
+.layer-stack-name small{display:block}
+.layer-stack-name strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer-stack-name small{margin-top:3px;opacity:.58;font-size:.75rem}
+.layer-stack-role{
+  justify-self:end;
+  padding:5px 8px;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:999px;
+  font-size:.68rem;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-align:center;
+}
+.layer-stack-row-actions{display:flex;justify-content:flex-end;gap:5px}
+.layer-stack-row-actions .icon-btn{width:32px;height:32px}
+.layer-stack-manager-foot{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  margin-top:14px;
+}
+.layer-stack-manager-foot .layer-stack-status{
+  margin-right:auto;
+  opacity:.72;
+  font-size:.82rem;
+}
+.layer-stack-empty{padding:22px;text-align:center;opacity:.62}
+.layer-stack-explainer{
+  margin-top:12px;
+  padding:10px 12px;
+  border-left:3px solid currentColor;
+  background:rgba(255,255,255,.025);
+  font-size:.82rem;
+  line-height:1.45;
+  opacity:.82;
+}
+@media(max-width:760px){
+  .layer-stack-manager-head{grid-template-columns:1fr}
+  .layer-stack-direction{align-items:flex-start}
+  .layer-stack-row{
+    grid-template-columns:24px 30px minmax(0,1fr) 68px;
+  }
+  .layer-stack-role{
+    grid-column:3/4;
+    justify-self:start;
+  }
+  .layer-stack-row-actions{
+    grid-column:4/5;
+    grid-row:1/3;
+  }
+}

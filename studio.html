@@ -282,6 +282,29 @@
   </label>
   <div class="oneofone-list" id="oneOfOneList"></div>
 </div>
+<section class="layer-stack-manager" id="layerStackManager" aria-labelledby="layerStackManagerHeading">
+  <div class="layer-stack-manager-head">
+    <div>
+      <div class="eyebrow">LAYER STACK</div>
+      <h3 id="layerStackManagerHeading">Choose what sits behind and what sits in front</h3>
+      <p>Relic Forge renders this list from top to bottom. The first layer is the BACK / BOTTOM and is drawn first. Every layer below it is drawn over the layers before it. The final layer is the FRONT / TOP.</p>
+    </div>
+    <div class="layer-stack-direction" aria-label="Layer rendering direction">
+      <strong>BACK / BOTTOM</strong>
+      <span>DRAWN FIRST</span>
+      <span>↓ later layers render on top ↓</span>
+      <strong>FRONT / TOP</strong>
+      <span>DRAWN LAST</span>
+    </div>
+  </div>
+  <div class="layer-stack-order-list" id="layerStackOrderList"></div>
+  <div class="layer-stack-explainer"><strong>Tip:</strong> Drag the compact rows or use ↑ toward BACK and ↓ toward FRONT. Nothing changes until you click Apply Layer Order.</div>
+  <div class="layer-stack-manager-foot">
+    <span class="layer-stack-status" id="layerStackOrderStatus">Current layer order is applied.</span>
+    <button class="ghost-btn" id="resetLayerStackOrderBtn" type="button">Reset Draft</button>
+    <button class="primary-btn" id="applyLayerStackOrderBtn" type="button">Apply Layer Order</button>
+  </div>
+</section>
 <div class="metadata-visibility-panel">
   <div>
     <strong>Metadata visibility</strong>
@@ -882,6 +905,7 @@
 </div>
 
   <link rel="stylesheet" href="./studio-r2.css?v=6e0-perf1"/>
+  <link rel="stylesheet" href="./layer-stack-order.css?v=6e01-layerstack-r1"/>
   <link rel="stylesheet" href="./studio-resume.css?v=r12v2-r24-1"/>
   <script src="./relicforge-config.js?v=11.1.6"></script>
 
@@ -894,7 +918,8 @@
   <link rel="stylesheet" href="./rf26-oneofone-metadata.css?v=rf26-1of1-r1"/>
   <script src="./rf26-oneofone-metadata.js?v=rf26-1of1-r1" defer></script>
   <script src="./rf26-oneofone-metadata-ui.js?v=rf26-1of1-r1" defer></script>
-  <script src="./app.js?v=6e0-perf2" defer></script>
+  <script src="./app.js?v=6e01-layerstack-r1" defer></script>
+  <script src="./layer-stack-order.js?v=6e01-layerstack-r1" defer></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>
   <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
   <script src="./rf26-forge-network.js?v=r3d-b1" defer></script>

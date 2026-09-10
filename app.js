@@ -932,7 +932,7 @@
       ${largeGifCount ? `<span class="summary-pill warning"><strong>${largeGifCount}</strong> GIF${largeGifCount === 1 ? '' : 's'} over onchain limit</span>` : ''}
       <span class="summary-pill"><strong>${state.imageWidth}×${state.imageHeight}</strong> canvas</span>
       <span class="summary-pill"><strong>${mismatchCount}</strong> size mismatch${mismatchCount === 1 ? '' : 'es'}</span>
-      <span class="summary-pill"><strong>Drag & drop</strong> reorder layers</span>
+      <span class="summary-pill"><strong>BACK → FRONT</strong> layer stack order</span>
     `;
     el.artworkSummary.classList.remove('hidden');
 
@@ -943,7 +943,7 @@
             <span class="layer-index">${index + 1}</span>
             <div class="layer-title-edit">
               <label>Trait category<input class="layer-name-input" data-layer-id="${escapeHtml(layer.id)}" type="text" value="${escapeHtml(layer.name)}" maxlength="80" aria-label="Rename trait category ${escapeHtml(layer.name)}" /></label>
-              <small>${layer.traits.length} traits · rendered ${index === 0 ? 'first / back' : index === state.layers.length - 1 ? 'last / front' : `after layer ${index}`}</small>
+              <small>${layer.traits.length} traits · ${index === 0 ? 'BACK / BOTTOM · rendered first' : index === state.layers.length - 1 ? 'FRONT / TOP · rendered last' : `stack ${index + 1} of ${state.layers.length} · rendered over earlier layers`}</small>
             </div>
           </div>
           <div class="layer-actions">
@@ -1008,11 +1008,52 @@
 
 
   function refreshAfterLayerOrderChange() {
-    renderArtwork();
-    renderTraitSetup();
-    if (state.buildMode === 'manual') renderManualBuilder();
-    if (state.compiledTokens.length) renderPreviewGrid();
-    if (state.step === 5) updateLaunchSummary();
+    // Layer order changes the rendered artwork, so invalidate any compiled preview.
+    // Only hydrate the workflow step that is visible; large projects should not
+    // rebuild thousands of hidden trait cards just because the stack changed.
+    resetCompiledForArtworkChange();
+
+    if (state.step === 1) {
+      renderArtwork();
+      renderOneOfOnes();
+    } else if (state.step === 2) {
+      renderTraitSetup();
+      if (state.buildMode === 'manual') renderManualBuilder();
+    } else if (state.step === 3) {
+      renderRulePickers();
+      renderRulesList();
+      updateRuleSentence();
+    } else if (state.step === 5) {
+      updateLaunchSummary();
+    }
+
+    window.dispatchEvent(new CustomEvent('relicforge:layer-order-changed', {
+      detail: { layerIds: state.layers.map(layer => layer.id) }
+    }));
+  }
+
+  function applyLayerOrder(layerIds) {
+    if (!Array.isArray(layerIds) || layerIds.length !== state.layers.length) {
+      throw new Error('Layer order must include every trait layer exactly once.');
+    }
+
+    const uniqueIds = new Set(layerIds);
+    if (uniqueIds.size !== state.layers.length) {
+      throw new Error('Layer order contains a duplicate or missing trait layer.');
+    }
+
+    const byId = new Map(state.layers.map(layer => [layer.id, layer]));
+    if (layerIds.some(layerId => !byId.has(layerId))) {
+      throw new Error('Layer order references a trait layer that is no longer in the project.');
+    }
+
+    const unchanged = layerIds.every((layerId, index) => state.layers[index]?.id === layerId);
+    if (unchanged) return false;
+
+    state.layers = layerIds.map(layerId => byId.get(layerId));
+    refreshAfterLayerOrderChange();
+    showStatus('Layer stack applied. First = BACK / BOTTOM; last = FRONT / TOP.', 'success');
+    return true;
   }
 
   function reorderLayer(draggedLayerId, targetLayerId, placeAfter) {
@@ -3457,7 +3498,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.1.7',
+    version: '11.1.8',
     getState: () => state,
     getManifest: manifestObject,
     getOneOfOneMetadataCatalog: oneOfOneMetadataCatalog,
@@ -3469,11 +3510,12 @@
     getSupply,
     getTrait,
     getLayer,
+    applyLayerOrder,
     traitToSvgFragment,
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.7' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.8' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
