@@ -50,7 +50,7 @@
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const $ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
   // Part 6E.0: large-collection UI budget. Keep the project data complete while
   // limiting expensive image decoding and DOM hydration to browser-sized chunks.
@@ -125,7 +125,7 @@
   }
 
   function decorateTraitSetupPaging() {
-    $('.trait-config-layer', el.traitSetup).forEach(section => {
+    $$('.trait-config-layer', el.traitSetup).forEach(section => {
       const layer = getLayer(section.dataset.layerId);
       if (!layer) return;
       const shown = traitSetupWindowTraits(layer).length;
