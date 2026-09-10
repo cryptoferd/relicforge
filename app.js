@@ -50,7 +50,115 @@
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const $ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+  // Part 6E.0: large-collection UI budget. Keep the project data complete while
+  // limiting expensive image decoding and DOM hydration to browser-sized chunks.
+  const LARGE_COLLECTION_PERF = Object.freeze({
+    imageMetadataBatchSize: 8,
+    artworkInitial: 72,
+    artworkIncrement: 72,
+    traitSetupInitial: 120,
+    traitSetupIncrement: 120,
+    rulePickerInitial: 160,
+    rulePickerIncrement: 160,
+  });
+  const artworkRenderLimits = new Map();
+  const traitSetupRenderLimits = new Map();
+  const rulePickerRenderLimits = new Map();
+  const traitLookupCache = new Map();
+
+  function yieldToBrowser() {
+    return new Promise(resolve => {
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(() => resolve(), { timeout: 32 });
+      } else if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  async function mapInBatches(items, worker, batchSize = LARGE_COLLECTION_PERF.imageMetadataBatchSize) {
+    const source = [...items];
+    const results = new Array(source.length);
+    const size = Math.max(1, Number(batchSize) || 1);
+    for (let start = 0; start < source.length; start += size) {
+      const batch = source.slice(start, start + size);
+      const values = await Promise.all(batch.map((item, offset) => worker(item, start + offset)));
+      for (let i = 0; i < values.length; i++) results[start + i] = values[i];
+      if (start + size < source.length) await yieldToBrowser();
+    }
+    return results;
+  }
+
+  function resetLargeCollectionWindows() {
+    artworkRenderLimits.clear();
+    traitSetupRenderLimits.clear();
+    rulePickerRenderLimits.clear();
+  }
+
+  function windowLimit(map, key, initial, total) {
+    const value = Math.max(initial, Number(map.get(key) || initial));
+    return Math.min(total, value);
+  }
+
+  function artworkWindowTraits(layer) {
+    return layer.traits.slice(0, windowLimit(
+      artworkRenderLimits, layer.id, LARGE_COLLECTION_PERF.artworkInitial, layer.traits.length
+    ));
+  }
+
+  function traitSetupWindowTraits(layer) {
+    return layer.traits.slice(0, windowLimit(
+      traitSetupRenderLimits, layer.id, LARGE_COLLECTION_PERF.traitSetupInitial, layer.traits.length
+    ));
+  }
+
+  function artworkWindowMoreMarkup(layer) {
+    const shown = artworkWindowTraits(layer).length;
+    const remaining = layer.traits.length - shown;
+    if (remaining <= 0) return '';
+    const next = Math.min(LARGE_COLLECTION_PERF.artworkIncrement, remaining);
+    return `<div class="trait-window-more-row"><button class="ghost-btn small-btn" type="button" data-artwork-show-more="${escapeHtml(layer.id)}">Load next ${next} traits</button><span>Showing ${shown.toLocaleString()} of ${layer.traits.length.toLocaleString()}</span></div>`;
+  }
+
+  function decorateTraitSetupPaging() {
+    $('.trait-config-layer', el.traitSetup).forEach(section => {
+      const layer = getLayer(section.dataset.layerId);
+      if (!layer) return;
+      const shown = traitSetupWindowTraits(layer).length;
+      const remaining = layer.traits.length - shown;
+      if (remaining <= 0) return;
+      const next = Math.min(LARGE_COLLECTION_PERF.traitSetupIncrement, remaining);
+      const row = document.createElement('div');
+      row.className = 'trait-window-more-row';
+      row.innerHTML = `<button class="ghost-btn small-btn" type="button" data-trait-setup-more="${escapeHtml(layer.id)}">Load next ${next} traits</button><span>Showing ${shown.toLocaleString()} of ${layer.traits.length.toLocaleString()}</span>`;
+      section.appendChild(row);
+    });
+  }
+
+  function rulePickerKey(kind, filterLayer) {
+    return `${kind}:${filterLayer || 'all'}`;
+  }
+
+  function rulePickerMoreMarkup(kind, total, shown) {
+    const remaining = total - shown;
+    if (remaining <= 0) return '';
+    const next = Math.min(LARGE_COLLECTION_PERF.rulePickerIncrement, remaining);
+    return `<div class="trait-window-more-row rule-picker-more-row"><button class="ghost-btn small-btn" type="button" data-rule-picker-more="${kind}">Load next ${next} traits</button><span>Showing ${shown.toLocaleString()} of ${total.toLocaleString()}</span></div>`;
+  }
+
+  function refreshDependentUiForCurrentStep() {
+    if (state.step === 2) {
+      renderTraitSetup();
+      if (state.buildMode === 'manual') renderManualBuilder();
+    } else if (state.step === 3) {
+      renderRulePickers();
+      renderRulesList();
+    }
+  }
 
   const el = {
     landingPage: $('#landingPage'),
@@ -162,9 +270,13 @@
   }
 
   function getTrait(traitId) {
+    if (traitLookupCache.has(traitId)) return traitLookupCache.get(traitId);
     for (const layer of state.layers) {
       const trait = layer.traits.find(t => t.id === traitId);
-      if (trait) return trait;
+      if (trait) {
+        traitLookupCache.set(traitId, trait);
+        return trait;
+      }
     }
     return null;
   }
@@ -410,12 +522,14 @@
   }
 
   function refreshArtworkUi() {
-    renderArtwork();
-    renderTraitSetup();
-    renderManualBuilder();
-    renderRulePickers();
-    renderRulesList();
-    renderOneOfOnes();
+    // Hydrate only the visible workflow step. Hidden steps are rebuilt by gotoStep()
+    // when opened, avoiding thousands of unnecessary cards/options on large imports.
+    if (state.step === 1) {
+      renderArtwork();
+      renderOneOfOnes();
+    } else {
+      refreshDependentUiForCurrentStep();
+    }
     updateStep1State();
     resetCompiledForArtworkChange();
   }
@@ -428,7 +542,12 @@
     const sizeError = traitArtworkSizeError(valid);
     if (sizeError) throw new Error(sizeError);
     valid.sort((a, b) => naturalSort(a.name, b.name));
-    for (const file of valid) layer.traits.push(await traitFromFile(layer, file));
+    const firstIndex = layer.traits.length;
+    const added = await mapInBatches(
+      valid,
+      (file, index) => traitFromFile(layer, file, firstIndex + index)
+    );
+    layer.traits.push(...added);
     const firstReal = allTraits().find(t => !t.isNone && t.width && t.height);
     if (firstReal && (!state.imageWidth || !state.imageHeight || (state.layers.length === 1 && layer.traits.length === valid.length))) {
       state.imageWidth = firstReal.width;
@@ -455,6 +574,7 @@
     if (trait.isNone) return;
     if (trait.url) URL.revokeObjectURL(trait.url);
     layer.traits.splice(index, 1);
+    traitLookupCache.delete(traitId);
     for (const recipe of state.manifestTokens.values()) if (recipe[layerId] === traitId) delete recipe[layerId];
     state.sourceSelected.delete(traitId);
     state.targetSelected.delete(traitId);
@@ -468,6 +588,7 @@
     const layer = state.layers[index];
     for (const trait of layer.traits) if (trait.url) URL.revokeObjectURL(trait.url);
     const traitIds = new Set(layer.traits.map(t => t.id));
+    for (const traitId of traitIds) traitLookupCache.delete(traitId);
     state.layers.splice(index, 1);
     for (const recipe of state.manifestTokens.values()) delete recipe[layerId];
     state.rules = state.rules.map(rule => ({...rule, sources: rule.sources.filter(id => !traitIds.has(id)), targets: rule.targets.filter(id => !traitIds.has(id))})).filter(rule => rule.sources.length && rule.targets.length);
@@ -514,6 +635,7 @@
     if (!layer.allowNone && existingIndex >= 0) {
       const noneTraitId = layer.traits[existingIndex].id;
       layer.traits.splice(existingIndex, 1);
+      traitLookupCache.delete(noneTraitId);
       for (const recipe of state.manifestTokens.values()) {
         if (recipe[layer.id] === noneTraitId) delete recipe[layer.id];
       }
@@ -719,6 +841,8 @@
     }
 
     revokeArtworkUrls(false);
+    traitLookupCache.clear();
+    resetLargeCollectionWindows();
     state.layers = [];
     state.rules = [];
     state.sourceSelected.clear();
@@ -736,7 +860,10 @@
     }
 
     const entries = [...grouped.entries()];
-    const metas = await Promise.all(imageFiles.map(imageMeta));
+    if (imageFiles.length > 250) {
+      showStatus(`Loading ${imageFiles.length.toLocaleString()} traits in responsive batches…`);
+    }
+    const metas = await mapInBatches(imageFiles, file => imageMeta(file));
     const metaMap = new Map(imageFiles.map((file, index) => [file, metas[index]]));
 
     state.layers = entries.map(([layerName, layerFiles], layerIndex) => {
@@ -783,12 +910,7 @@
       state.imageHeight = firstMeta.height;
     }
 
-    renderArtwork();
-    renderTraitSetup();
-    renderManualBuilder();
-    renderRulePickers();
-    renderRulesList();
-    updateStep1State();
+    refreshArtworkUi();
     showStatus(`Loaded ${imageFiles.length} artwork files across ${state.layers.length} layers.`, 'success');
   }
 
@@ -832,14 +954,14 @@
           </div>
         </div>
         <div class="trait-thumbs">
-          ${layer.traits.map(trait => `
+          ${artworkWindowTraits(layer).map(trait => `
             <div class="trait-thumb" data-trait-id="${escapeHtml(trait.id)}">
               ${traitPreviewMarkup(trait)}
               <input class="trait-name-input" data-trait-id="${escapeHtml(trait.id)}" type="text" value="${escapeHtml(trait.name)}" maxlength="80" aria-label="Rename trait ${escapeHtml(trait.name)}" ${trait.isNone ? 'disabled title="None is a system trait"' : ''} />
               ${trait.isNone ? '' : `<button class="trait-thumb-remove" type="button" data-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}" title="Remove trait">Remove</button>`}
             </div>
           `).join('')}
-          ${false && layer.traits.length > 24 ? `<div class="trait-thumb"><div class="thumb-box">+${layer.traits.length - 24}</div><span>more traits</span></div>` : ''}
+          ${artworkWindowMoreMarkup(layer)}
         </div>
         <div class="layer-upload-row">
           <label class="ghost-btn small-btn file-button" for="layer-traits-${escapeHtml(layer.id)}">Add Trait Artwork</label>
@@ -931,13 +1053,14 @@
             </div>
           </div>
           <div class="trait-config-grid">
-            ${layer.traits.map(trait => `<div class="trait-config" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
+            ${traitSetupWindowTraits(layer).map(trait => `<div class="trait-config" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
               ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}"/>`}
               <div><div class="trait-config-name">${escapeHtml(trait.name)}</div><label class="inline-check trait-metadata-check"><input class="trait-metadata-hidden" type="checkbox" ${trait.metadataHidden ? 'checked' : ''}/> Hide this trait from metadata</label>${trait.isNone ? '' : `<button class="rarity-remove-trait-btn" type="button" data-rarity-delete-trait="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">Remove trait</button>`}</div>
             </div>`).join('')}
           </div>
         </section>`).join('')}`;
-      updateBuildContinueState();
+      decorateTraitSetupPaging();
+    updateBuildContinueState();
       return;
     }
 
@@ -997,7 +1120,7 @@
         </div>
         ${sortMode ? `<div class="rarity-order-hint"><span class="drag-handle mini">⠿</span> Manually entered values stay fixed. Auto Fill only redistributes the remaining amount across blank/auto values and follows this rarity order.</div>` : ''}
         <div class="trait-config-grid ${sortMode ? 'sortable-grid' : ''}">
-          ${layer.traits.map(trait => `
+          ${traitSetupWindowTraits(layer).map(trait => `
             <div class="trait-config ${sortMode ? 'trait-sortable' : ''}" data-trait-id="${escapeHtml(trait.id)}" data-layer-id="${escapeHtml(layer.id)}">
               ${trait.isNone ? '<div class="trait-config-placeholder">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
               <div>
@@ -1022,6 +1145,7 @@
         </div>
       </section>`;
     }).join('');
+    decorateTraitSetupPaging();
     updateBuildContinueState();
   }
 
@@ -1347,7 +1471,12 @@
     const selected = kind === 'source' ? state.sourceSelected : state.targetSelected;
     const filterLayer = select.value || 'all';
     const traits = allTraits().filter(t => filterLayer === 'all' || t.layerId === filterLayer);
-    picker.innerHTML = traits.map(trait => {
+    const key = rulePickerKey(kind, filterLayer);
+    const limit = windowLimit(
+      rulePickerRenderLimits, key, LARGE_COLLECTION_PERF.rulePickerInitial, traits.length
+    );
+    const visibleTraits = traits.slice(0, limit);
+    picker.innerHTML = visibleTraits.map(trait => {
       const layer = getLayer(trait.layerId);
       return `<button class="pick-trait ${selected.has(trait.id) ? 'selected' : ''}" data-kind="${kind}" data-trait-id="${escapeHtml(trait.id)}" type="button">
         ${trait.isNone ? '<div class="pick-trait-none">None</div>' : `<img loading="lazy" decoding="async" src="${trait.url}" alt="${escapeHtml(trait.name)}" />`}
@@ -1355,6 +1484,7 @@
         <small>${escapeHtml(layer?.name || '')}</small>
       </button>`;
     }).join('') || '<div class="empty-state">No traits in this layer.</div>';
+    if (traits.length > limit) picker.insertAdjacentHTML('beforeend', rulePickerMoreMarkup(kind, traits.length, limit));
   }
 
   function setRulesEnabled(enabled, renderNow = true) {
@@ -3147,6 +3277,8 @@
     }
 
     revokeArtworkUrls();
+    traitLookupCache.clear();
+    resetLargeCollectionWindows();
     const saved = snapshot.state;
     state.layers = (saved.layers || []).map(layer => ({
       id: layer.id,
@@ -3325,7 +3457,7 @@
   // Public Studio bridge. Define this before UI event binding so project saves and
   // Forge tooling remain available even if a later optional UI binding fails.
   window.RelicForgeStudioBridge = {
-    version: '11.1.6',
+    version: '11.1.7',
     getState: () => state,
     getManifest: manifestObject,
     getOneOfOneMetadataCatalog: oneOfOneMetadataCatalog,
@@ -3341,7 +3473,7 @@
     updateLaunchSummary,
     showStatus,
   };
-  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.6' } }));
+  window.dispatchEvent(new CustomEvent('relicforge:studio-bridge-ready', { detail: { version: '11.1.7' } }));
 
   ['enterStudioBtn', 'enterStudioTopBtn', 'enterStudioBottomBtn'].forEach(id => {
     const button = $(`#${id}`);
@@ -3390,6 +3522,16 @@
     await loadArtwork(files);
   });
   el.layerList.addEventListener('click', e => {
+    const showMore = e.target.closest('[data-artwork-show-more]');
+    if (showMore) {
+      const layer = getLayer(showMore.dataset.artworkShowMore);
+      if (!layer) return;
+      const current = windowLimit(artworkRenderLimits, layer.id, LARGE_COLLECTION_PERF.artworkInitial, layer.traits.length);
+      artworkRenderLimits.set(layer.id, current + LARGE_COLLECTION_PERF.artworkIncrement);
+      renderArtwork();
+      return;
+    }
+
     const moveBtn = e.target.closest('.move-layer');
     if (moveBtn) {
       const card = moveBtn.closest('[data-layer-id]');
@@ -3452,10 +3594,7 @@
       const nextName = e.target.value.trim();
       if (!layer || !nextName) { if (layer) e.target.value = layer.name; return; }
       layer.name = nextName;
-      renderTraitSetup();
-      renderManualBuilder();
-      renderRulePickers();
-      renderRulesList();
+      refreshDependentUiForCurrentStep();
       showStatus(`Category renamed to ${nextName}.`, 'success');
       return;
     }
@@ -3464,10 +3603,7 @@
       const nextName = e.target.value.trim();
       if (!trait || trait.isNone || !nextName) { if (trait) e.target.value = trait.name; return; }
       trait.name = nextName;
-      renderTraitSetup();
-      renderManualBuilder();
-      renderRulePickers();
-      renderRulesList();
+      refreshDependentUiForCurrentStep();
       showStatus(`Trait renamed to ${nextName}.`, 'success');
     }
   });
@@ -3593,10 +3729,21 @@
     if (!trait) return;
     if (e.target.classList.contains('trait-metadata-hidden')) { trait.metadataHidden = e.target.checked; resetCompiledForArtworkChange(); return; }
     if (e.target.classList.contains('rarity-select')) { trait.rarity = e.target.value; resetCompiledForArtworkChange(); }
-    if (e.target.classList.contains('percent-input') || e.target.classList.contains('exact-count')) renderTraitSetup();
+    // Numeric inputs already update state, totals, validation, and preview staleness
+    // in the input handler. Do not rebuild every trait card again on blur/change.
   });
 
   el.traitSetup.addEventListener('click', e => {
+    const showMore = e.target.closest('[data-trait-setup-more]');
+    if (showMore) {
+      const layer = getLayer(showMore.dataset.traitSetupMore);
+      if (!layer) return;
+      const current = windowLimit(traitSetupRenderLimits, layer.id, LARGE_COLLECTION_PERF.traitSetupInitial, layer.traits.length);
+      traitSetupRenderLimits.set(layer.id, current + LARGE_COLLECTION_PERF.traitSetupIncrement);
+      renderTraitSetup();
+      return;
+    }
+
     const removeTraitBtn = e.target.closest('[data-rarity-delete-trait]');
     if (removeTraitBtn) {
       const layer = getLayer(removeTraitBtn.dataset.layerId);
@@ -3681,6 +3828,18 @@
   el.sourceLayerSelect.addEventListener('change', () => renderTraitPicker('source'));
   el.targetLayerSelect.addEventListener('change', () => renderTraitPicker('target'));
   [el.sourceTraitPicker, el.targetTraitPicker].forEach(picker => picker.addEventListener('click', e => {
+    const more = e.target.closest('[data-rule-picker-more]');
+    if (more) {
+      const kind = more.dataset.rulePickerMore;
+      const select = kind === 'source' ? el.sourceLayerSelect : el.targetLayerSelect;
+      const filterLayer = select.value || 'all';
+      const key = rulePickerKey(kind, filterLayer);
+      const current = Math.max(LARGE_COLLECTION_PERF.rulePickerInitial, Number(rulePickerRenderLimits.get(key) || LARGE_COLLECTION_PERF.rulePickerInitial));
+      rulePickerRenderLimits.set(key, current + LARGE_COLLECTION_PERF.rulePickerIncrement);
+      renderTraitPicker(kind);
+      return;
+    }
+
     const btn = e.target.closest('.pick-trait');
     if (!btn) return;
     const selected = btn.dataset.kind === 'source' ? state.sourceSelected : state.targetSelected;

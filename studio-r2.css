@@ -19,3 +19,36 @@
 .r2-launch-sync{margin-top:16px;border-left:3px solid #6b8c73;background:#101410;padding:10px 12px;color:#bcd0c1;font-size:12px;line-height:1.5}
 .r2-launch-sync.bad{border-left-color:#9b5555;background:#160d0d;color:#dfb0b0}.r2-launch-close{margin-top:16px}
 @media(max-width:720px){.mint-page-preview-content{grid-template-columns:72px minmax(0,1fr)!important}.mint-page-preview-avatar{width:72px!important;height:72px!important;min-width:72px!important}.mint-page-preview-action{grid-column:1/-1!important}.r2-allowlist-test-group{grid-template-columns:1fr!important;max-width:none!important}}
+/* RelicForge Part 6E.0 large-collection performance */
+/* Skip layout/paint work for off-screen trait-heavy sections and isolate card reflow. */
+.layer-card,
+.trait-config-layer {
+  content-visibility: auto;
+  contain-intrinsic-size: 420px;
+}
+.trait-thumb,
+.trait-config,
+.pick-trait {
+  contain: layout paint style;
+}
+.trait-thumbs,
+.trait-config-grid,
+.trait-picker {
+  contain: layout style;
+}
+.trait-window-more-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 12px 8px 4px;
+}
+.trait-window-more-row > span {
+  opacity: .72;
+  font-size: .82rem;
+}
+.rule-picker-more-row {
+  grid-column: 1 / -1;
+}

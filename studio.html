@@ -547,7 +547,7 @@
         <p>R12-v2 collector transactions never call Chainlink. The Collection funds later randomness requests from its reveal hopper first and may use only an exact bounded Reserve shortfall.</p>
       </div>
       <div class="vrf-credit-box">
-        <label class="field"><span>Forge batch window (seconds)</span><input id="batchWindowSeconds" min="1" max="86400" step="1" type="number" value="180"/><small>A full 20-NFT Forge batch locks automatically. A partial batch can be permissionlessly locked after this window.</small></label>
+        <label class="field"><span>Forge batch window (seconds)</span><input id="batchWindowSeconds" min="1" max="86400" step="1" type="number" value="30"/><small>A full 20-NFT Forge batch locks automatically. A partial batch can be permissionlessly locked after this window.</small></label>
         <label class="field"><span>Maximum randomness cost / batch (ETH)</span><input id="maxRandomnessCostPerBatchEth" min="0.000001" step="0.000001" type="number" value="0.02"/><small>The onchain request reverts if the live randomness quote exceeds this ceiling.</small></label>
         <div class="forge-inline-status" id="vrfQuoteStatus">Loading current Chainlink request quote...</div>
       </div>
@@ -881,11 +881,11 @@
   </section>
 </div>
 
-  <link rel="stylesheet" href="./studio-r2.css?v=r12v2-r2-1"/>
+  <link rel="stylesheet" href="./studio-r2.css?v=6e0-perf1"/>
   <link rel="stylesheet" href="./studio-resume.css?v=r12v2-r24-1"/>
   <script src="./relicforge-config.js?v=11.1.6"></script>
 
-  <script src="./relicforge-v2-addresses.js?v=r12v2-r1"></script>
+  <script src="./relicforge-v2-addresses.js?v=6e0-perf1"></script>
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
@@ -894,11 +894,11 @@
   <link rel="stylesheet" href="./rf26-oneofone-metadata.css?v=rf26-1of1-r1"/>
   <script src="./rf26-oneofone-metadata.js?v=rf26-1of1-r1" defer></script>
   <script src="./rf26-oneofone-metadata-ui.js?v=rf26-1of1-r1" defer></script>
-  <script src="./app.js?v=rf26-1of1-r1" defer></script>
+  <script src="./app.js?v=6e0-perf1" defer></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>
   <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
   <script src="./rf26-forge-network.js?v=r3d-b1" defer></script>
-  <script src="./forge.js?v=r3d-b1" defer></script>
+  <script src="./forge.js?v=6e0-perf1" defer></script>
   <script src="./project-storage.js?v=save-reliability6-textfix2" defer></script>
   <script src="./studio-collaboration.js?v=studio-collab-r1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>

@@ -22,7 +22,7 @@
       requestGasLimit: 1500000,
       replayGasLimit: 1000000,
       consumerWordDeliveryGas: 400000,
-      defaultBatchWindowSeconds: 180,
+      defaultBatchWindowSeconds: 30,
       defaultMaxRandomnessCostPerBatchWei: '20000000000000000',
       certifiedCollection: '0xaFec424d9EfFb59D6e5008D0A86b9A4DD5582172',
       sourceCommit: '57946d6f7f9146d570b1f87954b28204f1b0d6c2'
@@ -44,7 +44,8 @@
       renderer: '0xf449700e0fafdb1d0edb1af40096f61c229bc41f',
       randomnessAdapter: '0x231ccd119188c3e9a8ae18b62dc536d8e3ed675a',
       reserve: '0xf20442fcf072f87bb694eb6b7697ee2362ce5a49',
-      canonicalRegistry: '0xc9a8096aa3ead34282fbf24eaacabd414a00ee31'
+      canonicalRegistry: '0xc9a8096aa3ead34282fbf24eaacabd414a00ee31',
+      defaultBatchWindowSeconds: 30
     })
   });
 })();

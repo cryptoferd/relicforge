@@ -1789,7 +1789,7 @@ ${await file.text()}`;
   }
 
   function launchBatchWindowSeconds() {
-    const n = Math.floor(Number($('batchWindowSeconds')?.value || 180));
+    const n = Math.floor(Number($('batchWindowSeconds')?.value || 30));
     if (!Number.isFinite(n) || n < 1 || n > 86400) throw new Error('Forge batch window must be between 1 and 86400 seconds.');
     return n;
   }
@@ -3412,7 +3412,7 @@ ${await file.text()}`;
       royalty: $('royalty')?.value || '0',
       royaltyWallet: $('royaltyWallet')?.value || '',
       payoutWallet: $('payoutWallet')?.value || '',
-      batchWindowSeconds: $('batchWindowSeconds')?.value || '180',
+      batchWindowSeconds: $('batchWindowSeconds')?.value || '30',
       maxRandomnessCostPerBatchEth: $('maxRandomnessCostPerBatchEth')?.value || '0.02',
       revealMode: currentRevealMode(),
       platformFeeMode: currentPlatformFeeMode(),
@@ -3468,7 +3468,7 @@ ${await file.text()}`;
       royalty: saved.royalty,
       royaltyWallet: saved.royaltyWallet,
       payoutWallet: saved.payoutWallet,
-      batchWindowSeconds: saved.batchWindowSeconds || '180',
+      batchWindowSeconds: saved.batchWindowSeconds || '30',
       maxRandomnessCostPerBatchEth: saved.maxRandomnessCostPerBatchEth || '0.02',
       whitelistMintPrice: saved.whitelistMintPrice,
       whitelistMintStart: saved.whitelistMintStart || '',
