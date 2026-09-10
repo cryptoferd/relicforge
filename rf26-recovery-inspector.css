@@ -1,0 +1,16 @@
+/* R3D-B2: recovery inspector. Existing dark Studio surfaces are inherited. */
+#rf26RecoveryInspector { margin-top: 20px; }
+#rf26RecoveryInspector .r24-actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
+#rf26RecoveryInspector .forge-row { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:9px 0; border-bottom:1px solid rgba(128,128,128,.18); }
+#rf26RecoveryInspector .forge-row strong,
+#rf26RecoveryInspector .forge-row a { overflow-wrap:anywhere; min-width:0; }
+#rf26RecoveryInspector a { color:inherit; text-decoration:underline; text-underline-offset:3px; }
+#rf26RecoveryInspector .rf26-recovery-steps { margin-top:18px; }
+#rf26RecoveryInspector .rf26-recovery-step { display:grid; grid-template-columns:minmax(0,2fr) minmax(80px,1fr) minmax(0,1fr); gap:12px; padding:10px 0; border-bottom:1px solid rgba(128,128,128,.18); align-items:start; overflow-wrap:anywhere; }
+#rf26RecoveryInspector .rf26-recovery-step span { color:#aaa; }
+#rf26RecoveryInspector button:focus-visible,
+#rf26RecoveryInspector input:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
+@media(max-width:600px) {
+  #rf26RecoveryInspector .rf26-recovery-step { grid-template-columns:minmax(0,1fr); gap:4px; }
+  #rf26RecoveryInspector .r24-actions button { width:100%; }
+}

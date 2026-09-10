@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "phase": "R13_ETHEREUM_MAINNET_READ_ONLY_PREFLIGHT",
+  "asOf": "2026-09-06",
+  "status": "candidate_pending_live_fork_validation",
+  "productionEnabled": false,
+  "target": {
+    "network": "Ethereum Mainnet",
+    "chainId": 1,
+    "paymentMode": "native ETH",
+    "vrfVersion": "Chainlink VRF v2.5 direct funding",
+    "requestConfirmations": 3,
+    "numWords": 1,
+    "upstreamCallbackGas": 300000,
+    "defaultRandomnessCeilingWei": "20000000000000000"
+  },
+  "officialChainlinkSnapshot": {
+    "source": "https://docs.chain.link/vrf/v2-5/supported-networks",
+    "linkToken": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+    "vrfCoordinator": "0xD7f86b4b8Cae7D942340FF628F82735b7a20893a",
+    "vrfWrapper": "0x02aae1A04f9828517b3007f83f6181900CaD910c",
+    "keyHash200Gwei": "0x8077df514608a09f83e4e8d300645594e5d7234665448ba83f51a50f842bd3d9",
+    "keyHash500Gwei": "0x3fd2fec10d06ee8f65e7f2e95f5c56511359ece3f33960ad8a866ae24a8ff10b",
+    "keyHash1000Gwei": "0xc6bf2e7b88e5cfbb4946ff23af846494ae1f3c65270b79ee7876c9aa99d3d45f",
+    "nativePremiumPercent": 24,
+    "minimumConfirmations": 3,
+    "maximumConfirmations": 200,
+    "directFundingMaxRandomValues": 10,
+    "wrapperGasOverhead": 13400,
+    "coordinatorGasOverheadNative": 90000,
+    "coordinatorGasOverheadPerWord": 435
+  },
+  "feeOracleSnapshot": {
+    "network": "Ethereum Mainnet",
+    "pair": "ETH / USD",
+    "proxy": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+    "decimalsExpected": 8,
+    "maxOracleAgeSeconds": 86400,
+    "reference": "https://etherscan.io/address/0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+  },
+  "activationAllowed": false,
+  "nextGate": "review_live_r13_output_then_chain_aware_application_enablement"
+}

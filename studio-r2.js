@@ -44,26 +44,21 @@
     if(popup){popup.textContent=message;popup.classList.toggle('bad',!!bad);}
   }
 
-  async function currentWallet(){
-    const provider=window.RelicForgeWallets?.getProvider?.()||window.ethereum;
-    if(!provider?.request)throw new Error('Creator wallet provider is unavailable.');
-    let accounts=await provider.request({method:'eth_accounts'});
-    if(!accounts?.[0]&&window.RelicForgeWallets?.requestAccount) {
-      const account=await window.RelicForgeWallets.requestAccount({forceChooser:false});
-      accounts=account?[account]:[];
-    }
-    if(!accounts?.[0])throw new Error('Connect the creator wallet before syncing the mint page.');
-    return window.ethers.getAddress(accounts[0]);
+  async function currentWallet(collection){
+    const session=await window.RF26CreatorGuard.account(collection,{role:'creator',chainId:CHAIN_ID});
+    return session;
   }
 
-  async function uploadMintMedia(state,existing,projectId){
+  async function uploadMintMedia(state,existing,projectId,session){
     let imageId=existing?.collectionImageAssetId||null;
     let bannerId=existing?.bannerImageAssetId||null;
     if(state?.mintPageImageFile instanceof Blob){
+      await session.assert();
       const asset=await window.RelicForgeCloud.uploadAsset(state.mintPageImageFile,{projectId,purpose:'mint-page'});
       imageId=asset?.id||imageId;
     }
     if(state?.mintPageBannerFile instanceof Blob){
+      await session.assert();
       const asset=await window.RelicForgeCloud.uploadAsset(state.mintPageBannerFile,{projectId,purpose:'mint-page'});
       bannerId=asset?.id||bannerId;
     }
@@ -72,18 +67,27 @@
 
   async function publish(detail) {
     if(!window.RelicForgeCloud?.enabled?.())throw new Error('RelicForge Cloud is not configured. Public stages still work from the onchain mint page, but Approved Wallet proofs require Cloud sync.');
+    const launchScope=await window.RelicForgeForgeNetwork.requireReady();
+    if(launchScope.chainId!==11155111||detail?.chainId!=null&&Number(detail.chainId)!==11155111)
+      throw new Error('R3D-B R1 collector-page publishing is restricted to verified Sepolia deployments.');
     const collection=detail?.collectionAddress;
     if(!window.ethers?.isAddress(collection))throw new Error('Collection address is unavailable.');
-    const wallet=await currentWallet();
-    await window.RelicForgeCloud.ensureSignedIn(wallet);
+    const session=await currentWallet(collection),wallet=session.wallet;
+    await window.RelicForgeForgeNetwork.verifyCollection(collection,{creator:wallet,chainId:launchScope.chainId});
+    await session.assert();
     const projectId=window.RelicForgeProjects?.getCurrentProjectId?.()||null;
     const state=window.RelicForgeForge?.getForgeProjectState?.()||{};
+    if(state.collectionAddress&&state.collectionAddress.toLowerCase()!==collection.toLowerCase())
+      throw new Error('The loaded Studio project is bound to a different collection.');
+    await session.assert();
+    await window.RelicForgeCloud.ensureSignedIn(wallet);
     let existing={};
     try {
       const response=await window.RelicForgeCloud.json(`/api/public/mint/${CHAIN_ID}/${encodeURIComponent(collection)}/config`);
       existing=response?.config||{};
     } catch (_) {}
-    const media=await uploadMintMedia(state,existing,projectId);
+    await session.assert();
+    const media=await uploadMintMedia(state,existing,projectId,session);
     const publicPhaseId=Number(detail.publicPhaseId||state.publicPhaseId||0)||null;
     const allowlists=Array.isArray(detail.allowlists)?detail.allowlists:[];
     const config={
@@ -93,20 +97,24 @@
       contract:collection,
       title:String(state.launchName||existing.title||'Relic Forge Collection').slice(0,180),
       description:String(state.launchDescription||existing.description||'').slice(0,3000),
-      mintPhasesAddress:detail.mintPhasesAddress||state.mintPhasesAddress||null,
+      mintPhasesAddress:session.identity.phases,
       publicPhaseId,
       allowlistPhaseIds:allowlists.map(row=>Number(row.phaseId)).filter(Boolean),
       collectionImageAssetId:media.imageId,
       bannerImageAssetId:media.bannerId,
-      showcaseEnabled:Boolean(existing.showcaseEnabled),
-      showcaseStart:existing.showcaseStart||null,
+      showcaseEnabled:false,
+      showcaseStart:null,
       updatedAt:new Date().toISOString(),
     };
+    if(detail.mintPhasesAddress&&detail.mintPhasesAddress.toLowerCase()!==session.identity.phases)
+      throw new Error('The mint-phase address does not match the verified collection.');
+    await session.assert();
     await window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/mint-page`,{
       method:'PUT',body:JSON.stringify({projectId,config})
     },true);
     for(const row of allowlists){
       if(!Number(row.phaseId)||!row.root||!Array.isArray(row.entries))continue;
+      await session.assert();
       await window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(row.phaseId)}`,{
         method:'PUT',
         body:JSON.stringify({

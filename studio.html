@@ -34,6 +34,10 @@
   <link rel="stylesheet" href="./creator-controls-complete.css?v=ux2" />
   <link rel="stylesheet" href="./save-reminder.css?v=save-reliability5" />
   <link rel="stylesheet" href="./studio-collaboration.css?v=studio-collab-r1" />
+  <link rel="stylesheet" href="./relicforge-product.css?v=r26-p2a1"/>
+<!-- RF26 R3C-B creator URL controls: style -->
+<link rel="stylesheet" href="./rf26-creator-urls.css?v=r3c-b-r1">
+  <link rel="stylesheet" href="./rf26-recovery-inspector.css?v=r3d-b2-r1"/>
 </head>
 <body class="studio-page-body">
 <div class="app-shell" id="studioApp">
@@ -439,13 +443,21 @@
   <div class="panel-heading">
     <div>
       <div class="eyebrow">STEP 5</div>
-      <h2>Forge on Ethereum Sepolia</h2>
+      <h2>Forge on your selected network</h2>
       <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">CANONICAL V1 · SEPOLIA</div>
+    <div class="forge-test-badge">R12-v2 · NETWORK-AWARE PREPARATION</div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
+    <div class="launch-card rf26-forge-network-card">
+      <h3>Launch network</h3>
+      <p class="forge-footnote">Choose a network for this launch. Artwork and creative project saves remain independent of the selected chain. No wallet switch occurs until you explicitly connect for an enabled launch.</p>
+      <label class="field"><span>Deployment network</span><select id="rf26ForgeNetworkSelect"><option value="">Choose a network</option><option value="1">Ethereum Mainnet</option><option value="11155111">Ethereum Sepolia</option></select></label>
+      <div class="inline-actions"><button class="ghost-btn" id="rf26ForgePreflightBtn" type="button">Verify release &amp; infrastructure</button></div>
+      <div class="forge-inline-status" id="rf26ForgeNetworkStatus">Choose a network before preparing a launch.</div>
+      <small class="forge-footnote">Mainnet transaction execution remains locked in this checkpoint. A certified release and the network-aware recovery integration are required before real ETH can be spent through Studio.</small>
+    </div>
     <div class="launch-card">
       <h3>Collection</h3>
       <label class="field"><span>Name</span><input id="launchName" type="text"/></label>
@@ -630,7 +642,7 @@
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Estimated Sepolia deployment</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
+      <div class="forge-card-heading"><div><span>COST ESTIMATOR</span><h3>Deployment cost estimate</h3></div><button class="ghost-btn" id="refreshForgeCostBtn" type="button">Refresh</button></div>
       <div class="forge-cost-total"><strong id="forgeEstimatedCost">—</strong><span id="forgeEstimatedGas">Compile first</span></div>
       <div class="forge-gwei-control">
         <div class="forge-gwei-head"><span>Gas price</span><strong id="forgeCurrentGwei">Current: —</strong></div>
@@ -883,16 +895,33 @@
   <script src="./rf26-oneofone-metadata.js?v=rf26-1of1-r1" defer></script>
   <script src="./rf26-oneofone-metadata-ui.js?v=rf26-1of1-r1" defer></script>
   <script src="./app.js?v=rf26-1of1-r1" defer></script>
-  <script src="./forge.js?v=stability1-resume-r24-1" defer></script>
+  <script src="./relicforge-networks.js?v=r26-p2a1"></script>
+  <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
+  <script src="./rf26-forge-network.js?v=r3d-b1" defer></script>
+  <script src="./forge.js?v=r3d-b1" defer></script>
   <script src="./project-storage.js?v=save-reliability6-textfix2" defer></script>
   <script src="./studio-collaboration.js?v=studio-collab-r1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>
   <script src="./rc47b-bootstrap.js?v=rc4.7c" defer></script>
   <script src="./rc47b-studio.js?v=rc4.7b" defer></script>
   <script src="./studio-shell.js?v=reliquary1-forgeclickfix1" defer></script>
-  <script src="./studio-r2.js?v=r12v2-r24-resume1" defer></script>
+    <!-- R3D-B2 R4 R1: verified creator and publication authority -->
+  <script src="./rf26-creator-guard-core.js?v=r3d-b2-r4-1" defer></script>
+  <script src="./rf26-creator-guard.js?v=r3d-b2-r4-1" defer></script>
+<script src="./studio-r2.js?v=r12v2-r24-resume1" defer></script>
   <script src="./studio-resume.js?v=r12v2-r24-1" defer></script>
   <script src="./creator-controls-complete.js?v=ux2-event1-encoding1"></script>
   <script src="./relicforge-language.js?v=ux2-encoding1"></script>
+
+  <script src="./relicforge-product-ui.js?v=r26-p2a1"></script>
+<!-- RF26 R3C-B creator URL controls: module -->
+<script type="module" src="./rf26-creator-urls.js?v=r3c-b-r1"></script>
+  <!-- R3D-B2: scoped recovery and read-only inspector -->
+  <script src="./rf26-deployment-recovery-core.js?v=r3d-b2-r1" defer></script>
+  <script src="./rf26-deployment-recovery.js?v=r3d-b2-r1" defer></script>
+  <script src="./rf26-recovery-inspector.js?v=r3d-b2-r1" defer></script>
+  <!-- R3D-B2 R3: source-locked fresh Factory creation and unified resume -->
+  <script src="./rf26-fresh-forge-core.js?v=r3d-b2-r3" defer></script>
+  <script src="./rf26-fresh-forge.js?v=r3d-b2-r3" defer></script>
 </body>
 </html>

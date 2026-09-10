@@ -32,10 +32,14 @@
   const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
   const ZERO = ethers.ZeroAddress.toLowerCase();
   const params = new URLSearchParams(location.search);
-  const embedded = window.RELICFORGE_MINT_CONFIG || {};
-  const requestedContract = embedded.contract || params.get('contract') || '';
-  const requestedChain = Number(embedded.chainId || params.get('chain') || 11155111);
-  const localKey = requestedContract ? `relicforge_mint_page_${requestedChain}_${requestedContract.toLowerCase()}` : '';
+  const routeTarget = window.RelicForgeMintContext?.read?.() || null;
+  const embedded = routeTarget
+    ? {chainId:routeTarget.chainId,contract:routeTarget.contract}
+    : (window.RELICFORGE_MINT_CONFIG || {});
+  const requestedContract = routeTarget?.contract || embedded.contract || params.get('contract') || '';
+  const requestedChain = Number(routeTarget?.chainId || embedded.chainId || params.get('chain') || 11155111);
+  // A verified alias must not inherit stale, wallet-local collection settings.
+  const localKey = !routeTarget && requestedContract ? `relicforge_mint_page_${requestedChain}_${requestedContract.toLowerCase()}` : '';
   let localConfig = {};
   try { if (localKey) localConfig = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch (_) {}
   let config = { ...localConfig, ...embedded, contract: requestedContract || localConfig.contract, chainId: requestedChain || localConfig.chainId || 11155111 };
