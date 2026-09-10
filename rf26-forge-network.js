@@ -4,7 +4,8 @@
   if(!core)throw new Error('RF26 network core is missing.');
   const $=id=>document.getElementById(id);
   const CHOICE='relicforge_selected_network_v2';
-  const EXECUTION_CHAIN=11155111; // R3D-B R1: deliberately no Mainnet transaction execution.
+  const EXECUTION_CHAINS=new Set([1,11155111]);
+  const executionAllowed=id=>{try{return EXECUTION_CHAINS.has(core.chain(id));}catch{return false;}};
   const fail=(message,code='RF26_NETWORK_LOCKED')=>Object.assign(new Error(message),{code});
   let selected=null,scope=null,guarded=null,account=null,busy=0,serial=0,message='';
   const networks=()=>{if(!window.RelicForgeNetworks)throw fail('RelicForge network registry is unavailable.');return window.RelicForgeNetworks;};
@@ -86,7 +87,7 @@
     const result=await controller.preflight();
     if(ticket!==serial||selected!==result.chainId)throw fail('Network or wallet changed during preflight.');
     scope=result;
-    status(title(result.chainId)+' release verified. Factory: '+result.factory+'.'+(result.chainId===1?' Mainnet transaction execution remains locked in R3D-B R1.':''));
+    status(title(result.chainId)+' release verified. Factory: '+result.factory+'.'+(result.chainId===1?' Certified Mainnet creator execution is enabled.':''));
     window.dispatchEvent(new CustomEvent('relicforge:forge-preflight-complete',{detail:{chainId:result.chainId}}));
     return result;
   }
@@ -103,7 +104,7 @@
   }
   async function connect({forceChooser=false,requireLaunch=false}={}){
     // Account-only sign-in is chain-agnostic and never switches the wallet.
-    if(requireLaunch&&selected!==EXECUTION_CHAIN)throw fail('Mainnet transaction execution remains locked until the R3D-B recovery integration is certified.');
+    if(requireLaunch&&!executionAllowed(selected))throw fail('The selected network is not approved for Relic Forge execution.');
     const ready=requireLaunch?await requireReady():null;
     const ticket=serial;
     const requested=core.address(await requestAccount(forceChooser));
@@ -123,13 +124,13 @@
     return {provider,signer:guarded,wallet,scope:ready};
   }
   async function assertWrite(){
-    if(selected!==EXECUTION_CHAIN)throw fail('Mainnet transaction execution remains locked until the R3D-B recovery integration is certified.');
+    if(!executionAllowed(selected))throw fail('The selected network is not approved for Relic Forge execution.');
     if(!scope||!guarded)throw fail('Connect the creator wallet to the verified launch network before submitting a transaction.');
     await controller.assertScope(scope);
     if(!guarded||!account)throw fail('The creator signing session was revoked.');
     return scope;
   }
-  function writeSigner(){if(selected!==EXECUTION_CHAIN||!scope||!guarded)throw fail('A verified Sepolia launch signing session is required.');return guarded;}
+  function writeSigner(){if(!executionAllowed(selected)||!scope||!guarded)throw fail('A verified launch signing session is required for the selected network.');return guarded;}
   function assertBound(record,wallet){if(!scope)throw fail('Verify the launch network before using a deployment.');return core.assertDeployment(record,scope,wallet||account);}
   function assertJournal(journal){if(!scope||!account)throw fail('A verified creator session is required to use a deployment journal.');return core.journalIdentity(journal,scope,account);}
   function readJournal(provenance,wallet=account,factory=scope?.factory,id=selected){

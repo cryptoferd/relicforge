@@ -15,6 +15,8 @@
     'function creatorCollectionAt(address creator,uint256 index) view returns(address)',
     'event CollectionCreated(address indexed creator,address indexed collection,address indexed dataContract,uint256 collectionNumber)'
   ];
+  const executionAllowed=id=>[1,11155111].includes(Number(id));
+  const networkName=id=>net()?.title?.(id)||(`chain ${Number(id)}`);
   let running=false;
   function status(message,bad=false){
     const node=$('forgeTestStatus');
@@ -22,8 +24,8 @@
   }
   function freezeContext(ctx){
     const scope=net().scope();
-    if(!scope||scope.chainId!==11155111||!ctx.wallet||!ctx.compiled)
-      throw fail('A verified Sepolia launch and compiled build are required.');
+    if(!scope||!executionAllowed(scope.chainId)||!ctx.wallet||!ctx.compiled)
+      throw fail('A verified launch network and compiled build are required.');
     return Object.freeze({
       scope,chainId:scope.chainId,factory:core.address(scope.factory),
       wallet:core.address(ctx.wallet),provenance:core.hash(ctx.compiled.provenance)
@@ -143,12 +145,16 @@
       await assertCurrent(id);
       const total=window.ethers.formatEther(launch.feeValue);
       if(!found.scoped){
+        const name=networkName(id.chainId);
+        const mainnet=id.chainId===1;
+        const warning=mainnet
+          ? 'WARNING: This creates permanent Ethereum Mainnet contracts and spends REAL ETH. Verify the collection name, supply, Factory, and fee before approving the wallet transaction.'
+          : 'This creates real testnet contracts. The remaining artwork and configuration steps use durable recovery checkpoints.';
         const approved=window.confirm(
-          'Create a new R12-v2 collection on Ethereum Sepolia?\\n\\n'+
-          'Network: Sepolia (11155111)\\nFactory: '+id.factory+
+          'Create a new R12-v2 collection on '+name+'?\\n\\n'+
+          'Network: '+name+' ('+id.chainId+')\\nFactory: '+id.factory+
           '\\nCollection: '+launch.tuple[0]+'\\nSupply: '+launch.tuple[3]+
-          '\\nUpfront platform fee: '+total+' Sepolia ETH\\n\\n'+
-          'This creates real testnet contracts. The remaining artwork and configuration steps will then use durable recovery checkpoints.'
+          '\\nUpfront platform fee: '+total+' ETH\\n\\n'+warning
         );
         if(!approved)throw fail('Factory creation cancelled before wallet submission.');
       }
@@ -177,7 +183,7 @@
         'RF26_POSTCONDITION_FAILED','RF26_EXISTING_DEPLOYMENT','RF26_INTENT_MISMATCH'
       ].includes(error.code)){
         if(button){button.disabled=true;button.textContent='Review / Resume Deployment';}
-      }else if(button){button.disabled=false;button.textContent='Forge Collection on Sepolia';}
+      }else if(button){const selected=net()?.selectedChainId?.();button.disabled=false;button.textContent='Forge Collection on '+networkName(selected);}
       return {ok:false,code:error.code||'RF26_FRESH_ERROR',transactionHash:error.transactionHash||null};
     }finally{running=false;}
   }

@@ -190,7 +190,7 @@
   }
   async function executeFactory({provenance,launchSpecHash,legacyJournal=null,contract,args,verify}={}){
     const {scope,wallet}=context();
-    if(scope.chainId!==11155111)throw fail('Mainnet Factory transaction execution remains locked.','RF26_NETWORK_LOCKED');
+    if(![1,11155111].includes(Number(scope.chainId)))throw fail('The selected network is not approved for Factory execution.','RF26_NETWORK_LOCKED');
     if(typeof verify!=='function')throw fail('A Factory receipt and onchain postcondition verifier is required.','RF26_INTENT_MISMATCH');
     const fingerprint=core.hash(provenance),spec=core.hash(launchSpecHash);
     const identity=core.identity(scope,wallet,fingerprint);

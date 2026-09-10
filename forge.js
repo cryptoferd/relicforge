@@ -255,11 +255,11 @@
     const prior = forgeState.deploymentJournal?.provenance === compiled.provenance ? forgeState.deploymentJournal : findLocalDeploymentJournal(compiled.provenance);
     if (prior?.collectionAddress && prior.status !== 'complete') throw new Error('An incomplete deployment already exists for this compiled build. Use Resume Deployment instead of creating a duplicate collection.');
     if (prior?.collectionAddress && prior.status === 'complete') throw new Error('This compiled build is already associated with a completed deployment. Open the existing collection instead of forging a duplicate.');
-    return persistDeploymentJournal({schema:'relic-forge/deployment-journal@1',chainId:11155111,provenance:compiled.provenance,factory:factoryAddress,collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,status:'creating',steps:{},startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastError:null});
+    return persistDeploymentJournal({schema:'relic-forge/deployment-journal@1',chainId:activeChainId()||11155111,provenance:compiled.provenance,factory:factoryAddress,collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,status:'creating',steps:{},startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastError:null});
   }
   function adoptDeploymentJournal(partial) {
     const existing = forgeState.deploymentJournal || findLocalDeploymentJournal(partial?.provenance) || {};
-    return persistDeploymentJournal({...existing,schema:'relic-forge/deployment-journal@1',chainId:11155111,...partial,steps:{...(existing.steps||{}),...(partial?.steps||{})},startedAt:existing.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()});
+    return persistDeploymentJournal({...existing,schema:'relic-forge/deployment-journal@1',chainId:activeChainId()||11155111,...partial,steps:{...(existing.steps||{}),...(partial?.steps||{})},startedAt:existing.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()});
   }
   function bindDeploymentJournal(collectionAddress,dataAddress,mintPhasesAddress,txHash) {
     const j=forgeState.deploymentJournal||{};
@@ -274,7 +274,7 @@
   function getDeploymentJournal(){return cloneDeploymentJournal(forgeState.deploymentJournal);}
   function getResumeContext(){return {compiled:forgeState.compiled,provider:forgeState.provider,signer:forgeState.signer,wallet:forgeState.wallet,collectionAddress:forgeState.collectionAddress,dataAddress:forgeState.dataAddress,mintPhasesAddress:forgeState.mintPhasesAddress,publicPhaseId:forgeState.publicPhaseId,whitelistPhaseId:forgeState.whitelistPhaseId,journal:getDeploymentJournal(),config:canonicalV1Config(),projectState:getForgeProjectState()};}
   function applyResumeBindings(next={}) {
-    if(next.collectionAddress&&window.ethers?.isAddress(next.collectionAddress)){forgeState.collectionAddress=window.ethers.getAddress(next.collectionAddress);if($('forgedCollectionAddress'))$('forgedCollectionAddress').textContent=forgeState.collectionAddress;if($('forgedEtherscanLink'))$('forgedEtherscanLink').href='https://sepolia.etherscan.io/address/'+forgeState.collectionAddress;$('forgeResult')?.classList.remove('hidden');if($('viewerCollectionAddress'))$('viewerCollectionAddress').value=forgeState.collectionAddress;}
+    if(next.collectionAddress&&window.ethers?.isAddress(next.collectionAddress)){forgeState.collectionAddress=window.ethers.getAddress(next.collectionAddress);if($('forgedCollectionAddress'))$('forgedCollectionAddress').textContent=forgeState.collectionAddress;if($('forgedEtherscanLink'))$('forgedEtherscanLink').href=window.RelicForgeNetworks.explorerUrl(forgeState.collectionAddress,activeChainId()||11155111,'address');$('forgeResult')?.classList.remove('hidden');if($('viewerCollectionAddress'))$('viewerCollectionAddress').value=forgeState.collectionAddress;}
     if(next.dataAddress&&window.ethers?.isAddress(next.dataAddress))forgeState.dataAddress=window.ethers.getAddress(next.dataAddress);
     if(next.mintPhasesAddress&&window.ethers?.isAddress(next.mintPhasesAddress))forgeState.mintPhasesAddress=window.ethers.getAddress(next.mintPhasesAddress);
     if('publicPhaseId' in next)forgeState.publicPhaseId=next.publicPhaseId?Number(next.publicPhaseId):null;
@@ -386,7 +386,7 @@
     if (!window.ethers?.isAddress(collectionAddress || '')) return false;
     try {
       const cfg = canonicalV1Config();
-      const provider = readProvider(11155111) || forgeState.provider;
+      const provider = readProvider(activeChainId() || 11155111) || forgeState.provider;
       if (!provider) return false;
       const collection = new window.ethers.Contract(collectionAddress, ['function factory() view returns(address)'], provider);
       const factory = await collection.factory();
@@ -1633,7 +1633,8 @@ ${await file.text()}`;
       await requestForgeAccount({ forceChooser });
       const injected = activeInjectedWallet();
       if (!injected) throw new Error('No selected EVM wallet provider found.');
-      await switchSepolia(injected);
+      const launchChain=activeChainId()||11155111;
+      await window.RelicForgeNetworks.ensureWalletChain(injected,launchChain);
       forgeState.provider = new window.ethers.BrowserProvider(injected);
       forgeState.signer = await forgeState.provider.getSigner();
       forgeState.wallet = await forgeState.signer.getAddress();
@@ -1685,10 +1686,13 @@ ${await file.text()}`;
     return address;
   }
 
-  function canonicalV1Config() {
-    const config = window.RELICFORGE_V2_ADDRESSES?.[11155111];
-    if (!config || config.launchEnabled !== true || !window.ethers?.isAddress(config.factory) || !window.ethers?.isAddress(config.feePolicy)) {
-      throw new Error('Relic Forge R12-v2 Sepolia preproduction configuration is unavailable.');
+  function canonicalV1Config(chainId = activeChainId() || 11155111) {
+    const id = Number(chainId || 11155111);
+    const config = window.RELICFORGE_V2_ADDRESSES?.[id];
+    if (!config || Number(config.chainId) !== id || config.launchEnabled !== true ||
+        !window.ethers?.isAddress(config.factory) || !window.ethers?.isAddress(config.feePolicy)) {
+      const label = window.RelicForgeNetworks?.metadata?.(id)?.name || ('chain ' + id);
+      throw new Error('Relic Forge R12-v2 ' + label + ' production configuration is unavailable.');
     }
     return config;
   }
@@ -1759,8 +1763,9 @@ ${await file.text()}`;
     const mode = currentPlatformFeeMode();
     document.querySelectorAll('[data-fee-mode-card]').forEach(card => card.classList.toggle('selected', Number(card.dataset.feeModeCard) === mode));
     try {
-      const provider = readProvider(11155111);
-      if (!provider) throw new Error('Sepolia RPC unavailable.');
+      const chainId = activeChainId() || 11155111;
+      const provider = readProvider(chainId);
+      if (!provider) throw new Error('Selected-network RPC unavailable.');
       const factory = new window.ethers.Contract(cfg.factory, V2_FACTORY_ABI, provider);
       const supply = canonicalSupply();
       const [cents, upfront, healthy, active] = await factory.quoteCollectionFeeTerms(supply, mode);
@@ -1783,7 +1788,7 @@ ${await file.text()}`;
     }
   }
 
-  function v1RandomnessContract(runner = readProvider(11155111)) {
+  function v1RandomnessContract(runner = readProvider(activeChainId() || 11155111)) {
     const cfg = canonicalV1Config();
     return new window.ethers.Contract(cfg.randomnessAdapter, V2_RANDOMNESS_ABI, runner);
   }
@@ -3730,7 +3735,6 @@ ${await file.text()}`;
   };
   function activeChainId(){return rf26Network().selectedChainId();}
   async function requireForgeWrite(verifyV2=false){
-    if(activeChainId()!==11155111)throw new Error('Mainnet transaction execution remains locked until R3D-B recovery certification.');
     let authorized=null;
     try{authorized=rf26Network().writeSigner();}catch{}
     if(!authorized||forgeState.signer!==authorized)await connectWallet({requireLaunch:true});
@@ -3794,26 +3798,35 @@ ${await file.text()}`;
     return rf26OriginalRender();
   };
   const rf26OriginalFeeQuote=refreshPlatformFeeQuote;
-  refreshPlatformFeeQuote=async function(...args){if(activeChainId()!==11155111)return null;return rf26OriginalFeeQuote(...args);};
+  refreshPlatformFeeQuote=async function(...args){
+    const id=activeChainId();
+    if(id==null||!rf26Network().localReady(id))return null;
+    return rf26OriginalFeeQuote(...args);
+  };
   const rf26OriginalVrfQuote=refreshVrfQuote;
-  refreshVrfQuote=async function(...args){if(activeChainId()!==11155111)return null;return rf26OriginalVrfQuote(...args);};
+  refreshVrfQuote=async function(...args){
+    const id=activeChainId();
+    if(id==null||!rf26Network().localReady(id))return null;
+    return rf26OriginalVrfQuote(...args);
+  };
   const rf26OriginalCost=refreshCostEstimate;
   refreshCostEstimate=async function(){
-    if(activeChainId()!==11155111){
-      if($('forgeEstimatedCost'))$('forgeEstimatedCost').textContent='—';
-      if($('forgeEstimatedGas'))$('forgeEstimatedGas').textContent='Mainnet estimator is pending network-aware deployment integration.';
-      if($('forgeCurrentGwei'))$('forgeCurrentGwei').textContent='Current: unavailable';
-      if($('forgeCostBreakdown'))$('forgeCostBreakdown').innerHTML='';
+    if(activeChainId()===1){
+      if($('forgeEstimatedCost'))$('forgeEstimatedCost').textContent='Wallet quote';
+      if($('forgeEstimatedGas'))$('forgeEstimatedGas').textContent='Mainnet gas will be calculated by your wallet before signing.';
+      if($('forgeCurrentGwei'))$('forgeCurrentGwei').textContent='Current: wallet estimate';
+      if($('forgeCostBreakdown'))$('forgeCostBreakdown').innerHTML='<div>Ethereum Mainnet gas is intentionally left to the connected wallet estimate at transaction time.</div>';
       return;
     }
     return rf26OriginalCost();
   };
   function rf26RefreshLaunchAction(){
     const button=$('forgeCollectionBtn');if(!button)return;
-    if(activeChainId()!==11155111){button.disabled=true;button.textContent='Mainnet Deployment Locked';return;}
+    const id=activeChainId();
+    if(id==null||!rf26Network().localReady(id)){button.disabled=true;button.textContent='Deployment Network Locked';return;}
     if(!forgeState.compiled){button.disabled=true;button.textContent='Compile for Onchain First';return;}
     if(!rf26Network().scope()){button.disabled=true;button.textContent='Verify Network Before Forging';return;}
-    if(!forgeState.collectionAddress){button.disabled=false;button.textContent='Forge Collection on Sepolia';}
+    if(!forgeState.collectionAddress){button.disabled=false;button.textContent='Forge Collection on '+rf26Network().title(id);}
   }
   const rf26OriginalCompile=compileForOnchain;
   compileForOnchain=async function(){const result=await rf26OriginalCompile();rf26RefreshLaunchAction();return result;};
@@ -3843,7 +3856,7 @@ ${await file.text()}`;
     const explicit=journal?.chainId??saved.chainId??saved.launchChainId??null;
     const target=bound?(explicit??11155111):(explicit??activeChainId());
     if(target!=null)window.RelicForgeNetworks.chainId(target);
-    if(bound&&Number(target)!==11155111)throw new Error('This deployment is not a certified legacy Sepolia record. The R3D-B R1 legacy engine cannot restore it.');
+    if(bound&&![1,11155111].includes(Number(target)))throw new Error('This deployment belongs to an unsupported network.');
     if(bound&&journal?.chainId!=null&&Number(journal.chainId)!==Number(target))throw new Error('Saved deployment network mismatch.');
     if(bound&&journal?.factory&&saved.factory&&String(journal.factory).toLowerCase()!==String(saved.factory).toLowerCase())throw new Error('Saved deployment Factory mismatch.');
     rf26ClearDeploymentBindings();
@@ -3852,9 +3865,10 @@ ${await file.text()}`;
     rf26RefreshLaunchAction();return result;
   };
   function rf26GuardLegacyAction(event){
-    if(activeChainId()===11155111)return;
+    const id=activeChainId();
+    if(id!=null&&rf26Network().localReady(id))return;
     event.preventDefault();event.stopImmediatePropagation();
-    const message='Mainnet transaction execution remains locked until R3D-B recovery certification.';
+    const message='The selected network is not enabled for Relic Forge execution.';
     if($('forgeTestStatus'))$('forgeTestStatus').textContent=message;
     if($('forgeWalletStatus'))$('forgeWalletStatus').textContent=message;
   }

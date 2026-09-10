@@ -31,9 +31,10 @@
       chainId: 1,
       network: 'Ethereum Mainnet',
       environment: 'production',
-      // Part 6C stages the certified production release identity but deliberately
-      // leaves creator deployment disabled until the separately approved activation stage.
-      launchEnabled: false,
+      // Part 6E.2A exposes the already-certified production release to Studio.
+      // Server policy, chain verification, Factory binding checks, and wallet-chain
+      // verification still run before any transaction can be prepared.
+      launchEnabled: true,
       releaseId: 'RelicForge-Mainnet-R12V2-R1',
       deploymentManifestHash: 'ad99569e1dd416a01c0f159ab2bb6c2fe7749ee50aa44527c32639983ee57c14',
       factory: '0xd614d4dd3757365fb456789d2669dd55b6e6d6d5',
