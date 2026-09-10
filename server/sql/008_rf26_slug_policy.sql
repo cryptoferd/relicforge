@@ -99,7 +99,7 @@ SELECT c.chain_id,c.contract_address,c.owner_wallet,d.project_id,c.mint_page,
 FROM collections c
 JOIN rf26_publications p USING(chain_id,contract_address)
 JOIN rf26_networks n ON n.chain_id=c.chain_id
-JOIN rf26_deployments d USING(chain_id,contract_address)
+JOIN rf26_deployments d ON d.chain_id=c.chain_id AND d.contract_address=c.contract_address
 WHERE d.architecture='v2' AND d.status='sealed'
   AND d.provenance ~ '^0x[0-9a-fA-F]{64}$'
   AND d.provenance<>('0x' || repeat('0',64))
