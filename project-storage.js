@@ -396,6 +396,25 @@
     return message || name || 'Browser local cache write failed.';
   }
 
+  function cloudSaveProgressText(progress) {
+    const phase = String(progress?.phase || '');
+    const total = Math.max(0, Number(progress?.total || 0));
+    const completed = Math.max(0, Number(progress?.completed || 0));
+    const cached = Math.max(0, Number(progress?.cached || 0));
+    const uploaded = Math.max(0, Number(progress?.uploaded || 0));
+    const amount = total ? `${Math.min(completed, total).toLocaleString()} / ${total.toLocaleString()}` : '';
+
+    if (phase === 'scan') return total
+      ? `Preparing ${total.toLocaleString()} artwork files for cloud save…`
+      : 'Preparing project data for cloud save…';
+    if (phase === 'hash') return `Fingerprinting artwork ${amount}…`;
+    if (phase === 'prepare') return `Checking cloud artwork ${amount} · ${cached.toLocaleString()} already reusable…`;
+    if (phase === 'upload') return `Uploading artwork ${amount} · ${cached.toLocaleString()} reused · ${uploaded.toLocaleString()} uploaded…`;
+    if (phase === 'snapshot') return 'Artwork sync complete · saving project data…';
+    if (phase === 'done') return 'Cloud project data saved · finalizing…';
+    return '';
+  }
+
   async function cloudMeta() {
     if (!window.RelicForgeCloud?.enabled?.()) return { projects: [], count: 0, limit: MAX_CLOUD_PROJECTS };
     await ensureCloudSession();
@@ -476,7 +495,16 @@
         } else {
           setStatus(`Local cache ready - syncing "${name}" to RelicForge Cloud...`);
         }
-        await window.RelicForgeCloud.saveProject({ id, name, studio, forge });
+        await window.RelicForgeCloud.saveProject({
+          id,
+          name,
+          studio,
+          forge,
+          onProgress(progress) {
+            const message = cloudSaveProgressText(progress);
+            if (message) setStatus(message, '', 'saving');
+          }
+        });
         markSaved(now);
         if (localSaveError) {
           setStatus('Saved globally - browser cache unavailable, but your cloud project is safe.', 'warning');

@@ -7,6 +7,7 @@ const PROJECT_ALLOWED_TYPES = new Set(['application/json','application/zip','tex
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
 const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const PROJECT_LIMIT = Math.max(1, Number(process.env.PROJECT_LIMIT || 10));
+const PROJECT_BATCH_PREPARE_MAX = 50;
 const ALLOWED_PURPOSES = new Set(['project','mint-page']);
 
 function allowedType(contentType, purpose) {
@@ -54,7 +55,114 @@ export default async function assetRoutes(app) {
     return { reused: false, asset: { id, filename, contentType, size: bytes }, uploadUrl };
   });
 
-  app.put('/api/assets/:id/upload', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/api/assets/batch-prepare', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const { projectId = null, assets = [] } = request.body || {};
+    if (!projectId) return reply.code(400).send({ error: 'projectId is required for batch artwork preparation.' });
+    if (!Array.isArray(assets) || !assets.length || assets.length > PROJECT_BATCH_PREPARE_MAX) {
+      return reply.code(400).send({ error: `Prepare between 1 and ${PROJECT_BATCH_PREPARE_MAX} project assets per batch.` });
+    }
+
+    const normalized = [];
+    for (let index = 0; index < assets.length; index++) {
+      const item = assets[index] || {};
+      const filename = String(item.filename || '').trim();
+      const contentType = String(item.contentType || 'application/octet-stream');
+      const bytes = Number(item.size || 0);
+      const sha256 = String(item.sha256 || '').toLowerCase();
+
+      if (!filename || !allowedType(contentType, 'project')) {
+        return reply.code(400).send({ error: `Asset ${index + 1} has an unsupported project asset type.` });
+      }
+      if (!Number.isFinite(bytes) || bytes < 0 || bytes > PROJECT_MAX_BYTES) {
+        return reply.code(400).send({ error: `Asset ${index + 1} exceeds the 25 MB cloud upload limit.` });
+      }
+      if (!/^[0-9a-f]{64}$/.test(sha256)) {
+        return reply.code(400).send({ error: `Asset ${index + 1} requires a SHA-256 fingerprint.` });
+      }
+
+      normalized.push({ filename, contentType, bytes, sha256 });
+    }
+
+    const existingProject = await one(
+      'SELECT id FROM projects WHERE id=$1 AND owner_wallet=$2',
+      [projectId, request.user.wallet]
+    );
+    if (!existingProject) {
+      const count = Number((await one(
+        'SELECT COUNT(*)::int AS count FROM projects WHERE owner_wallet=$1',
+        [request.user.wallet]
+      ))?.count || 0);
+      if (count >= PROJECT_LIMIT) {
+        return reply.code(409).send({
+          error: `Active cloud project limit reached (${PROJECT_LIMIT}). Delete a project before uploading another project's artwork.`
+        });
+      }
+    }
+
+    const prepared = [];
+    for (let index = 0; index < normalized.length; index++) {
+      const item = normalized[index];
+
+      const existing = await one(
+        `SELECT id,filename,content_type,size_bytes,status
+         FROM assets
+         WHERE owner_wallet=$1
+           AND sha256=$2
+           AND purpose='project'
+           AND project_id IS NOT DISTINCT FROM $3
+         ORDER BY CASE WHEN status='ready' THEN 0 ELSE 1 END, created_at DESC
+         LIMIT 1`,
+        [request.user.wallet, item.sha256, projectId]
+      );
+
+      if (existing) {
+        prepared.push({
+          index,
+          reused: existing.status === 'ready',
+          needsUpload: existing.status !== 'ready',
+          asset: {
+            id: existing.id,
+            filename: existing.filename,
+            content_type: existing.content_type,
+            size_bytes: Number(existing.size_bytes || 0),
+            sha256: item.sha256
+          }
+        });
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      const key = objectKey({ wallet: request.user.wallet, purpose: 'project', filename: item.filename });
+      await db.query(
+        `INSERT INTO assets(id,owner_wallet,project_id,object_key,filename,content_type,size_bytes,sha256,purpose)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'project')`,
+        [id, request.user.wallet, projectId, key, item.filename, item.contentType, item.bytes, item.sha256]
+      );
+
+      prepared.push({
+        index,
+        reused: false,
+        needsUpload: true,
+        asset: {
+          id,
+          filename: item.filename,
+          content_type: item.contentType,
+          size_bytes: item.bytes,
+          sha256: item.sha256
+        }
+      });
+    }
+
+    return { assets: prepared };
+  });
+
+  app.put('/api/assets/:id/upload', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 540, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const asset = await one(
       `SELECT id,object_key,size_bytes,content_type,purpose,status
        FROM assets WHERE id=$1 AND owner_wallet=$2`,
