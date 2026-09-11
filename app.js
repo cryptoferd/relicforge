@@ -2786,7 +2786,14 @@
 
     root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(node => node.remove());
     root.querySelectorAll('style').forEach(node => {
-      if (/@import|url\s*\(/i.test(node.textContent || '')) node.remove();
+      const cssText = String(node.textContent || '');
+      const hasImport = /@import/i.test(cssText);
+      const hasExternalUrl = [...cssText.matchAll(/url\s*\(\s*(['"]?)(.*?)\1\s*\)/gi)]
+        .some(match => !String(match[2] || '').trim().startsWith('#'));
+      // Keep self-contained paint-server references such as url(#gradient),
+      // url(#mask), url(#filter), url(#clipPath), and url(#pattern).
+      // Imported or non-local resources remain blocked.
+      if (hasImport || hasExternalUrl) node.remove();
     });
     [root, ...root.querySelectorAll('*')].forEach(node => {
       [...node.attributes].forEach(attr => {
@@ -3421,7 +3428,7 @@
 
   function updateLaunchSummary() {
     const name = el.collectionName.value.trim() || 'Untitled Collection';
-    if (el.launchName && document.activeElement !== el.launchName) el.launchName.value = name;
+    if (el.launchName && !el.launchName.value.trim()) el.launchName.value = name;
     el.launchSummaryTitle.textContent = el.launchName?.value?.trim() || name;
     const chain = $('#chainSelect')?.value || 'Ethereum Sepolia';
     const price = $('#mintPrice')?.value || '0';
