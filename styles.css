@@ -335,6 +335,36 @@ footer { padding: 20px 3px 0; display: flex; justify-content: space-between; gap
 .trait-config-controls.percent-mode { grid-template-columns: 1fr auto; align-items: center; }
 .input-tag { display: inline-grid; place-items: center; min-width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: #151515; font-size: 11px; }
 .percent-input { height: 34px; }
+
+/* Part 6E.2A.1: Exact-count values must remain readable in narrow trait cards. */
+.trait-config-controls.exact-mode {
+  grid-template-columns: minmax(64px, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+}
+.trait-config-controls.exact-mode .exact-count {
+  width: 100%;
+  min-width: 64px;
+  height: 34px;
+  padding: 0 9px;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  background: #0d0d0d;
+  opacity: 1;
+}
+.trait-config-controls.exact-mode .exact-count::placeholder {
+  color: var(--dim);
+  -webkit-text-fill-color: var(--dim);
+  opacity: 1;
+}
+.trait-config-controls.exact-mode .input-manual-badge,
+.trait-config-controls.exact-mode .input-tag {
+  min-width: 0;
+  width: auto;
+  white-space: nowrap;
+  justify-self: start;
+}
 @media (max-width: 980px) {
   .trait-config-header-rich { flex-direction: column; align-items: stretch; }
   .trait-header-controls { justify-content: flex-start; }

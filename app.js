@@ -1169,7 +1169,7 @@
                   <div class="trait-config-name" title="${escapeHtml(trait.name)}">${escapeHtml(trait.name)}</div>
                   ${sortMode ? `<span class="drag-handle" draggable="true" data-layer-id="${escapeHtml(layer.id)}" data-trait-id="${escapeHtml(trait.id)}" role="button" aria-label="Drag ${escapeHtml(trait.name)} to change rarity order" title="Drag to change rarity order">⠿</span>` : ''}
                 </div>
-                <div class="trait-config-controls ${(autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : (autoMode && layer.rarityMode === 'tier' ? 'tier-mode' : '')}">
+                <div class="trait-config-controls ${showExact ? 'exact-mode' : ((autoMode && layer.rarityMode === 'percentage') ? 'percent-mode' : (autoMode && layer.rarityMode === 'tier' ? 'tier-mode' : ''))}">
                   ${showExact
                     ? `<input class="exact-count" type="number" min="0" max="${genSupply}" placeholder="Blank / auto" value="${trait.exactCount == null ? '' : trait.exactCount}" aria-label="Exact amount for ${escapeHtml(trait.name)}" />${trait.exactManual ? '<span class="input-manual-badge">Manual</span>' : '<span class="input-tag">#</span>'}`
                     : autoMode && layer.rarityMode === 'percentage'
@@ -2788,7 +2788,7 @@
     root.querySelectorAll('style').forEach(node => {
       if (/@import|url\s*\(/i.test(node.textContent || '')) node.remove();
     });
-    root.querySelectorAll('*').forEach(node => {
+    [root, ...root.querySelectorAll('*')].forEach(node => {
       [...node.attributes].forEach(attr => {
         const name = attr.name.toLowerCase();
         const value = String(attr.value || '').trim();
@@ -2821,16 +2821,25 @@
       }
     }
 
-    let fragment = root.innerHTML
-      .replace(/<!--([\s\S]*?)-->/g, '')
-      .replace(/>\s+</g, '><')
-      .trim() || '<g/>';
-
-    if (offsetX || offsetY) {
-      fragment = `<g transform="translate(${-offsetX} ${-offsetY})">${fragment}</g>`;
+    // Preserve the uploaded SVG root. Creator SVGs often carry inherited
+    // rendering state on <svg> itself (class/style/color/fill/CSS variables).
+    // Dropping that root changes the artwork in Collection Preview/onchain SVG.
+    if (!root.getAttribute('viewBox') && expectedWidth && expectedHeight) {
+      root.setAttribute('viewBox', `0 0 ${expectedWidth} ${expectedHeight}`);
+    }
+    root.setAttribute('x', '0');
+    root.setAttribute('y', '0');
+    if (expectedWidth && expectedHeight) {
+      root.setAttribute('width', String(expectedWidth));
+      root.setAttribute('height', String(expectedHeight));
     }
 
-    trait.svgFragment = fragment;
+    const fragment = new XMLSerializer().serializeToString(root)
+      .replace(/<!--([\s\S]*?)-->/g, '')
+      .replace(/>\s+</g, '><')
+      .trim();
+
+    trait.svgFragment = fragment || `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${expectedWidth || 1} ${expectedHeight || 1}"/>`;
     trait.svgStats = {
       rectangles: 0,
       colors: 0,
