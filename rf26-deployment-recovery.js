@@ -3,6 +3,63 @@
   const core=window.RF26RecoveryCore;
   if(!core)throw new Error('RF26 recovery core is missing.');
   const fail=(message,code='RF26_RECOVERY_MISMATCH')=>Object.assign(new Error(message),{code});
+  const METAMASK_DELEGATION_MANAGER='0xdb9b1e94b5b69df7e401ddbede43491141047db3';
+  const DEFAULT_SINGLE_MODE='0x'+'0'.repeat(64);
+  const DELEGATION_MANAGER_ABI=[
+    'function redeemDelegations(bytes[] _permissionContexts,bytes32[] _modes,bytes[] _executionCallDatas)'
+  ];
+  let delegationManagerInterface=null;
+  function delegationInterface(){
+    if(!window.ethers?.Interface)throw fail('ethers.js delegation decoder is unavailable.','RF26_INTENT_MISMATCH');
+    return delegationManagerInterface||(delegationManagerInterface=new window.ethers.Interface(DELEGATION_MANAGER_ABI));
+  }
+  function decodeSingleExecution(raw){
+    const hex=String(raw||'').toLowerCase();
+    if(!/^0x(?:[0-9a-f]{2})*$/i.test(hex)||hex.length<106)return null;
+    const target='0x'+hex.slice(2,42),valueHex='0x'+hex.slice(42,106),data='0x'+hex.slice(106);
+    try{return {to:core.address(target),value:BigInt(valueHex),data};}catch{return null;}
+  }
+  function resolveDelegatedIntent(transaction,expected){
+    try{
+      if(!transaction?.to||core.address(transaction.to)!==METAMASK_DELEGATION_MANAGER)return null;
+      const parsed=delegationInterface().parseTransaction({data:String(transaction.data||'0x'),value:transaction.value??0});
+      if(!parsed||parsed.name!=='redeemDelegations')return null;
+      const contexts=Array.from(parsed.args?.[0]||[]),modes=Array.from(parsed.args?.[1]||[]),calls=Array.from(parsed.args?.[2]||[]);
+      // Fail closed: one delegated action only, using the observed/default single-call mode.
+      if(contexts.length!==1||modes.length!==1||calls.length!==1)return null;
+      if(String(modes[0]||'').toLowerCase()!==DEFAULT_SINGLE_MODE)return null;
+      const inner=decodeSingleExecution(calls[0]);
+      if(!inner)return null;
+      const data=String(inner.data||'0x').toLowerCase(),dataLength=(data.length-2)/2;
+      if(core.address(inner.to)!==core.address(expected.to)||
+         String(inner.value)!==String(BigInt(expected.value))||
+         dataLength!==Number(expected.dataLength)||
+         window.ethers.keccak256(data).toLowerCase()!==String(expected.dataHash).toLowerCase())return null;
+      return Object.freeze({to:core.address(inner.to),value:inner.value,data});
+    }catch{return null;}
+  }
+  function providerForIntent(provider,expected){
+    if(!provider||!expected)return provider;
+    return new Proxy(provider,{
+      get(target,key){
+        if(key==='getTransaction')return async hash=>{
+          const tx=await target.getTransaction(hash);
+          if(!tx)return tx;
+          const inner=resolveDelegatedIntent(tx,expected);
+          if(!inner)return tx;
+          // Keep the OUTER sender/chain/nonce, while exposing only the cryptographically
+          // exact single inner call for the existing durable-intent checks.
+          return {
+            hash:tx.hash,from:tx.from,to:inner.to,chainId:tx.chainId,nonce:tx.nonce,
+            data:inner.data,value:inner.value,blockNumber:tx.blockNumber,
+            rf26DelegatedVia:METAMASK_DELEGATION_MANAGER
+          };
+        };
+        const value=Reflect.get(target,key,target);
+        return typeof value==='function'?value.bind(target):value;
+      }
+    });
+  }
   const network=()=>{
     if(!window.RelicForgeForgeNetwork)throw fail('Verified Forge network runtime is unavailable.');
     return window.RelicForgeForgeNetwork;
@@ -146,8 +203,9 @@
       throw fail('The rebuilt transaction no longer matches the saved durable intent.','RF26_INTENT_MISMATCH');
     const intentValue=prior?.intent||prepared?.intent||null;
     const {provider}=await readScope();
+    const verificationProvider=providerForIntent(provider,intentValue);
     return core.executeIntentStep({
-      store:store(),journal:normalized,stepKey,label,intentValue,provider,
+      store:store(),journal:normalized,stepKey,label,intentValue,provider:verificationProvider,
       hashData:data=>window.ethers.keccak256(data),
       assertWrite:async expected=>{
         const scope=await network().assertWrite(),wallet=network().account();
@@ -239,6 +297,7 @@
   }
   window.RF26Recovery=Object.freeze({
     core,context,store,read,save,begin,adoptLegacy,assertJournal,
-    readScope,verifyCollection,inspect,ensureJournal,executeIntent,executeFactory,publicationTarget
+    readScope,verifyCollection,inspect,ensureJournal,executeIntent,executeFactory,publicationTarget,
+    resolveDelegatedIntent,providerForIntent,METAMASK_DELEGATION_MANAGER
   });
 })();
