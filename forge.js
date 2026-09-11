@@ -179,6 +179,7 @@
 
   const V2_RANDOMNESS_ABI = [
     'function quoteRequestPrice(uint32 requestedConsumerCallbackGas) view returns(uint256)',
+    'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)',
     'function wordReadyForLocalRequest(uint256) view returns(bool)',
     'function deliveredForLocalRequest(uint256) view returns(bool)',
     'function upstreamRequestIdForLocalRequest(uint256) view returns(uint256)',
@@ -229,6 +230,70 @@
     dashboardMintPageBannerFile: null,
     deploymentJournal: null,
   };
+
+
+  // Chainlink direct-funding prices are a function of EVM tx.gasprice. A plain
+  // eth_call commonly executes with gasprice=0, and MetaMask Smart Account
+  // wrapping can otherwise estimate only the zero-price branch. Always provide
+  // an explicit live gasPrice on writes that request randomness.
+  async function rf26RandomnessGasPrice() {
+    const providers=[];
+    if (forgeState.provider?.send) providers.push(forgeState.provider);
+    try {
+      const reader=readProvider(activeChainId() || 11155111);
+      if (reader?.send && !providers.includes(reader)) providers.push(reader);
+    } catch (_) {}
+
+    let lastError=null;
+    for (const provider of providers) {
+      try {
+        const raw=await provider.send('eth_gasPrice', []);
+        const gasPrice=BigInt(raw);
+        if (gasPrice > 0n) return gasPrice;
+      } catch (error) { lastError=error; }
+    }
+    throw new Error(
+      'A live non-zero network gas price is required before requesting Chainlink randomness.'+
+      (lastError?.message ? ' '+lastError.message : '')
+    );
+  }
+
+  async function rf26RandomnessQuoteAtGasPrice(gasPrice, callbackGas) {
+    const adapter=v1RandomnessContract(readProvider(activeChainId() || 11155111));
+    const quote=await adapter.estimateRequestPriceAtGasPrice(BigInt(gasPrice));
+    return BigInt(quote);
+  }
+
+  async function rf26RandomnessRequestOverrides(cfg, collection, label='Randomness request') {
+    if (!collection) throw new Error(label+': collection contract is unavailable.');
+    const gasPrice=await rf26RandomnessGasPrice();
+    const callbackGas=Number(cfg?.consumerWordDeliveryGas || 400000);
+    const quote=await rf26RandomnessQuoteAtGasPrice(gasPrice, callbackGas);
+    const ceiling=BigInt(await collection.maxRandomnessCostPerBatchWei());
+    if (quote > ceiling) {
+      throw new Error(
+        label+' blocked: current Chainlink request quote ('+
+        window.ethers.formatEther(quote)+' ETH) exceeds this collection\'s randomness ceiling ('+
+        window.ethers.formatEther(ceiling)+' ETH).'
+      );
+    }
+
+    const gasLimit=BigInt(cfg?.requestGasLimit || 1500000);
+    console.info('RF26 fee-aware randomness write', {
+      label,
+      chainId: activeChainId(),
+      gasPriceWei: gasPrice.toString(),
+      gasLimit: gasLimit.toString(),
+      quoteWei: quote.toString(),
+      ceilingWei: ceiling.toString()
+    });
+
+    // gasPrice is intentionally explicit. This is not merely a fee preference:
+    // the Chainlink wrapper quote, Reserve shortfall path and therefore gas usage
+    // all depend on tx.gasprice. Supplying it keeps wallet gas estimation on the
+    // same execution path that will run once the transaction is mined.
+    return Object.freeze({gasLimit, gasPrice});
+  }
 
   function bridge() {
     if (!window.RelicForgeStudioBridge) throw new Error('Studio bridge is unavailable. Reload the page.');
@@ -1812,7 +1877,8 @@ ${await file.text()}`;
       const cfg = canonicalV1Config();
       const batchWindowSeconds = launchBatchWindowSeconds();
       const ceiling = launchRandomnessCeilingWei();
-      const price = await v1RandomnessContract().quoteRequestPrice(Number(cfg.consumerWordDeliveryGas || 400000));
+      const gasPrice = await rf26RandomnessGasPrice();
+      const price = await rf26RandomnessQuoteAtGasPrice(gasPrice, Number(cfg.consumerWordDeliveryGas || 400000));
       const within = price <= ceiling;
       $('vrfQuoteStatus').textContent =
         'Current request ~ ' + Number(window.ethers.formatEther(price)).toFixed(6) + ' ETH; ceiling ' + Number(window.ethers.formatEther(ceiling)).toFixed(6) + ' ETH; batch window ' + batchWindowSeconds + 's. ' +
@@ -2099,7 +2165,8 @@ ${await file.text()}`;
       if (currentRevealMode() !== 0) throw new Error('This Studio project uses Forge Reveal, not Deferred Reveal.');
       const cfg = canonicalV1Config(); const collection = collectionContract();
       log('forgeTestStatus','Requesting Deferred Reveal with explicit request gas...',true);
-      const tx = await collection.requestDelayedReveal({ gasLimit: BigInt(cfg.requestGasLimit || 1500000) }); const receipt = await tx.wait();
+      const randomnessOverrides = await rf26RandomnessRequestOverrides(cfg, collection, 'Deferred Reveal');
+      const tx = await collection.requestDelayedReveal(randomnessOverrides); const receipt = await tx.wait();
       const requestId = requestIdFromReceipt(receipt, collection, 'DelayedRevealRequested');
       if (requestId != null) { forgeState.latestRequestId = requestId; if ($('forgeLocalRequestId')) $('forgeLocalRequestId').value = requestId.toString(); }
       log('forgeTestStatus','Deferred Reveal requested' + (requestId != null ? ' - local request ' + requestId : '') + '. Wait for Chainlink wordReady, then Replay Verified Word.');
@@ -2121,7 +2188,8 @@ ${await file.text()}`;
       const quote = await refreshVrfQuote(); if (!quote) throw new Error('Randomness quote unavailable.');
       if (!quote.within) throw new Error('Current randomness quote is above the collection launch ceiling.');
       log('forgeTestStatus','Requesting verified randomness for Forge batch ' + batchId + '...',true);
-      const tx = await collection.requestRandomnessForBatch(batchId, { gasLimit: BigInt(cfg.requestGasLimit || 1500000) }); const receipt = await tx.wait();
+      const randomnessOverrides = await rf26RandomnessRequestOverrides(cfg, collection, 'Forge batch randomness');
+      const tx = await collection.requestRandomnessForBatch(batchId, randomnessOverrides); const receipt = await tx.wait();
       const requestId = requestIdFromReceipt(receipt, collection, 'ForgeRandomnessRequested');
       if (requestId != null) { forgeState.latestRequestId = requestId; if ($('forgeLocalRequestId')) $('forgeLocalRequestId').value = requestId.toString(); }
       log('forgeTestStatus','Forge randomness requested' + (requestId != null ? ' - local request ' + requestId : '') + '. Wait for Chainlink wordReady before replay.');
@@ -3079,9 +3147,9 @@ ${await file.text()}`;
       else if (action === 'withdraw') { launchedStatus('Withdrawing accrued creator proceeds to '+snap.payoutReceiver+'...'); const tx=await collection.withdraw(); await tx.wait(); }
       else if (action === 'payout') { const addr=String($('dashboardV2Payout')?.value||'').trim(); if(!window.ethers.isAddress(addr)) throw new Error('Invalid payout receiver.'); const tx=await collection.setPayoutReceiver(addr); await tx.wait(); }
       else if (action === 'royalty') { const addr=String($('dashboardV2RoyaltyWallet')?.value||'').trim(); const bps=Math.round(Math.max(0,Math.min(10,Number($('dashboardV2RoyaltyPct')?.value||0)))*100); if(!window.ethers.isAddress(addr)) throw new Error('Invalid royalty receiver.'); const tx=await collection.setRoyalty(addr,bps); await tx.wait(); }
-      else if (action === 'deferredreveal') { const cfg=canonicalV1Config(); const tx=await collection.requestDelayedReveal({gasLimit:BigInt(cfg.requestGasLimit||1500000)}); const receipt=await tx.wait(); const id=requestIdFromReceipt(receipt,collection,'DelayedRevealRequested'); launchedStatus('Deferred reveal requested'+(id!=null?' - local request '+id:'')+'. Replay only after the adapter reports wordReady.'); }
+      else if (action === 'deferredreveal') { const cfg=canonicalV1Config(); const randomnessOverrides=await rf26RandomnessRequestOverrides(cfg,collection,'Deferred Reveal'); const tx=await collection.requestDelayedReveal(randomnessOverrides); const receipt=await tx.wait(); const id=requestIdFromReceipt(receipt,collection,'DelayedRevealRequested'); launchedStatus('Deferred reveal requested'+(id!=null?' - local request '+id:'')+'. Replay only after the adapter reports wordReady.'); }
       else if (action === 'lockbatch') { const tx=await collection.lockTimedOutBatch(); await tx.wait(); }
-      else if (action === 'requestbatch') { const cfg=canonicalV1Config(); const id=BigInt(Math.max(1,Number($('dashboardV2BatchId')?.value||1))); const tx=await collection.requestRandomnessForBatch(id,{gasLimit:BigInt(cfg.requestGasLimit||1500000)}); const receipt=await tx.wait(); const rid=requestIdFromReceipt(receipt,collection,'ForgeRandomnessRequested'); if(rid!=null&&$('dashboardV2RequestId')) $('dashboardV2RequestId').value=rid.toString(); launchedStatus('Randomness requested'+(rid!=null?' - local request '+rid:'')+'.'); }
+      else if (action === 'requestbatch') { const cfg=canonicalV1Config(); const id=BigInt(Math.max(1,Number($('dashboardV2BatchId')?.value||1))); const randomnessOverrides=await rf26RandomnessRequestOverrides(cfg,collection,'Forge batch randomness'); const tx=await collection.requestRandomnessForBatch(id,randomnessOverrides); const receipt=await tx.wait(); const rid=requestIdFromReceipt(receipt,collection,'ForgeRandomnessRequested'); if(rid!=null&&$('dashboardV2RequestId')) $('dashboardV2RequestId').value=rid.toString(); launchedStatus('Randomness requested'+(rid!=null?' - local request '+rid:'')+'.'); }
       else if (action === 'replay') { const cfg=canonicalV1Config(); const id=BigInt(String($('dashboardV2RequestId')?.value||'0')); if(id<=0n) throw new Error('Enter a local request ID.'); const adapter=new window.ethers.Contract(cfg.randomnessAdapter,V2_RANDOMNESS_ABI,forgeState.signer); if(!await adapter.wordReadyForLocalRequest(id)) throw new Error('Verified Chainlink word is not ready yet.'); const tx=await adapter.replayFulfillment(id,{gasLimit:BigInt(cfg.replayGasLimit||1000000)}); await tx.wait(); if(!await adapter.deliveredForLocalRequest(id)) throw new Error('Replay mined but deliveredForLocalRequest is still false.'); launchedStatus('Verified word delivery confirmed.'); }
       else if (action === 'settle') { const max=Math.max(1,Math.floor(Number($('dashboardV2SettleMax')?.value||100))); const tx=await collection.settleReady(max); await tx.wait(); }
       await openLaunchedCollection(snap.address);
