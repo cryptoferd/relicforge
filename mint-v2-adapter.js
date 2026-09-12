@@ -9,6 +9,8 @@
     'function totalCommitted() view returns(uint32)',
     'function totalMinted() view returns(uint32)',
     'function futureRevealMode() view returns(uint8)',
+    'function maxRandomnessCostPerBatchWei() view returns(uint256)',
+    'function randomnessProvider() view returns(address)',
     'function mintPhases() view returns(address)',
     'function balanceOf(address) view returns(uint256)',
     'function mint(uint32 phaseId,uint32 quantity,uint32 allowance,bytes32[] proof) payable returns(uint256 startTokenId)',
@@ -21,7 +23,9 @@
     'function phaseIsOpen(uint32) view returns(bool)',
     'function quoteMint(uint32,uint32) view returns(uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
   ];
-  const PUBLIC_RPCS = {
+  const RANDOMNESS_ADAPTER_ABI = [
+    'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)',
+  ];  const PUBLIC_RPCS = {
     11155111: ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://rpc.sepolia.org'],
     1: ['https://ethereum-rpc.publicnode.com','https://eth.drpc.org'],
   };
@@ -397,6 +401,65 @@
     await render();
   }
 
+  async function liveMintGasPrice() {
+    const providers=[];
+    try {
+      const reader=await getReadProvider(Number(app.config?.chainId||11155111));
+      if(reader?.send)providers.push(reader);
+    } catch (_) {}
+    if(app.browserProvider?.send && !providers.includes(app.browserProvider))providers.push(app.browserProvider);
+
+    let lastError=null;
+    for(const provider of providers){
+      try {
+        const raw=await provider.send('eth_gasPrice',[]);
+        const gasPrice=BigInt(raw);
+        if(gasPrice>0n)return gasPrice;
+      } catch(error){ lastError=error; }
+    }
+    throw new Error(
+      'A live non-zero network gas price is required before an automatic-reveal mint.'+
+      (lastError?.message ? ' '+lastError.message : '')
+    );
+  }
+
+  async function forgeMintOverrides(writeCollection,phaseId,qty,allowance,proof,minimumValue) {
+    const gasPrice=await liveMintGasPrice();
+    const reader=await getReadProvider(Number(app.config.chainId));
+    const readCollection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,reader);
+    const [ceilingRaw,adapterAddress]=await Promise.all([
+      readCollection.maxRandomnessCostPerBatchWei(),
+      readCollection.randomnessProvider(),
+    ]);
+    const ceiling=BigInt(ceilingRaw);
+    const adapter=new window.ethers.Contract(adapterAddress,RANDOMNESS_ADAPTER_ABI,reader);
+    const quote=BigInt(await adapter.estimateRequestPriceAtGasPrice(gasPrice));
+
+    if(quote>ceiling){
+      throw new Error(
+        `Mint temporarily unavailable: the current automatic-reveal randomness quote (${fmtEth(quote)}) exceeds this collection's configured ceiling (${fmtEth(ceiling)}).`
+      );
+    }
+
+    const estimate=BigInt(await writeCollection.mint.estimateGas(
+      phaseId,qty,allowance,proof,{value:minimumValue,gasPrice}
+    ));
+    // A generous limit prevents wallet re-estimation from switching to a
+    // different tx.gasprice-dependent Chainlink pricing branch. The user pays
+    // only gas actually consumed, not the entire gas limit.
+    const gasLimit=((estimate*130n)/100n)+100000n;
+    console.info('RelicForge R2 fee-aware Forge mint', {
+      chainId:Number(app.config.chainId),
+      phaseId:Number(phaseId),
+      quantity:Number(qty),
+      gasPriceWei:gasPrice.toString(),
+      gasEstimate:estimate.toString(),
+      gasLimit:gasLimit.toString(),
+      randomnessQuoteWei:quote.toString(),
+      randomnessCeilingWei:ceiling.toString(),
+    });
+    return Object.freeze({value:minimumValue,gasPrice,gasLimit});
+  }
   async function mintPhase(phaseId) {
     if(!app.wallet)await connect();
     const signer=await mintSigner();
@@ -428,7 +491,10 @@
     const minimumValue=BigInt(liveQuote.minimumValue??liveQuote[2]);
     setStatus(`Confirm ${fmtEth(minimumValue)} for Stage ${phase.id} in your wallet.`);
     const writeCollection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,signer);
-    const tx=await writeCollection.mint(phase.id,qty,allowance,proof,{value:minimumValue});
+    const txOverrides=app.state.revealMode===1
+      ? await forgeMintOverrides(writeCollection,phase.id,qty,allowance,proof,minimumValue)
+      : {value:minimumValue};
+    const tx=await writeCollection.mint(phase.id,qty,allowance,proof,txOverrides);
     setStatus(`Mint submitted: ${short(tx.hash)}. Waiting for confirmation…`);
     const receipt=await tx.wait();
     if(!receipt || Number(receipt.status)!==1)throw new Error('Mint transaction was not confirmed.');

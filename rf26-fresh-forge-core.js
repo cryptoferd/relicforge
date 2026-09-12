@@ -44,8 +44,14 @@
     if(!Number.isSafeInteger(batchWindow)||batchWindow<1||batchWindow>86400)
       throw fail('Invalid randomness batch window.');
     const ceiling=uint(randomnessQuote.ceiling);
+    const currentRandomnessPrice=uint(randomnessQuote.price);
     if(batchWindow!==Number(input.batchWindow)||ceiling!==uint(input.ceiling))
       throw fail('Randomness quote changed after launch inputs were prepared. Re-check the launch.');
+    if(randomnessQuote.within!==true||BigInt(currentRandomnessPrice)>BigInt(ceiling))
+      throw fail(
+        'Current automatic-reveal randomness cost exceeds the configured collection ceiling. Raise the randomness ceiling or wait for network pricing to fall before launching.',
+        'RF26_RANDOMNESS_CEILING'
+      );
     const payout=address(input.payout||wallet),royalty=address(input.royalty||wallet);
     const tuple=[
       String(c.name||''),String(c.symbol||''),String(c.description||''),
