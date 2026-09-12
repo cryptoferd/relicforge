@@ -2228,7 +2228,8 @@ ${await file.text()}`;
         return;
       }
       log('forgeTestStatus', 'Deferred Reveal — Step 2 of 2: requesting verified randomness...', true);
-      const tx = await collection.requestDelayedReveal();
+      const gasPrice = await rf26RandomnessGasPrice();
+      const tx = await collection.requestDelayedReveal({ gasPrice, gasLimit: 1500000n });
       await tx.wait();
       log('forgeTestStatus', 'Step 2 confirmed. Verified randomness is pending; the frozen NFTs will reveal automatically. No third creator transaction is required.', true);
       await refreshStudioR2RevealActions();
@@ -3274,7 +3275,8 @@ ${await file.text()}`;
       } else if (action === 'requestdeferred') {
         if (!snap.delayedRevealPrepared) throw new Error('Complete Step 1 before requesting delayed randomness.');
         launchedStatus('Deferred Reveal — Step 2 of 2: requesting verified randomness...');
-        const tx = await collection.requestDelayedReveal();
+        const gasPrice = await rf26RandomnessGasPrice();
+        const tx = await collection.requestDelayedReveal({ gasPrice, gasLimit: 1500000n });
         await tx.wait();
         launchedStatus('Step 2 confirmed. The frozen set will reveal automatically after verified randomness arrives. No third creator transaction is required.');
       }

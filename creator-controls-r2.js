@@ -280,6 +280,20 @@
     return signer;
   }
 
+  async function delayedRevealRequestOverrides(provider) {
+    if (!provider?.send) {
+      throw new Error('A live Sepolia RPC provider is required before requesting Chainlink randomness.');
+    }
+    const raw = await provider.send('eth_gasPrice', []);
+    const gasPrice = BigInt(raw);
+    if (gasPrice <= 0n) {
+      throw new Error('A live non-zero network gas price is required before requesting Chainlink randomness.');
+    }
+    // Chainlink direct-funding pricing depends on tx.gasprice. Supplying both
+    // fields prevents MetaMask/eth_estimateGas from simulating the zero-price
+    // branch that can otherwise make Step 2 revert during estimation.
+    return Object.freeze({ gasPrice, gasLimit: 1500000n });
+  }
   async function executeRevealStep(step, snapshot) {
     if (state.busy) return;
     state.busy = true;
@@ -316,7 +330,8 @@
           await refresh(true);
           return;
         }
-        const tx = await contract.requestDelayedReveal();
+        const overrides = await delayedRevealRequestOverrides(provider);
+        const tx = await contract.requestDelayedReveal(overrides);
         setStatus('Step 2 submitted. Waiting for confirmation…');
         await tx.wait();
         setStatus('Step 2 confirmed. Chainlink randomness is now pending; reveal will finish automatically.');
