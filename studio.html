@@ -562,16 +562,16 @@
       <h3>Reveal</h3>
       <label class="reveal-choice" data-reveal-card="0">
         <input name="revealMode" type="radio" value="0"/>
-        <span><strong>Deferred Reveal</strong><small>Hidden NFTs mint immediately. One later verified Chainlink word permanently fixes the collection-wide assignment permutation.</small></span>
+        <span><strong>Deferred Reveal</strong><small>NFTs mint to collectors immediately with the pre-reveal artwork. When ready, the creator uses exactly two transactions: prepare/freeze the currently minted set, then request verified randomness. Reveal finishes automatically.</small></span>
       </label>
       <label class="reveal-choice selected" data-reveal-card="1">
         <input checked name="revealMode" type="radio" value="1"/>
-        <span><strong>Forge Reveal</strong><small>Collector mints create reservations. Batches are randomized later and settled in deterministic order.</small></span>
+        <span><strong>Forge Reveal</strong><small>NFTs mint to collectors immediately. Verified randomness is requested automatically in the mint transaction and the placeholder reveals automatically — no collector or creator follow-up transaction.</small></span>
       </label>
       <label class="compact-upload forge-placeholder-upload" for="creatorPlaceholderInput" id="creatorPlaceholderWrap">
-        <strong>Custom forging placeholder (optional)</strong>
-        <span id="creatorPlaceholderName">PNG, WEBP, JPG, or SVG</span>
-        <input accept="image/png,image/webp,image/jpeg,image/svg+xml,.svg" id="creatorPlaceholderInput" type="file"/>
+        <strong>Pre-reveal artwork (optional)</strong>
+        <span id="creatorPlaceholderName">PNG, WEBP, JPG, GIF, or SVG · any dimensions / aspect ratio</span>
+        <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="creatorPlaceholderInput" type="file"/>
       </label>
       <div class="prototype-note">
         <strong>Verified randomness</strong>
@@ -714,22 +714,14 @@
         <button class="ghost-btn" disabled id="forgeCreatorMintBtn" type="button">Creator Mint</button>
       </div>
       <div class="launched-section">
-        <h4>Deferred Reveal</h4>
-        <button class="ghost-btn" disabled id="forgeDeferredRevealBtn" type="button">Request Deferred Reveal</button>
-      </div>
-      <div class="launched-section">
-        <h4>Forge batch execution</h4>
+        <h4>R2 Reveal</h4>
+        <p class="forge-footnote">Forge Reveal is automatic after every mint. Deferred Reveal uses exactly two creator transactions and then completes automatically.</p>
         <div class="forge-mint-controls">
-          <button class="ghost-btn" disabled id="forgeLockBatchBtn" type="button">Lock Timed-Out Batch</button>
-          <label class="field"><span>Batch ID</span><input id="forgeBatchId" min="1" step="1" type="number" value="1"/></label>
-          <button class="ghost-btn" disabled id="forgeRequestBatchBtn" type="button">Request Batch Randomness</button>
-          <label class="field"><span>Local request ID</span><input id="forgeLocalRequestId" min="1" step="1" type="number"/></label>
-          <button class="ghost-btn" disabled id="forgeReplayBtn" type="button">Replay Verified Word</button>
-          <label class="field"><span>Settle max tokens</span><input id="forgeSettleMaxTokens" min="1" max="500" step="1" type="number" value="100"/></label>
-          <button class="ghost-btn" disabled id="forgeSettleBtn" type="button">Settle Ready</button>
+          <button class="ghost-btn" disabled id="forgePrepareDelayedRevealBtn" type="button">REVEAL COLLECTION — STEP 1 OF 2</button>
+          <button class="ghost-btn" disabled id="forgeRequestDelayedRevealBtn" type="button">CONTINUE REVEAL — STEP 2 OF 2</button>
         </div>
+        <div class="forge-inline-status" id="forgeR2RevealStatus">Forge mode needs no reveal action. For Deferred Reveal, Step 1 freezes the currently minted set and prepares its randomness budget; Step 2 requests verified randomness. No third creator transaction is required.</div>
       </div>
-      <div class="forge-inline-status">Request transactions use an explicit 1,500,000 gas limit. Replay uses 1,000,000 gas and is not reported successful until deliveredForLocalRequest(localRequestId) is true.</div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
       <pre class="forge-log" id="forgeTestStatus">Forge an R12-v2 collection to enable test controls.</pre>
@@ -917,7 +909,7 @@
   <link rel="stylesheet" href="./studio-resume.css?v=r12v2-r24-1"/>
   <script src="./relicforge-config.js?v=11.1.6"></script>
 
-  <script src="./relicforge-v2-addresses.js?v=6e2a-mainnet1"></script>
+  <script src="./relicforge-v2-addresses.js?v=r12v2-r2-sepolia-a1"></script>
   <script src="./relicforge-v1-addresses.js?v=rc4.4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
@@ -931,7 +923,7 @@
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>
   <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
   <script src="./rf26-forge-network.js?v=6e2a-mainnet1" defer></script>
-  <script src="./forge.js?v=6e2a-feeawarevrf1" defer></script>
+  <script src="./forge.js?v=r12v2-r2-ui-b1" defer></script>
   <script src="./project-storage.js?v=6e05-paced1" defer></script>
   <script src="./studio-collaboration.js?v=studio-collab-r1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>

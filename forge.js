@@ -135,31 +135,24 @@
     'function factory() view returns(address)', 'function dataContract() view returns(address)', 'function mintPhases() view returns(address)',
     'function randomnessProvider() view returns(address)', 'function forgeReserve() view returns(address)', 'function feePolicy() view returns(address)',
     'function payoutReceiver() view returns(address)', 'function royaltyReceiver() view returns(address)', 'function royaltyBps() view returns(uint96)',
-    'function maxSupply() view returns(uint32)', 'function totalCommitted() view returns(uint32)', 'function totalMinted() view returns(uint32)',
+    'function maxSupply() view returns(uint32)', 'function totalCommitted() view returns(uint32)', 'function totalMinted() view returns(uint32)', 'function pendingSupply() view returns(uint32)',
     'function futureRevealMode() view returns(uint8)', 'function platformFeeMode() view returns(uint8)', 'function lockedPlatformFeeCents() view returns(uint32)',
     'function batchWindowSeconds() view returns(uint64)', 'function maxRandomnessCostPerBatchWei() view returns(uint256)',
     'function sponsoredPrepaidWei() view returns(uint256)', 'function hopperBalance() view returns(uint256)', 'function creatorEscrow() view returns(uint256)', 'function accruedCreatorProceeds() view returns(uint256)',
-    'function delayedRevealRequested() view returns(bool)', 'function delayedRevealed() view returns(bool)', 'function delayedRevealRequestId() view returns(uint256)',
-    'function openBatchId() view returns(uint64)', 'function nextSettleBatchId() view returns(uint64)', 'function unrequestedLockedBatches() view returns(uint32)', 'function lockedUnsettledBatches() view returns(uint32)',
-    'function batches(uint64) view returns(uint64 firstReservationId,uint64 lastReservationId,uint64 openedAt,uint64 lockedAt,uint32 reservationCount,uint32 totalQuantity,uint256 randomnessCost,uint256 requestId,uint256 randomWord,bool locked,bool wordReady,bool settled)',
+    'function delayedRevealRequested() view returns(bool)', 'function delayedRevealPrepared() view returns(bool)', 'function delayedRevealed() view returns(bool)',
+    'function delayedRevealSupply() view returns(uint32)', 'function delayedRevealRequestId() view returns(uint256)',
+    'function pendingDelayedReserveRefundWei() view returns(uint256)', 'function activeAutoRevealRequests() view returns(uint32)',
     'function setPayoutReceiver(address receiver)', 'function setRoyalty(address receiver,uint96 bps)', 'function setFutureRevealMode(uint8 mode)',
     'function setRenderConfig(string baseURI,bool holderEnabled,uint8 defaultMode)',
     'function mint(uint32 phaseId,uint32 quantity,uint32 allowance,bytes32[] proof) payable returns(uint256 startTokenId)',
     'function creatorMint(address to,uint32 quantity) payable returns(uint256 startTokenId)',
-    'function requestDelayedReveal() returns(uint256 requestId)', 'function lockTimedOutBatch() returns(uint64 batchId)',
-    'function requestRandomnessForBatch(uint64 batchId) returns(uint256 requestId)', 'function settleReady(uint32 maxTokens) returns(uint32 tokensSettled)',
+    'function prepareDelayedReveal()', 'function requestDelayedReveal() returns(uint256 requestId)',
     'function withdraw()', 'function tokenURI(uint256 tokenId) view returns(string)', 'function ownerOf(uint256 tokenId) view returns(address)',
     'function contractURI() view returns(string)',
     'function flattenedRenderBaseURI() view returns(string)',
     'function holderRenderModeEnabled() view returns(bool)',
     'function defaultRenderMode() view returns(uint8)',
-    'event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)',
-    'event DelayedRevealRequested(uint256 indexed requestId,uint32 revealedSupply,uint256 randomnessCost)',
-    'event ForgeReservationCreated(uint64 indexed reservationId,uint64 indexed batchId,address indexed payer,address recipient,uint32 quantity,uint256 creatorValue,bool creatorTeamMint)',
-    'event ForgeBatchLocked(uint64 indexed batchId,uint32 reservationCount,uint32 totalQuantity,bool full)',
-    'event ForgeRandomnessRequested(uint64 indexed batchId,uint256 indexed requestId,uint256 randomnessCost,uint256 hopperPaid,uint256 reservePaid)',
-    'event ForgeBatchRandomnessReady(uint64 indexed batchId,uint256 indexed requestId)',
-    'event ForgeBatchSettled(uint64 indexed batchId,uint256 indexed requestId,uint32 reservationCount,uint32 totalQuantity)'
+    'event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)'
   ];
 
   const V2_MINT_PHASES_ABI = [
@@ -178,13 +171,7 @@
   ];
 
   const V2_RANDOMNESS_ABI = [
-    'function quoteRequestPrice(uint32 requestedConsumerCallbackGas) view returns(uint256)',
-    'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)',
-    'function wordReadyForLocalRequest(uint256) view returns(bool)',
-    'function deliveredForLocalRequest(uint256) view returns(bool)',
-    'function upstreamRequestIdForLocalRequest(uint256) view returns(uint256)',
-    'function storedWordForLocalRequest(uint256) view returns(uint256)',
-    'function replayFulfillment(uint256) returns(bool delivered)'
+    'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)'
   ];
 
   const PUBLIC_SEPOLIA_GAS_RPCS = [
@@ -344,6 +331,7 @@
     if(next.mintPhasesAddress&&window.ethers?.isAddress(next.mintPhasesAddress))forgeState.mintPhasesAddress=window.ethers.getAddress(next.mintPhasesAddress);
     if('publicPhaseId' in next)forgeState.publicPhaseId=next.publicPhaseId?Number(next.publicPhaseId):null;
     if('whitelistPhaseId' in next)forgeState.whitelistPhaseId=next.whitelistPhaseId?Number(next.whitelistPhaseId):null;
+    refreshStudioR2RevealActions().catch(()=>{});
     if(forgeState.deploymentJournal)adoptDeploymentJournal({collectionAddress:forgeState.collectionAddress,dataAddress:forgeState.dataAddress,mintPhasesAddress:forgeState.mintPhasesAddress,publicPhaseId:forgeState.publicPhaseId,whitelistPhaseId:forgeState.whitelistPhaseId});
   }
 
@@ -1176,105 +1164,60 @@ ${await file.text()}`;
   }
 
   async function compilePlaceholderFile(file, expectedWidth, expectedHeight) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (ext === 'svg') {
+    if (!file) throw new Error('Choose a pre-reveal artwork file first.');
+    const ext = String(file.name || '').split('.').pop().toLowerCase();
+    const type = String(file.type || '').toLowerCase();
+
+    const embed = (mime, bytes, encoding) => {
+      const data = bytesToBase64(bytes);
+      const fragment = `<image x="0" y="0" width="${expectedWidth}" height="${expectedHeight}" preserveAspectRatio="xMidYMid meet" href="data:${mime};base64,${data}"/>`;
+      const encoded = enc.encode(fragment);
+      if (encoded.length > MAX_TRAIT_BYTES) {
+        throw new Error(`Pre-reveal artwork needs ${fmtBytes(encoded.length)} when embedded onchain, above the ${fmtBytes(MAX_TRAIT_BYTES)} placeholder limit. Optimize the source file without changing its intended aspect ratio and re-upload it.`);
+      }
+      return { fragment, encoding };
+    };
+
+    if (ext === 'svg' || type === 'image/svg+xml') {
       const text = await file.text();
       const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
-      if (doc.querySelector('parsererror')) throw new Error('Creator placeholder is not valid SVG.');
+      if (doc.querySelector('parsererror')) throw new Error('Pre-reveal artwork is not valid SVG.');
       const root = doc.documentElement;
+      if (String(root.localName || '').toLowerCase() !== 'svg') throw new Error('Pre-reveal SVG must have an <svg> root element.');
+      root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(n => n.remove());
       root.querySelectorAll('*').forEach(node => {
         [...node.attributes].forEach(attr => {
           const n = attr.name.toLowerCase();
           const v = attr.value.trim().toLowerCase();
           if (n.startsWith('on') || v.startsWith('javascript:')) node.removeAttribute(attr.name);
-          if ((n === 'href' || n === 'xlink:href') && /^(https?:|\/\/)/.test(v)) node.removeAttribute(attr.name);
+          if ((n === 'href' || n === 'xlink:href') && (v.startsWith('http:') || v.startsWith('https:') || v.startsWith('//'))) node.removeAttribute(attr.name);
         });
       });
-      const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
-      if (vb.length === 4 && Number.isFinite(vb[2]) && Number.isFinite(vb[3])) {
-        if (Math.round(vb[2]) !== expectedWidth || Math.round(vb[3]) !== expectedHeight) {
-          throw new Error(`Creator placeholder SVG is ${vb[2]}×${vb[3]}; expected ${expectedWidth}×${expectedHeight}.`);
-        }
-      }
-      const fragment = root.innerHTML.replace(/<!--([\s\S]*?)-->/g, '').replace(/>\s+</g, '><').replace(/\s{2,}/g, ' ').trim() || '<g/>';
-      return { fragment, encoding: 'native-svg' };
+      const serialized = new XMLSerializer().serializeToString(root);
+      return embed('image/svg+xml', enc.encode(serialized), 'native-svg-contain');
     }
 
-    if (ext === 'gif' || String(file.type || '').toLowerCase() === 'image/gif') {
-      const bitmap = await createImageBitmap(file);
-      if (bitmap.width !== expectedWidth || bitmap.height !== expectedHeight) {
-        const dims = `${bitmap.width}×${bitmap.height}`;
-        bitmap.close();
-        throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}×${expectedHeight}.`);
-      }
-      bitmap.close();
-      const raw = new Uint8Array(await file.arrayBuffer());
-      const data = bytesToBase64(raw);
-      return {
-        fragment: `<image x="0" y="0" width="${expectedWidth}" height="${expectedHeight}" preserveAspectRatio="none" style="image-rendering:pixelated" href="data:image/gif;base64,${data}"/>`,
-        encoding: 'animated-gif'
-      };
+    const mime =
+      (type === 'image/png' || ext === 'png') ? 'image/png' :
+      (type === 'image/jpeg' || ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' :
+      (type === 'image/webp' || ext === 'webp') ? 'image/webp' :
+      (type === 'image/gif' || ext === 'gif') ? 'image/gif' :
+      null;
+    if (!mime) throw new Error('Pre-reveal artwork must be PNG, WEBP, JPG, GIF, or SVG.');
+
+    let bitmap = null;
+    try {
+      bitmap = await createImageBitmap(file);
+      if (!bitmap.width || !bitmap.height) throw new Error('Image dimensions are unavailable.');
+    } catch (error) {
+      throw new Error('Pre-reveal artwork could not be decoded: ' + error.message);
+    } finally {
+      bitmap?.close?.();
     }
 
-    const bitmap = await createImageBitmap(file);
-    if (bitmap.width !== expectedWidth || bitmap.height !== expectedHeight) {
-      const dims = `${bitmap.width}×${bitmap.height}`;
-      bitmap.close();
-      throw new Error(`Creator placeholder is ${dims}; expected ${expectedWidth}×${expectedHeight}.`);
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width; canvas.height = bitmap.height;
-    const ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: true });
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const rectangles = [];
-    let active = new Map();
-    for (let y = 0; y < canvas.height; y++) {
-      const rowRuns = [];
-      let x = 0;
-      while (x < canvas.width) {
-        const i = (y * canvas.width + x) * 4;
-        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3];
-        if (!a) { x++; continue; }
-        let end = x + 1;
-        while (end < canvas.width) {
-          const j = (y * canvas.width + end) * 4;
-          if (pixels[j] !== r || pixels[j + 1] !== g || pixels[j + 2] !== b || pixels[j + 3] !== a) break;
-          end++;
-        }
-        rowRuns.push({ x, w: end - x, r, g, b, a });
-        x = end;
-      }
-      const next = new Map(), seen = new Set();
-      for (const run of rowRuns) {
-        const key = `${run.x}:${run.w}:${run.r}:${run.g}:${run.b}:${run.a}`;
-        seen.add(key);
-        const existing = active.get(key);
-        if (existing) { existing.h += 1; next.set(key, existing); }
-        else next.set(key, { ...run, y, h: 1 });
-      }
-      for (const [key, rect] of active) if (!seen.has(key)) rectangles.push(rect);
-      active = next;
-    }
-    rectangles.push(...active.values());
-    const groups = new Map();
-    for (const rect of rectangles) {
-      const key = `${rect.r}:${rect.g}:${rect.b}:${rect.a}`;
-      if (!groups.has(key)) groups.set(key, { ...rect, commands: [] });
-      groups.get(key).commands.push(`M${rect.x} ${rect.y}h${rect.w}v${rect.h}h-${rect.w}Z`);
-    }
-    const hex = n => n.toString(16).padStart(2, '0');
-    const fragments = [];
-    for (const group of groups.values()) {
-      const fill = `#${hex(group.r)}${hex(group.g)}${hex(group.b)}`;
-      const opacity = group.a === 255 ? '' : ` fill-opacity="${(group.a / 255).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}"`;
-      fragments.push(`<path fill="${fill}"${opacity} d="${group.commands.join('')}"/>`);
-    }
-    return { fragment: fragments.join('') || '<g/>', encoding: 'pixel-rectangles' };
+    const raw = new Uint8Array(await file.arrayBuffer());
+    return embed(mime, raw, mime === 'image/gif' ? 'animated-gif-contain' : 'native-raster-contain');
   }
 
   function defaultForgePlaceholderFragment(width, height) {
@@ -2093,130 +2036,205 @@ ${await file.text()}`;
     } catch (error) { log('forgeTestStatus','MINTING ERROR: ' + (error.shortMessage || error.message),true); }
   }
 
-  function reservationIdsFromReceipt(receipt, collection) {
-    const rows = [];
-    for (const entry of receipt.logs) { try { const parsed = collection.interface.parseLog(entry); if (parsed?.name === 'ForgeReservationCreated') rows.push({ reservationId: parsed.args.reservationId, batchId: parsed.args.batchId, quantity: parsed.args.quantity }); } catch (_) {} }
-    return rows;
+  function mintedTokenIdsFromReceipt(receipt, collection) {
+    const tokenIds = [];
+    for (const entry of receipt.logs || []) {
+      try {
+        const parsed = collection.interface.parseLog(entry);
+        if (parsed?.name === 'Transfer' && String(parsed.args.from).toLowerCase() === window.ethers.ZeroAddress.toLowerCase()) {
+          tokenIds.push(BigInt(parsed.args.tokenId));
+        }
+      } catch (_) {}
+    }
+    return tokenIds;
+  }
+
+  async function refreshStudioR2RevealActions() {
+    const step1 = $('forgePrepareDelayedRevealBtn');
+    const step2 = $('forgeRequestDelayedRevealBtn');
+    const status = $('forgeR2RevealStatus');
+    if (!step1 && !step2) return;
+
+    if (!forgeState.collectionAddress || !window.ethers?.isAddress(forgeState.collectionAddress)) {
+      if (step1) step1.disabled = true;
+      if (step2) step2.disabled = true;
+      if (status) status.textContent = 'Forge mode needs no reveal action. Deferred Reveal becomes available after a collection is forged.';
+      return;
+    }
+
+    try {
+      const runner = readProvider(activeChainId() || 11155111) || forgeState.provider || forgeState.signer;
+      const collection = collectionContract(runner);
+      const [mode, totalMinted, prepared, revealed, requestId, frozenSupply, activeAuto] = await Promise.all([
+        collection.futureRevealMode(),
+        collection.totalMinted(),
+        collection.delayedRevealPrepared(),
+        collection.delayedRevealed(),
+        collection.delayedRevealRequestId(),
+        collection.delayedRevealSupply(),
+        collection.activeAutoRevealRequests()
+      ]);
+      const revealMode = Number(mode);
+      const minted = Number(totalMinted);
+      const request = BigInt(requestId);
+      if (step1) step1.disabled = !(revealMode === 0 && !prepared && !revealed && request === 0n && minted > 0);
+      if (step2) step2.disabled = !(revealMode === 0 && prepared && !revealed && request === 0n);
+
+      if (!status) return;
+      if (revealed) {
+        status.textContent = 'COLLECTION REVEALED. The frozen delayed set is complete; any remaining unsold supply now uses fresh automatic Forge randomness.';
+      } else if (revealMode === 1) {
+        status.textContent = Number(activeAuto) > 0
+          ? `Forge Reveal is automatic. ${Number(activeAuto)} reveal request${Number(activeAuto) === 1 ? '' : 's'} currently awaiting completion; no creator action is required.`
+          : 'Forge Reveal is automatic. NFTs are owned immediately at mint and reveal automatically after verified randomness arrives.';
+      } else if (request > 0n) {
+        status.textContent = 'Step 2 is confirmed. Verified randomness is pending and the frozen collection will reveal automatically — no third creator transaction is required.';
+      } else if (prepared) {
+        status.textContent = `Step 1 is confirmed. ${Number(frozenSupply)} minted NFT${Number(frozenSupply) === 1 ? '' : 's'} are frozen for this reveal. Continue with Step 2 to request randomness.`;
+      } else if (minted > 0) {
+        status.textContent = `Deferred Reveal is ready. Step 1 will freeze exactly the current ${minted} minted NFT${minted === 1 ? '' : 's'} and prepare its randomness budget.`;
+      } else {
+        status.textContent = 'Deferred Reveal is configured. Mint at least one NFT before starting the two-step creator reveal.';
+      }
+    } catch (error) {
+      if (step1) step1.disabled = true;
+      if (step2) step2.disabled = true;
+      if (status) status.textContent = 'R2 reveal state unavailable: ' + (error.shortMessage || error.message);
+    }
   }
 
   async function mintTest() {
     try {
-    await requireForgeWrite(true);
-
+      await requireForgeWrite(true);
       if (!forgeState.publicPhaseId) throw new Error('This project did not create a public MintPhases stage.');
-      const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
-      const quote = await phases.quoteMint(forgeState.publicPhaseId, quantity); const minimumValue = quote.minimumValue ?? quote[2];
-      log('forgeTestStatus','Public minting ' + quantity + ' through MintPhases stage ' + forgeState.publicPhaseId + '...',true);
-      const tx = await collection.mint(forgeState.publicPhaseId, quantity, 0, [], { value: minimumValue }); const receipt = await tx.wait();
-      const reservations = reservationIdsFromReceipt(receipt, collection);
-      if (currentRevealMode() === 1 || reservations.length) {
-        if (reservations[0] && $('forgeBatchId')) $('forgeBatchId').value = String(reservations[0].batchId);
-        log('forgeTestStatus','Forge reservation accepted for ' + quantity + ' NFT(s). NFT Transfer events occur later when settleReady() settles a ready batch.');
+      const collection = collectionContract();
+      const phases = mintPhasesContract();
+      const quantity = requestedMintQuantity();
+      const quote = await phases.quoteMint(forgeState.publicPhaseId, quantity);
+      const minimumValue = quote.minimumValue ?? quote[2];
+      log('forgeTestStatus', 'Public minting ' + quantity + ' through MintPhases stage ' + forgeState.publicPhaseId + '...', true);
+      const tx = await collection.mint(forgeState.publicPhaseId, quantity, 0, [], { value: minimumValue });
+      const receipt = await tx.wait();
+      const tokenIds = mintedTokenIdsFromReceipt(receipt, collection);
+      if (tokenIds[0] && $('forgeInspectTokenId')) $('forgeInspectTokenId').value = tokenIds[0].toString();
+      if (currentRevealMode() === 1) {
+        log('forgeTestStatus', 'Forge mint confirmed. ' + (tokenIds.length || quantity) + ' NFT(s) are already in the recipient wallet; verified randomness and reveal continue automatically.');
       } else {
-        const tokenIds = []; for (const entry of receipt.logs) { try { const parsed = collection.interface.parseLog(entry); if (parsed?.name === 'Transfer' && parsed.args.from === window.ethers.ZeroAddress) tokenIds.push(BigInt(parsed.args.tokenId)); } catch (_) {} }
-        if (tokenIds.length && $('forgeInspectTokenId')) $('forgeInspectTokenId').value = tokenIds[0].toString();
-        log('forgeTestStatus','Deferred mint confirmed for ' + (tokenIds.length || quantity) + ' hidden NFT(s).');
+        log('forgeTestStatus', 'Deferred mint confirmed. ' + (tokenIds.length || quantity) + ' NFT(s) are already owned and display the pre-reveal artwork until the creator completes the two-step reveal.');
       }
-    } catch (error) { log('forgeTestStatus','MINT ERROR: ' + (error.shortMessage || error.message),true); }
+      await refreshStudioR2RevealActions();
+    } catch (error) {
+      log('forgeTestStatus', 'MINT ERROR: ' + (error.shortMessage || error.message), true);
+    }
   }
 
   async function whitelistMintTest() {
     try {
-    await requireForgeWrite(true);
-
+      await requireForgeWrite(true);
       if (!forgeState.whitelistPhaseId) throw new Error('This project did not create an Approved Wallet stage.');
-      const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
+      const collection = collectionContract();
+      const phases = mintPhasesContract();
+      const quantity = requestedMintQuantity();
       if (!forgeState.wallet) await connectWallet();
       const entry = forgeState.whitelist?.proofByAddress?.[forgeState.wallet.toLowerCase()];
       if (!entry) throw new Error('Connected wallet is not eligible for the final Approved Wallet stage.');
-      const quote = await phases.quoteMint(forgeState.whitelistPhaseId, quantity); const minimumValue = quote.minimumValue ?? quote[2];
-      const tx = await collection.mint(forgeState.whitelistPhaseId, quantity, entry.allowance, entry.proof, { value: minimumValue }); const receipt = await tx.wait();
-      const reservations = reservationIdsFromReceipt(receipt, collection);
-      if (reservations[0] && $('forgeBatchId')) $('forgeBatchId').value = String(reservations[0].batchId);
-      log('forgeTestStatus', reservations.length ? 'Approved Wallet Forge reservation accepted.' : 'Approved Wallet Deferred mint confirmed.');
-    } catch (error) { log('forgeTestStatus','APPROVED WALLET MINT ERROR: ' + (error.shortMessage || error.message),true); }
+      const quote = await phases.quoteMint(forgeState.whitelistPhaseId, quantity);
+      const minimumValue = quote.minimumValue ?? quote[2];
+      const tx = await collection.mint(forgeState.whitelistPhaseId, quantity, entry.allowance, entry.proof, { value: minimumValue });
+      const receipt = await tx.wait();
+      const tokenIds = mintedTokenIdsFromReceipt(receipt, collection);
+      if (tokenIds[0] && $('forgeInspectTokenId')) $('forgeInspectTokenId').value = tokenIds[0].toString();
+      log('forgeTestStatus', currentRevealMode() === 1
+        ? 'Approved Wallet mint confirmed with immediate NFT ownership; reveal continues automatically.'
+        : 'Approved Wallet deferred mint confirmed with immediate NFT ownership and pre-reveal artwork.');
+      await refreshStudioR2RevealActions();
+    } catch (error) {
+      log('forgeTestStatus', 'APPROVED WALLET MINT ERROR: ' + (error.shortMessage || error.message), true);
+    }
   }
 
   async function creatorMintTest() {
     try {
-    await requireForgeWrite(true);
-
-      const collection = collectionContract(); const phases = mintPhasesContract(); const quantity = requestedMintQuantity();
+      await requireForgeWrite(true);
+      const collection = collectionContract();
+      const phases = mintPhasesContract();
+      const quantity = requestedMintQuantity();
       if (!forgeState.wallet) await connectWallet();
-      const quote = await phases.creatorTeamFeeQuote(quantity); const feeWei = BigInt(quote.feeWei ?? quote[0] ?? 0n); const healthy = Boolean(quote.oracleHealthy ?? quote[1]); const active = Boolean(quote.feeActive ?? quote[2]);
+      const quote = await phases.creatorTeamFeeQuote(quantity);
+      const feeWei = BigInt(quote.feeWei ?? quote[0] ?? 0n);
+      const healthy = Boolean(quote.oracleHealthy ?? quote[1]);
+      const active = Boolean(quote.feeActive ?? quote[2]);
       const value = active && healthy ? feeWei : 0n;
-      log('forgeTestStatus','Creator minting ' + quantity + ' NFT(s); team platform fee ' + window.ethers.formatEther(value) + ' ETH...',true);
-      const tx = await collection.creatorMint(forgeState.wallet, quantity, { value }); const receipt = await tx.wait();
-      const reservations = reservationIdsFromReceipt(receipt, collection);
-      if (reservations[0] && $('forgeBatchId')) $('forgeBatchId').value = String(reservations[0].batchId);
-      log('forgeTestStatus', reservations.length ? 'Creator Forge reservation accepted. Settlement will mint the NFT(s).' : 'Creator Deferred mint confirmed.');
-    } catch (error) { log('forgeTestStatus','CREATOR MINT ERROR: ' + (error.shortMessage || error.message),true); }
+      log('forgeTestStatus', 'Creator minting ' + quantity + ' NFT(s); team platform fee ' + window.ethers.formatEther(value) + ' ETH...', true);
+      const tx = await collection.creatorMint(forgeState.wallet, quantity, { value });
+      const receipt = await tx.wait();
+      const tokenIds = mintedTokenIdsFromReceipt(receipt, collection);
+      if (tokenIds[0] && $('forgeInspectTokenId')) $('forgeInspectTokenId').value = tokenIds[0].toString();
+      log('forgeTestStatus', currentRevealMode() === 1
+        ? 'Creator mint confirmed with immediate NFT ownership; reveal continues automatically.'
+        : 'Creator deferred mint confirmed with immediate NFT ownership and pre-reveal artwork.');
+      await refreshStudioR2RevealActions();
+    } catch (error) {
+      log('forgeTestStatus', 'CREATOR MINT ERROR: ' + (error.shortMessage || error.message), true);
+    }
   }
 
-  function requestIdFromReceipt(receipt, collection, eventName) {
-    for (const entry of receipt.logs) { try { const parsed = collection.interface.parseLog(entry); if (parsed?.name === eventName) return BigInt(parsed.args.requestId); } catch (_) {} }
-    return null;
-  }
-
-  async function requestDeferredReveal() {
+  async function prepareDelayedReveal() {
     try {
-    await requireForgeWrite(true);
-
-      if (currentRevealMode() !== 0) throw new Error('This Studio project uses Forge Reveal, not Deferred Reveal.');
-      const cfg = canonicalV1Config(); const collection = collectionContract();
-      log('forgeTestStatus','Requesting Deferred Reveal with explicit request gas...',true);
-      const randomnessOverrides = await rf26RandomnessRequestOverrides(cfg, collection, 'Deferred Reveal');
-      const tx = await collection.requestDelayedReveal(randomnessOverrides); const receipt = await tx.wait();
-      const requestId = requestIdFromReceipt(receipt, collection, 'DelayedRevealRequested');
-      if (requestId != null) { forgeState.latestRequestId = requestId; if ($('forgeLocalRequestId')) $('forgeLocalRequestId').value = requestId.toString(); }
-      log('forgeTestStatus','Deferred Reveal requested' + (requestId != null ? ' - local request ' + requestId : '') + '. Wait for Chainlink wordReady, then Replay Verified Word.');
-    } catch (error) { log('forgeTestStatus','DEFERRED REVEAL ERROR: ' + (error.shortMessage || error.message),true); }
+      await requireForgeWrite(true);
+      const collection = collectionContract();
+      const [mode, minted, prepared, revealed, requestId] = await Promise.all([
+        collection.futureRevealMode(),
+        collection.totalMinted(),
+        collection.delayedRevealPrepared(),
+        collection.delayedRevealed(),
+        collection.delayedRevealRequestId()
+      ]);
+      if (Number(mode) !== 0) throw new Error('This collection is already using Forge automatic reveal.');
+      if (Number(minted) < 1) throw new Error('Mint at least one NFT before preparing Deferred Reveal.');
+      if (revealed) throw new Error('This collection has already been revealed.');
+      if (BigInt(requestId) > 0n) throw new Error('Randomness has already been requested for this delayed reveal.');
+      if (prepared) {
+        log('forgeTestStatus', 'Step 1 was already confirmed. Continue with Step 2.', true);
+        await refreshStudioR2RevealActions();
+        return;
+      }
+      log('forgeTestStatus', 'Deferred Reveal — Step 1 of 2: freezing the currently minted set and preparing its randomness budget...', true);
+      const tx = await collection.prepareDelayedReveal();
+      await tx.wait();
+      log('forgeTestStatus', 'Step 1 confirmed. Minting is frozen for the prepared delayed set. Continue with Step 2 to request verified randomness.', true);
+      await refreshStudioR2RevealActions();
+    } catch (error) {
+      log('forgeTestStatus', 'DEFERRED REVEAL STEP 1: ' + (error.shortMessage || error.message), true);
+    }
   }
 
-  async function lockTimedOutForgeBatch() {
+  async function requestPreparedDelayedReveal() {
     try {
-    await requireForgeWrite(true);
- const collection = collectionContract(); const tx = await collection.lockTimedOutBatch(); await tx.wait(); log('forgeTestStatus','Timed-out partial Forge batch locked.'); }
-    catch (error) { log('forgeTestStatus','LOCK BATCH: ' + (error.shortMessage || error.message),true); }
-  }
-
-  async function requestForgeBatchRandomness() {
-    try {
-    await requireForgeWrite(true);
-
-      const cfg = canonicalV1Config(); const collection = collectionContract(); const batchId = BigInt(Math.max(1, Number($('forgeBatchId')?.value || 1)));
-      const quote = await refreshVrfQuote(); if (!quote) throw new Error('Randomness quote unavailable.');
-      if (!quote.within) throw new Error('Current randomness quote is above the collection launch ceiling.');
-      log('forgeTestStatus','Requesting verified randomness for Forge batch ' + batchId + '...',true);
-      const randomnessOverrides = await rf26RandomnessRequestOverrides(cfg, collection, 'Forge batch randomness');
-      const tx = await collection.requestRandomnessForBatch(batchId, randomnessOverrides); const receipt = await tx.wait();
-      const requestId = requestIdFromReceipt(receipt, collection, 'ForgeRandomnessRequested');
-      if (requestId != null) { forgeState.latestRequestId = requestId; if ($('forgeLocalRequestId')) $('forgeLocalRequestId').value = requestId.toString(); }
-      log('forgeTestStatus','Forge randomness requested' + (requestId != null ? ' - local request ' + requestId : '') + '. Wait for Chainlink wordReady before replay.');
-    } catch (error) { log('forgeTestStatus','REQUEST BATCH: ' + (error.shortMessage || error.message),true); }
-  }
-
-  async function replayVerifiedWord() {
-    try {
-    await requireForgeWrite(true);
-
-      const cfg = canonicalV1Config(); const localRequestId = BigInt(String($('forgeLocalRequestId')?.value || forgeState.latestRequestId || '').trim());
-      if (localRequestId <= 0n) throw new Error('Enter a valid local request ID.');
-      const adapter = v1RandomnessContract(forgeState.signer);
-      const ready = await adapter.wordReadyForLocalRequest(localRequestId); if (!ready) throw new Error('The verified Chainlink word is not ready upstream yet.');
-      log('forgeTestStatus','Replaying exact verified word for local request ' + localRequestId + ' with explicit gas...',true);
-      const tx = await adapter.replayFulfillment(localRequestId, { gasLimit: BigInt(cfg.replayGasLimit || 1000000) }); await tx.wait();
-      const delivered = await adapter.deliveredForLocalRequest(localRequestId);
-      if (!delivered) throw new Error('Replay transaction mined but deliveredForLocalRequest is still false. Do not treat this request as delivered.');
-      log('forgeTestStatus','Verified word delivery confirmed: deliveredForLocalRequest(' + localRequestId + ') == true.');
-    } catch (error) { log('forgeTestStatus','REPLAY ERROR: ' + (error.shortMessage || error.message),true); }
-  }
-
-  async function settleReadyForge() {
-    try {
-    await requireForgeWrite(true);
- const collection = collectionContract(); const maxTokens = Math.max(1, Math.floor(Number($('forgeSettleMaxTokens')?.value || 100))); const tx = await collection.settleReady(maxTokens); await tx.wait(); log('forgeTestStatus','settleReady(' + maxTokens + ') confirmed. Ready batches were settled in order up to the requested cap.'); }
-    catch (error) { log('forgeTestStatus','SETTLE ERROR: ' + (error.shortMessage || error.message),true); }
+      await requireForgeWrite(true);
+      const collection = collectionContract();
+      const [mode, prepared, revealed, requestId] = await Promise.all([
+        collection.futureRevealMode(),
+        collection.delayedRevealPrepared(),
+        collection.delayedRevealed(),
+        collection.delayedRevealRequestId()
+      ]);
+      if (revealed) throw new Error('This collection has already been revealed.');
+      if (Number(mode) !== 0) throw new Error('This collection is no longer awaiting Deferred Reveal.');
+      if (!prepared) throw new Error('Complete Step 1 before requesting delayed randomness.');
+      if (BigInt(requestId) > 0n) {
+        log('forgeTestStatus', 'Step 2 was already submitted. Reveal will finish automatically after verified randomness arrives.', true);
+        await refreshStudioR2RevealActions();
+        return;
+      }
+      log('forgeTestStatus', 'Deferred Reveal — Step 2 of 2: requesting verified randomness...', true);
+      const tx = await collection.requestDelayedReveal();
+      await tx.wait();
+      log('forgeTestStatus', 'Step 2 confirmed. Verified randomness is pending; the frozen NFTs will reveal automatically. No third creator transaction is required.', true);
+      await refreshStudioR2RevealActions();
+    } catch (error) {
+      log('forgeTestStatus', 'DEFERRED REVEAL STEP 2: ' + (error.shortMessage || error.message), true);
+    }
   }
 
   function decodeDataUri(uri) {
@@ -2463,36 +2481,105 @@ ${await file.text()}`;
   async function collectionDashboardSnapshotV2(address, runner) {
     const c = new window.ethers.Contract(address, V2_COLLECTION_ABI, runner);
     const cfg = canonicalV1Config();
-    const [factory, name, symbol, description, creator, controller, dataAddress, mintPhasesAddress, payoutReceiver, royaltyReceiver, royaltyBps, maxSupply, totalCommitted, totalMinted, futureRevealMode, batchWindowSeconds, maxRandomnessCostPerBatchWei, hopperBalance, creatorEscrow, accruedCreatorProceeds, delayedRevealRequested, delayedRevealed, delayedRevealRequestId, openBatchId, nextSettleBatchId, unrequestedLockedBatches, lockedUnsettledBatches] = await Promise.all([
-      c.factory(), c.name(), c.symbol(), c.description(), c.creator(), c.controller(), c.dataContract(), c.mintPhases(), c.payoutReceiver(), c.royaltyReceiver(), c.royaltyBps(), c.maxSupply(), c.totalCommitted(), c.totalMinted(), c.futureRevealMode(), c.batchWindowSeconds(), c.maxRandomnessCostPerBatchWei(), c.hopperBalance(), c.creatorEscrow(), c.accruedCreatorProceeds(), c.delayedRevealRequested(), c.delayedRevealed(), c.delayedRevealRequestId(), c.openBatchId(), c.nextSettleBatchId(), c.unrequestedLockedBatches(), c.lockedUnsettledBatches()
+    const optional = async (promise, fallback) => {
+      try { return await promise; } catch (_) { return fallback; }
+    };
+
+    const [
+      factory, name, symbol, description, creator, controller, dataAddress, mintPhasesAddress,
+      payoutReceiver, royaltyReceiver, royaltyBps, maxSupply, totalCommitted, totalMinted,
+      pendingSupply, futureRevealMode, batchWindowSeconds, maxRandomnessCostPerBatchWei,
+      delayedRevealRequested, delayedRevealPrepared, delayedRevealed, delayedRevealSupply,
+      delayedRevealRequestId, pendingDelayedReserveRefundWei, activeAutoRevealRequests,
+      hopperBalance, creatorEscrow, accruedCreatorProceeds
+    ] = await Promise.all([
+      c.factory(), c.name(), c.symbol(), c.description(), c.creator(), c.controller(), c.dataContract(), c.mintPhases(),
+      c.payoutReceiver(), c.royaltyReceiver(), c.royaltyBps(), c.maxSupply(), c.totalCommitted(), c.totalMinted(),
+      c.pendingSupply(), c.futureRevealMode(), c.batchWindowSeconds(), c.maxRandomnessCostPerBatchWei(),
+      c.delayedRevealRequested(), c.delayedRevealPrepared(), c.delayedRevealed(), c.delayedRevealSupply(),
+      c.delayedRevealRequestId(), c.pendingDelayedReserveRefundWei(), c.activeAutoRevealRequests(),
+      optional(c.hopperBalance(), 0n), optional(c.creatorEscrow(), 0n), optional(c.accruedCreatorProceeds(), 0n)
     ]);
-    if (String(factory).toLowerCase() !== String(cfg.factory).toLowerCase()) throw new Error('Not current R12-v2 Factory');
+
+    if (String(factory).toLowerCase() !== String(cfg.factory).toLowerCase()) throw new Error('Not current R12-v2 R2 Factory');
     const factoryReader = new window.ethers.Contract(cfg.factory, V2_FACTORY_ABI, runner);
     const factoryMintPhases = await factoryReader.mintPhasesForCollection(address);
     if (String(factoryMintPhases).toLowerCase() !== String(mintPhasesAddress).toLowerCase()) throw new Error('MintPhases binding mismatch');
+
     const phasesContract = new window.ethers.Contract(mintPhasesAddress, V2_MINT_PHASES_ABI, runner);
     const [masterMintEnabled, phaseCount] = await Promise.all([phasesContract.masterMintEnabled(), phasesContract.phaseCount()]);
     const phases = [];
     const count = Math.min(Number(phaseCount), 500);
     for (let start = 1; start <= count; start += 25) {
       const ids = Array.from({ length: Math.min(25, count - start + 1) }, (_, i) => start + i);
-      const rows = await Promise.all(ids.map(async id => { const raw = await phasesContract.phases(id); let open = false; try { open = Boolean(await phasesContract.phaseIsOpen(id)); } catch (_) {} return { id, price:BigInt(raw.price ?? raw[0]), startTime:Number(raw.startTime ?? raw[1]), endTime:Number(raw.endTime ?? raw[2]), phaseSupply:Number(raw.phaseSupply ?? raw[3]), minted:Number(raw.minted ?? raw[4]), maxPerWallet:Number(raw.maxPerWallet ?? raw[5]), merkleRoot:String(raw.merkleRoot ?? raw[6]), accessType:Number(raw.accessType ?? raw[7]), priority:Number(raw.priority ?? raw[8]), enabled:Boolean(raw.enabled ?? raw[9]), open }; }));
+      const rows = await Promise.all(ids.map(async id => {
+        const raw = await phasesContract.phases(id);
+        let open = false;
+        try { open = Boolean(await phasesContract.phaseIsOpen(id)); } catch (_) {}
+        return {
+          id,
+          price: BigInt(raw.price ?? raw[0]),
+          startTime: Number(raw.startTime ?? raw[1]),
+          endTime: Number(raw.endTime ?? raw[2]),
+          phaseSupply: Number(raw.phaseSupply ?? raw[3]),
+          minted: Number(raw.minted ?? raw[4]),
+          maxPerWallet: Number(raw.maxPerWallet ?? raw[5]),
+          merkleRoot: String(raw.merkleRoot ?? raw[6]),
+          accessType: Number(raw.accessType ?? raw[7]),
+          priority: Number(raw.priority ?? raw[8]),
+          enabled: Boolean(raw.enabled ?? raw[9]),
+          open
+        };
+      }));
       phases.push(...rows);
     }
+
     let contentSealed = false, provenance = window.ethers.ZeroHash;
-    try { const data = new window.ethers.Contract(dataAddress, V1_PROJECT_DATA_ABI, runner); [contentSealed, provenance] = await Promise.all([data.contentSealed(), data.provenanceHash()]); } catch (_) {}
-    const batches = [];
-    const firstBatch = Math.max(1, Number(nextSettleBatchId));
-    const lastBatch = Math.min(Number(openBatchId), firstBatch + 24);
-    for (let id = firstBatch; id <= lastBatch; id++) { try { const raw = await c.batches(id); const q = Number(raw.totalQuantity ?? raw[5]); if (!q && id === Number(openBatchId)) continue; batches.push({ id, openedAt:Number(raw.openedAt ?? raw[2]), lockedAt:Number(raw.lockedAt ?? raw[3]), reservationCount:Number(raw.reservationCount ?? raw[4]), totalQuantity:q, randomnessCost:BigInt(raw.randomnessCost ?? raw[6]), requestId:BigInt(raw.requestId ?? raw[7]), locked:Boolean(raw.locked ?? raw[9]), wordReady:Boolean(raw.wordReady ?? raw[10]), settled:Boolean(raw.settled ?? raw[11]) }); } catch (_) {} }
+    try {
+      const data = new window.ethers.Contract(dataAddress, V1_PROJECT_DATA_ABI, runner);
+      [contentSealed, provenance] = await Promise.all([data.contentSealed(), data.provenanceHash()]);
+    } catch (_) {}
+
     return {
-      isV2:true, isV1:false, address:window.ethers.getAddress(address), name, symbol, description,
-      owner:window.ethers.getAddress(controller), creator:window.ethers.getAddress(creator), controller:window.ethers.getAddress(controller), controllerActive:String(controller).toLowerCase() !== window.ethers.ZeroAddress.toLowerCase(),
-      dataAddress:window.ethers.getAddress(dataAddress), mintPhasesAddress:window.ethers.getAddress(mintPhasesAddress), payoutReceiver:window.ethers.getAddress(payoutReceiver), royaltyReceiver:window.ethers.getAddress(royaltyReceiver), royaltyBps:Number(royaltyBps),
-      maxSupply:Number(maxSupply), totalCommitted:Number(totalCommitted), totalMinted:Number(totalMinted), futureRevealMode:Number(futureRevealMode), batchWindowSeconds:Number(batchWindowSeconds), maxRandomnessCostPerBatchWei:BigInt(maxRandomnessCostPerBatchWei),
-      hopperBalance:BigInt(hopperBalance), creatorEscrow:BigInt(creatorEscrow), accruedCreatorProceeds:BigInt(accruedCreatorProceeds), delayedRevealRequested:Boolean(delayedRevealRequested), delayedRevealed:Boolean(delayedRevealed), delayedRevealRequestId:BigInt(delayedRevealRequestId),
-      openBatchId:Number(openBatchId), nextSettleBatchId:Number(nextSettleBatchId), unrequestedLockedBatches:Number(unrequestedLockedBatches), lockedUnsettledBatches:Number(lockedUnsettledBatches),
-      masterMintEnabled:Boolean(masterMintEnabled), phaseCount:Number(phaseCount), phases, batches, phasesTruncated:Number(phaseCount)>count, contentSealed:Boolean(contentSealed), sealed:Boolean(contentSealed), provenance
+      isV2: true,
+      isV1: false,
+      r2: true,
+      address: window.ethers.getAddress(address),
+      name, symbol, description,
+      owner: window.ethers.getAddress(controller),
+      creator: window.ethers.getAddress(creator),
+      controller: window.ethers.getAddress(controller),
+      controllerActive: String(controller).toLowerCase() !== window.ethers.ZeroAddress.toLowerCase(),
+      dataAddress: window.ethers.getAddress(dataAddress),
+      mintPhasesAddress: window.ethers.getAddress(mintPhasesAddress),
+      payoutReceiver: window.ethers.getAddress(payoutReceiver),
+      royaltyReceiver: window.ethers.getAddress(royaltyReceiver),
+      royaltyBps: Number(royaltyBps),
+      maxSupply: Number(maxSupply),
+      totalCommitted: Number(totalCommitted),
+      totalMinted: Number(totalMinted),
+      pendingSupply: Number(pendingSupply),
+      soldOut: Number(totalMinted) >= Number(maxSupply),
+      futureRevealMode: Number(futureRevealMode),
+      batchWindowSeconds: Number(batchWindowSeconds),
+      maxRandomnessCostPerBatchWei: BigInt(maxRandomnessCostPerBatchWei),
+      hopperBalance: BigInt(hopperBalance),
+      creatorEscrow: BigInt(creatorEscrow),
+      accruedCreatorProceeds: BigInt(accruedCreatorProceeds),
+      delayedRevealRequested: Boolean(delayedRevealRequested),
+      delayedRevealPrepared: Boolean(delayedRevealPrepared),
+      delayedRevealed: Boolean(delayedRevealed),
+      delayedRevealSupply: Number(delayedRevealSupply),
+      delayedRevealRequestId: BigInt(delayedRevealRequestId),
+      pendingDelayedReserveRefundWei: BigInt(pendingDelayedReserveRefundWei),
+      activeAutoRevealRequests: Number(activeAutoRevealRequests),
+      masterMintEnabled: Boolean(masterMintEnabled),
+      phaseCount: Number(phaseCount),
+      phases,
+      phasesTruncated: Number(phaseCount) > count,
+      contentSealed: Boolean(contentSealed),
+      sealed: Boolean(contentSealed),
+      provenance
     };
   }
   async function collectionDashboardSnapshot(address, runner = readProvider(11155111) || forgeState.provider) {
@@ -3131,66 +3218,184 @@ ${await file.text()}`;
 
   async function handleV2LaunchedAction(action, snap) {
     try {
-    if(action!=='mintpage')await requireForgeWrite(snap.address);
+      if (action !== 'mintpage') await requireForgeWrite(snap.address);
 
       if (action === 'mintpage') {
         window.open(`./mint.html?contract=${encodeURIComponent(snap.address)}&chain=11155111`, '_blank', 'noopener');
         return;
       }
       if (!forgeState.signer) await connectWallet();
+
       const collection = new window.ethers.Contract(snap.address, V2_COLLECTION_ABI, forgeState.signer);
       const phases = new window.ethers.Contract(snap.mintPhasesAddress, V2_MINT_PHASES_ABI, forgeState.signer);
       const canControl = String(snap.controller).toLowerCase() === String(forgeState.wallet).toLowerCase();
-      if (['mastermint','creatormint','deferredreveal','payout','royalty'].includes(action) && !canControl) throw new Error('Connected wallet is not the active collection controller.');
-      if (action === 'mastermint') { launchedStatus((snap.masterMintEnabled?'Pausing':'Enabling') + ' Minting through MintPhases...'); const tx=await phases.setMasterMintEnabled(!snap.masterMintEnabled); await tx.wait(); }
-      else if (action === 'creatormint') { const q=Math.max(1,Math.floor(Number($('dashboardV2CreatorMintQty')?.value||1))); const quote=await phases.creatorTeamFeeQuote(q); const fee=BigInt(quote.feeWei??quote[0]??0n); const healthy=Boolean(quote.oracleHealthy??quote[1]); const active=Boolean(quote.feeActive??quote[2]); const value=active&&healthy?fee:0n; launchedStatus('Creator mint fee quote: '+window.ethers.formatEther(value)+' ETH. Submitting...'); const tx=await collection.creatorMint(forgeState.wallet,q,{value}); await tx.wait(); }
-      else if (action === 'withdraw') { launchedStatus('Withdrawing accrued creator proceeds to '+snap.payoutReceiver+'...'); const tx=await collection.withdraw(); await tx.wait(); }
-      else if (action === 'payout') { const addr=String($('dashboardV2Payout')?.value||'').trim(); if(!window.ethers.isAddress(addr)) throw new Error('Invalid payout receiver.'); const tx=await collection.setPayoutReceiver(addr); await tx.wait(); }
-      else if (action === 'royalty') { const addr=String($('dashboardV2RoyaltyWallet')?.value||'').trim(); const bps=Math.round(Math.max(0,Math.min(10,Number($('dashboardV2RoyaltyPct')?.value||0)))*100); if(!window.ethers.isAddress(addr)) throw new Error('Invalid royalty receiver.'); const tx=await collection.setRoyalty(addr,bps); await tx.wait(); }
-      else if (action === 'deferredreveal') { const cfg=canonicalV1Config(); const randomnessOverrides=await rf26RandomnessRequestOverrides(cfg,collection,'Deferred Reveal'); const tx=await collection.requestDelayedReveal(randomnessOverrides); const receipt=await tx.wait(); const id=requestIdFromReceipt(receipt,collection,'DelayedRevealRequested'); launchedStatus('Deferred reveal requested'+(id!=null?' - local request '+id:'')+'. Replay only after the adapter reports wordReady.'); }
-      else if (action === 'lockbatch') { const tx=await collection.lockTimedOutBatch(); await tx.wait(); }
-      else if (action === 'requestbatch') { const cfg=canonicalV1Config(); const id=BigInt(Math.max(1,Number($('dashboardV2BatchId')?.value||1))); const randomnessOverrides=await rf26RandomnessRequestOverrides(cfg,collection,'Forge batch randomness'); const tx=await collection.requestRandomnessForBatch(id,randomnessOverrides); const receipt=await tx.wait(); const rid=requestIdFromReceipt(receipt,collection,'ForgeRandomnessRequested'); if(rid!=null&&$('dashboardV2RequestId')) $('dashboardV2RequestId').value=rid.toString(); launchedStatus('Randomness requested'+(rid!=null?' - local request '+rid:'')+'.'); }
-      else if (action === 'replay') { const cfg=canonicalV1Config(); const id=BigInt(String($('dashboardV2RequestId')?.value||'0')); if(id<=0n) throw new Error('Enter a local request ID.'); const adapter=new window.ethers.Contract(cfg.randomnessAdapter,V2_RANDOMNESS_ABI,forgeState.signer); if(!await adapter.wordReadyForLocalRequest(id)) throw new Error('Verified Chainlink word is not ready yet.'); const tx=await adapter.replayFulfillment(id,{gasLimit:BigInt(cfg.replayGasLimit||1000000)}); await tx.wait(); if(!await adapter.deliveredForLocalRequest(id)) throw new Error('Replay mined but deliveredForLocalRequest is still false.'); launchedStatus('Verified word delivery confirmed.'); }
-      else if (action === 'settle') { const max=Math.max(1,Math.floor(Number($('dashboardV2SettleMax')?.value||100))); const tx=await collection.settleReady(max); await tx.wait(); }
+      if (['mastermint','creatormint','preparedeferred','requestdeferred','withdraw','payout','royalty'].includes(action) && !canControl) {
+        throw new Error('Connected wallet is not the active collection controller.');
+      }
+
+      if (action === 'mastermint') {
+        launchedStatus((snap.masterMintEnabled ? 'Pausing' : 'Enabling') + ' Minting through MintPhases...');
+        const tx = await phases.setMasterMintEnabled(!snap.masterMintEnabled);
+        await tx.wait();
+      } else if (action === 'creatormint') {
+        if (snap.soldOut) throw new Error('Minting unavailable — collection maximum supply has already been minted.');
+        const q = Math.max(1, Math.min(50, Math.floor(Number($('dashboardV2CreatorMintQty')?.value || 1))));
+        const quote = await phases.creatorTeamFeeQuote(q);
+        const fee = BigInt(quote.feeWei ?? quote[0] ?? 0n);
+        const healthy = Boolean(quote.oracleHealthy ?? quote[1]);
+        const active = Boolean(quote.feeActive ?? quote[2]);
+        const value = active && healthy ? fee : 0n;
+        launchedStatus('Creator mint fee quote: ' + window.ethers.formatEther(value) + ' ETH. Submitting immediate-ownership mint...');
+        const tx = await collection.creatorMint(forgeState.wallet, q, { value });
+        await tx.wait();
+        launchedStatus('Creator mint confirmed. NFT ownership is immediate; Forge reveal continues automatically when configured.');
+      } else if (action === 'withdraw') {
+        launchedStatus('Withdrawing accrued creator proceeds to ' + snap.payoutReceiver + '...');
+        const tx = await collection.withdraw();
+        await tx.wait();
+      } else if (action === 'payout') {
+        const addr = String($('dashboardV2Payout')?.value || '').trim();
+        if (!window.ethers.isAddress(addr)) throw new Error('Invalid payout receiver.');
+        const tx = await collection.setPayoutReceiver(addr);
+        await tx.wait();
+      } else if (action === 'royalty') {
+        const addr = String($('dashboardV2RoyaltyWallet')?.value || '').trim();
+        const bps = Math.round(Math.max(0, Math.min(10, Number($('dashboardV2RoyaltyPct')?.value || 0))) * 100);
+        if (!window.ethers.isAddress(addr)) throw new Error('Invalid royalty receiver.');
+        const tx = await collection.setRoyalty(addr, bps);
+        await tx.wait();
+      } else if (action === 'preparedeferred') {
+        if (snap.futureRevealMode !== 0 || snap.delayedRevealed) throw new Error('This collection is not awaiting Deferred Reveal.');
+        if (snap.totalMinted < 1) throw new Error('Mint at least one NFT before preparing Deferred Reveal.');
+        launchedStatus('Deferred Reveal — Step 1 of 2: freezing the currently minted set and preparing its randomness budget...');
+        const tx = await collection.prepareDelayedReveal();
+        await tx.wait();
+        launchedStatus('Step 1 confirmed. Continue with Step 2 to request verified randomness.');
+      } else if (action === 'requestdeferred') {
+        if (!snap.delayedRevealPrepared) throw new Error('Complete Step 1 before requesting delayed randomness.');
+        launchedStatus('Deferred Reveal — Step 2 of 2: requesting verified randomness...');
+        const tx = await collection.requestDelayedReveal();
+        await tx.wait();
+        launchedStatus('Step 2 confirmed. The frozen set will reveal automatically after verified randomness arrives. No third creator transaction is required.');
+      }
+
       await openLaunchedCollection(snap.address);
-    } catch (error) { launchedStatus('R12-v2 dashboard error: '+(error.shortMessage||error.message)); }
+    } catch (error) {
+      launchedStatus('R12-v2 R2 dashboard error: ' + (error.shortMessage || error.message));
+    }
   }
 
   async function openV2LaunchedCollection(snap) {
-    forgeState.launchedSelected=snap.address; forgeState.collectionAddress=snap.address; forgeState.dataAddress=snap.dataAddress; forgeState.mintPhasesAddress=snap.mintPhasesAddress;
-    $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button=>button.classList.toggle('selected',button.dataset.launchedAddress.toLowerCase()===snap.address.toLowerCase()));
-    const canControl=String(snap.controller).toLowerCase()===String(forgeState.wallet).toLowerCase();
-    const detail=$('launchedCollectionDetail'); if(!detail) return;
-    const nextBatch=snap.batches.find(b=>!b.settled)||null;
-    detail.innerHTML = '<div class="launched-detail-head"><div><span class="eyebrow">R12-v2 COLLECTION</span><h3>'+esc(snap.name)+'</h3><p>'+esc(snap.address)+'</p></div><span class="launched-badge '+(canControl?'good':'warn')+'">'+(canControl?'ACTIVE CONTROLLER':'READ ONLY')+'</span></div>'+
-      '<div class="launched-stats"><div><span>Minted / committed / max</span><strong>'+snap.totalMinted+' / '+snap.totalCommitted+' / '+snap.maxSupply+'</strong></div><div><span>Minting</span><strong>'+(snap.masterMintEnabled?'ON':'OFF')+'</strong></div><div><span>Reveal</span><strong>'+(snap.futureRevealMode===0?'DEFERRED':'FORGE')+'</strong></div><div><span>Stages</span><strong>'+snap.phaseCount+'</strong></div></div>'+
-      '<div class="launched-section"><h4>R12-v2 contract bindings</h4><div class="forge-rows"><div class="forge-row"><span>ProjectData</span><strong>'+esc(shortAddr(snap.dataAddress))+'</strong></div><div class="forge-row"><span>MintPhases</span><strong>'+esc(shortAddr(snap.mintPhasesAddress))+'</strong></div><div class="forge-row"><span>Content sealed</span><strong>'+(snap.contentSealed?'Yes':'No')+'</strong></div><div class="forge-row"><span>Batch window</span><strong>'+snap.batchWindowSeconds+' s</strong></div><div class="forge-row"><span>Randomness ceiling</span><strong>'+esc(window.ethers.formatEther(snap.maxRandomnessCostPerBatchWei))+' ETH</strong></div></div></div>'+
-      '<div class="launched-section"><h4>Creator proceeds + reveal funding</h4><div class="launched-stats"><div><span>Accrued creator proceeds</span><strong>'+esc(window.ethers.formatEther(snap.accruedCreatorProceeds))+' ETH</strong></div><div><span>Creator escrow</span><strong>'+esc(window.ethers.formatEther(snap.creatorEscrow))+' ETH</strong></div><div><span>Reveal hopper</span><strong>'+esc(window.ethers.formatEther(snap.hopperBalance))+' ETH</strong></div></div><div class="launched-actions"><button class="ghost-btn" data-v2-dashboard-action="withdraw">Withdraw to Payout Receiver</button></div></div>'+
-      '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="'+(snap.masterMintEnabled?'ghost-btn danger-btn':'primary-btn')+'" data-v2-dashboard-action="mastermint" '+(canControl?'':'disabled')+'>'+(snap.masterMintEnabled?'Pause Minting':'Enable Minting')+'</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="50" value="1" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" '+(canControl?'':'disabled')+'>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="'+esc(snap.payoutReceiver)+'" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="payout" '+(canControl?'':'disabled')+'>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="'+esc(snap.royaltyReceiver)+'" '+(canControl?'':'disabled')+'/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="'+(snap.royaltyBps/100).toFixed(2)+'" '+(canControl?'':'disabled')+'/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" '+(canControl?'':'disabled')+'>Update Royalty</button></div></div>'+
-      '<div class="launched-section"><h4>Reveal execution</h4><div class="launched-stats"><div><span>Delayed requested</span><strong>'+(snap.delayedRevealRequested?'YES':'NO')+'</strong></div><div><span>Delayed revealed</span><strong>'+(snap.delayedRevealed?'YES':'NO')+'</strong></div><div><span>Unrequested locked batches</span><strong>'+snap.unrequestedLockedBatches+'</strong></div><div><span>Locked unsettled</span><strong>'+snap.lockedUnsettledBatches+'</strong></div></div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="deferredreveal" '+(canControl&&snap.futureRevealMode===0&&!snap.delayedRevealRequested&&snap.totalMinted>0?'':'disabled')+'>Request Deferred Reveal</button><button class="ghost-btn" data-v2-dashboard-action="lockbatch">Lock Timed-Out Batch</button><label class="field"><span>Batch ID</span><input id="dashboardV2BatchId" type="number" min="1" value="'+(nextBatch?.id||Math.max(1,snap.nextSettleBatchId))+'"/></label><button class="ghost-btn" data-v2-dashboard-action="requestbatch">Request Randomness</button><label class="field"><span>Local request ID</span><input id="dashboardV2RequestId" type="number" min="1" value="'+(nextBatch&&nextBatch.requestId>0n?nextBatch.requestId.toString():(snap.delayedRevealRequestId>0n?snap.delayedRevealRequestId.toString():''))+'"/></label><button class="ghost-btn" data-v2-dashboard-action="replay">Replay Verified Word</button><label class="field"><span>Settle max</span><input id="dashboardV2SettleMax" type="number" min="1" value="100"/></label><button class="ghost-btn" data-v2-dashboard-action="settle">Settle Ready</button></div><small class="forge-footnote">Request gas: 1,500,000. Replay gas: 1,000,000. Replay is only reported successful after deliveredForLocalRequest is true.</small></div>'+
-      '<div class="launched-section"><h4>MintPhases stages</h4>'+v2PhaseRows(snap,canControl)+'<div class="prototype-note"><strong>Create new stages in Studio R1</strong><p>Existing stages can be updated, enabled, or disabled here. Initial Public / Approved Wallet stage creation is handled during the R12-v2 Studio launch flow in R1.</p></div></div>'+
-      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">R12-v2 MintPhases-aware collector page is available at a permanent collection URL. Approved Wallet proof tables are synced from the saved Studio project.</div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/'+esc(snap.address)+'" rel="noreferrer" target="_blank">View on Etherscan</a></div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
-    detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button=>button.addEventListener('click',()=>handleV2LaunchedAction(button.dataset.v2DashboardAction,snap)));
-    detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button=>button.addEventListener('click',async()=>{try{await requireForgeWrite(snap.address);const id=Number(button.dataset.v2PhaseToggle);const p=snap.phases.find(x=>x.id===id);const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);const tx=await mp.setPhaseEnabled(id,!p.enabled);await tx.wait();await openLaunchedCollection(snap.address);}catch(error){launchedStatus('Stage toggle: '+(error.shortMessage||error.message));}}));
-    detail.querySelectorAll('[data-v2-no-end]').forEach(toggle=>toggle.addEventListener('change',()=>{const id=Number(toggle.dataset.v2NoEnd);const endInput=$('v2PhaseEnd-'+id);if(endInput){endInput.disabled=toggle.checked||!canControl;if(toggle.checked)endInput.value='';}}));
-    detail.querySelectorAll('[data-v2-phase-save]').forEach(button=>button.addEventListener('click',async()=>{try{await requireForgeWrite(snap.address);
-      const id=Number(button.dataset.v2PhaseSave);
-      const p=snap.phases.find(row=>row.id===id);
-      if(!p)throw new Error('Stage was not found.');
-      const parseDate=(fieldId,label,allowBlank=true)=>{const raw=String($(fieldId)?.value||'').trim();if(!raw){if(allowBlank)return 0;throw new Error(label+' is required.');}const date=new Date(raw);if(!Number.isFinite(date.getTime()))throw new Error(label+' is invalid.');return Math.floor(date.getTime()/1000);};
-      const price=window.ethers.parseEther(String($('v2PhasePrice-'+id)?.value||0));
-      const start=parseDate('v2PhaseStart-'+id,'Start date/time',true);
-      const noEnd=!!$('v2PhaseNoEnd-'+id)?.checked;
-      const end=noEnd?0:parseDate('v2PhaseEnd-'+id,'End date/time',false);
-      if(end&&end<=start)throw new Error('End date/time must be later than the start.');
-      const supply=Math.max(0,Math.floor(Number($('v2PhaseSupply-'+id)?.value||0)));
-      const wallet=Math.max(0,Math.floor(Number($('v2PhaseWallet-'+id)?.value||0)));
-      const mp=new window.ethers.Contract(snap.mintPhasesAddress,V2_MINT_PHASES_ABI,forgeState.signer);
-      launchedStatus('Updating Stage '+id+' without changing its access type, verification root, or priority…');
-      const tx=await mp.updatePhase(id,price,start,end,supply,wallet,p.merkleRoot,p.accessType,p.priority);
-      await tx.wait();
-      await openLaunchedCollection(snap.address);
-    }catch(error){launchedStatus('Stage update: '+(error.shortMessage||error.message));}}));
+    forgeState.launchedSelected = snap.address;
+    forgeState.collectionAddress = snap.address;
+    forgeState.dataAddress = snap.dataAddress;
+    forgeState.mintPhasesAddress = snap.mintPhasesAddress;
+    $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button =>
+      button.classList.toggle('selected', button.dataset.launchedAddress.toLowerCase() === snap.address.toLowerCase())
+    );
+
+    const canControl = String(snap.controller).toLowerCase() === String(forgeState.wallet).toLowerCase();
+    const detail = $('launchedCollectionDetail');
+    if (!detail) return;
+
+    let revealTitle = 'DEFERRED REVEAL';
+    let revealMessage = '';
+    let revealActions = '';
+    if (snap.delayedRevealed) {
+      revealTitle = 'COLLECTION REVEALED';
+      revealMessage = 'The frozen delayed set has revealed automatically. Any remaining unsold supply now uses fresh automatic Forge randomness.';
+    } else if (snap.futureRevealMode === 1) {
+      revealTitle = 'AUTOMATIC REVEAL ACTIVE';
+      revealMessage = snap.activeAutoRevealRequests > 0
+        ? snap.activeAutoRevealRequests + ' automatic reveal request' + (snap.activeAutoRevealRequests === 1 ? '' : 's') + ' currently awaiting completion. No creator action is required.'
+        : 'Collectors own NFTs immediately at mint. Verified randomness and reveal are automatic; no creator settlement action is required.';
+    } else if (snap.delayedRevealRequestId > 0n) {
+      revealTitle = 'RANDOMNESS REQUESTED';
+      revealMessage = 'Step 2 is confirmed. The frozen supply will reveal automatically when verified randomness arrives. No third creator transaction is required.';
+      revealActions = '<button class="primary-btn" type="button" disabled>WAITING FOR AUTOMATIC REVEAL</button>';
+    } else if (snap.delayedRevealPrepared) {
+      revealTitle = 'STEP 1 COMPLETE';
+      revealMessage = 'The currently minted set is frozen and its randomness budget is prepared. Continue with Step 2.';
+      revealActions = '<button class="primary-btn" data-v2-dashboard-action="requestdeferred" ' + (canControl ? '' : 'disabled') + '>CONTINUE REVEAL — STEP 2 OF 2</button>';
+    } else if (snap.totalMinted > 0) {
+      revealMessage = 'Step 1 freezes exactly the currently minted NFTs and prepares the delayed randomness budget. Step 2 requests randomness; reveal then finishes automatically.';
+      revealActions = '<button class="primary-btn" data-v2-dashboard-action="preparedeferred" ' + (canControl ? '' : 'disabled') + '>REVEAL COLLECTION — STEP 1 OF 2</button>';
+    } else {
+      revealMessage = 'Deferred Reveal is configured. Mint at least one NFT before starting the two-step creator reveal.';
+      revealActions = '<button class="primary-btn" type="button" disabled>REVEAL COLLECTION — STEP 1 OF 2</button>';
+    }
+
+    const soldOutBanner = snap.soldOut
+      ? '<div class="forge-check warn">Minting unavailable — collection maximum supply has already been minted.</div>'
+      : '';
+
+    detail.innerHTML =
+      '<div class="launched-detail-head"><div><span class="eyebrow">R12-v2 R2 COLLECTION</span><h3>' + esc(snap.name) + '</h3><p>' + esc(snap.address) + '</p></div><span class="launched-badge ' + (canControl ? 'good' : 'warn') + '">' + (canControl ? 'ACTIVE CONTROLLER' : 'READ ONLY') + '</span></div>' +
+      soldOutBanner +
+      '<div class="launched-stats"><div><span>Minted / committed / max</span><strong>' + snap.totalMinted + ' / ' + snap.totalCommitted + ' / ' + snap.maxSupply + '</strong></div><div><span>Pending ownership</span><strong>' + snap.pendingSupply + '</strong></div><div><span>Reveal</span><strong>' + (snap.futureRevealMode === 0 ? 'DEFERRED' : 'FORGE') + '</strong></div><div><span>Stages</span><strong>' + snap.phaseCount + '</strong></div></div>' +
+      '<div class="launched-section"><h4>R12-v2 R2 contract bindings</h4><div class="forge-rows"><div class="forge-row"><span>ProjectData</span><strong>' + esc(shortAddr(snap.dataAddress)) + '</strong></div><div class="forge-row"><span>MintPhases</span><strong>' + esc(shortAddr(snap.mintPhasesAddress)) + '</strong></div><div class="forge-row"><span>Content sealed</span><strong>' + (snap.contentSealed ? 'Yes' : 'No') + '</strong></div><div class="forge-row"><span>Randomness ceiling</span><strong>' + esc(window.ethers.formatEther(snap.maxRandomnessCostPerBatchWei)) + ' ETH</strong></div></div></div>' +
+      '<div class="launched-section"><h4>Creator proceeds + reveal funding</h4><div class="launched-stats"><div><span>Accrued creator proceeds</span><strong>' + esc(window.ethers.formatEther(snap.accruedCreatorProceeds)) + ' ETH</strong></div><div><span>Reveal hopper</span><strong>' + esc(window.ethers.formatEther(snap.hopperBalance)) + ' ETH</strong></div><div><span>Pending Reserve refund</span><strong>' + esc(window.ethers.formatEther(snap.pendingDelayedReserveRefundWei)) + ' ETH</strong></div></div><div class="launched-actions"><button class="ghost-btn" data-v2-dashboard-action="withdraw" ' + (canControl ? '' : 'disabled') + '>Withdraw to Payout Receiver</button></div></div>' +
+      '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="' + (snap.masterMintEnabled ? 'ghost-btn danger-btn' : 'primary-btn') + '" data-v2-dashboard-action="mastermint" ' + (canControl ? '' : 'disabled') + '>' + (snap.masterMintEnabled ? 'Pause Minting' : 'Enable Minting') + '</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="' + Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted)) + '" value="1" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="' + esc(snap.payoutReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="payout" ' + (canControl ? '' : 'disabled') + '>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="' + esc(snap.royaltyReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="' + (snap.royaltyBps / 100).toFixed(2) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" ' + (canControl ? '' : 'disabled') + '>Update Royalty</button></div></div>' +
+      '<div class="launched-section"><h4>Reveal</h4><div class="launched-stats"><div><span>State</span><strong>' + revealTitle + '</strong></div><div><span>Frozen delayed supply</span><strong>' + snap.delayedRevealSupply + '</strong></div><div><span>Automatic requests</span><strong>' + snap.activeAutoRevealRequests + '</strong></div></div><div class="forge-inline-status">' + esc(revealMessage) + '</div><div class="launched-actions">' + revealActions + '</div><small class="forge-footnote">Normal Studio controls do not expose batch locking, manual randomness requests, request IDs, replay, or settlement. R2 handles the normal reveal lifecycle automatically.</small></div>' +
+      '<div class="launched-section"><h4>MintPhases stages</h4>' + v2PhaseRows(snap, canControl) + '<div class="prototype-note"><strong>Stage scheduling remains independent of reveal</strong><p>Existing stages can be updated, enabled, or disabled here. A sold-out collection stays closed even if a stage schedule is otherwise open.</p></div></div>' +
+      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">The R12-v2 R2 MintPhases-aware collector page uses immediate NFT ownership and automatic Forge reveal semantics.</div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/' + esc(snap.address) + '" rel="noreferrer" target="_blank">View on Etherscan</a></div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
+
+    detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button =>
+      button.addEventListener('click', () => handleV2LaunchedAction(button.dataset.v2DashboardAction, snap))
+    );
+    detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button => button.addEventListener('click', async () => {
+      try {
+        await requireForgeWrite(snap.address);
+        const id = Number(button.dataset.v2PhaseToggle);
+        const p = snap.phases.find(x => x.id === id);
+        const mp = new window.ethers.Contract(snap.mintPhasesAddress, V2_MINT_PHASES_ABI, forgeState.signer);
+        const tx = await mp.setPhaseEnabled(id, !p.enabled);
+        await tx.wait();
+        await openLaunchedCollection(snap.address);
+      } catch (error) {
+        launchedStatus('Stage toggle: ' + (error.shortMessage || error.message));
+      }
+    }));
+    detail.querySelectorAll('[data-v2-no-end]').forEach(toggle => toggle.addEventListener('change', () => {
+      const id = Number(toggle.dataset.v2NoEnd);
+      const endInput = $('v2PhaseEnd-' + id);
+      if (endInput) {
+        endInput.disabled = toggle.checked || !canControl;
+        if (toggle.checked) endInput.value = '';
+      }
+    }));
+    detail.querySelectorAll('[data-v2-phase-save]').forEach(button => button.addEventListener('click', async () => {
+      try {
+        await requireForgeWrite(snap.address);
+        const id = Number(button.dataset.v2PhaseSave);
+        const p = snap.phases.find(row => row.id === id);
+        if (!p) throw new Error('Stage was not found.');
+        const parseDate = (fieldId, label, allowBlank = true) => {
+          const raw = String($(fieldId)?.value || '').trim();
+          if (!raw) {
+            if (allowBlank) return 0;
+            throw new Error(label + ' is required.');
+          }
+          const date = new Date(raw);
+          if (!Number.isFinite(date.getTime())) throw new Error(label + ' is invalid.');
+          return Math.floor(date.getTime() / 1000);
+        };
+        const price = window.ethers.parseEther(String($('v2PhasePrice-' + id)?.value || 0));
+        const start = parseDate('v2PhaseStart-' + id, 'Start date/time', true);
+        const noEnd = !!$('v2PhaseNoEnd-' + id)?.checked;
+        const end = noEnd ? 0 : parseDate('v2PhaseEnd-' + id, 'End date/time', false);
+        if (end && end <= start) throw new Error('End date/time must be later than the start.');
+        const supply = Math.max(0, Math.floor(Number($('v2PhaseSupply-' + id)?.value || 0)));
+        const wallet = Math.max(0, Math.floor(Number($('v2PhaseWallet-' + id)?.value || 0)));
+        const mp = new window.ethers.Contract(snap.mintPhasesAddress, V2_MINT_PHASES_ABI, forgeState.signer);
+        launchedStatus('Updating Stage ' + id + ' without changing its access type, verification root, or priority...');
+        const tx = await mp.updatePhase(id, price, start, end, supply, wallet, p.merkleRoot, p.accessType, p.priority);
+        await tx.wait();
+        await openLaunchedCollection(snap.address);
+      } catch (error) {
+        launchedStatus('Stage update: ' + (error.shortMessage || error.message));
+      }
+    }));
   }
   async function openLaunchedCollection(address) {
     try {
@@ -3607,6 +3812,7 @@ ${await file.text()}`;
     }
     if (!options.preserveCompiled) forgeState.compiled = null;
     updateRevealUi();
+    refreshStudioR2RevealActions().catch(() => {});
     updateWhitelistUi();
     bridge().updateLaunchSummary?.();
   }
@@ -3664,11 +3870,8 @@ ${await file.text()}`;
     $('forgeMintTestBtn')?.addEventListener('click', mintTest);
     $('forgeWhitelistMintBtn')?.addEventListener('click', whitelistMintTest);
     $('forgeCreatorMintBtn')?.addEventListener('click', creatorMintTest);
-    $('forgeDeferredRevealBtn')?.addEventListener('click', requestDeferredReveal);
-    $('forgeLockBatchBtn')?.addEventListener('click', lockTimedOutForgeBatch);
-    $('forgeRequestBatchBtn')?.addEventListener('click', requestForgeBatchRandomness);
-    $('forgeReplayBtn')?.addEventListener('click', replayVerifiedWord);
-    $('forgeSettleBtn')?.addEventListener('click', settleReadyForge);
+    $('forgePrepareDelayedRevealBtn')?.addEventListener('click', prepareDelayedReveal);
+    $('forgeRequestDelayedRevealBtn')?.addEventListener('click', requestPreparedDelayedReveal);
     $('forgeInspectBtn')?.addEventListener('click', inspectToken);
     $('previewMintPageBtn')?.addEventListener('click', () => updateMintPagePreview().catch(() => {}));
     $('publishMintPageBtn')?.addEventListener('click', async () => { try { if ($('mintPageStatus')) $('mintPageStatus').textContent = 'Publishing mint page + whitelist proofs to RelicForge Cloud…'; await publishMintPageCloud(); if ($('mintPageStatus')) $('mintPageStatus').textContent = '✓ Published. Mint aesthetics and whitelist proofs are now available cross-device.'; } catch (error) { if ($('mintPageStatus')) $('mintPageStatus').textContent = `Publish: ${error.message}`; } });
@@ -3912,7 +4115,7 @@ ${await file.text()}`;
     if($('forgedCollectionAddress'))$('forgedCollectionAddress').textContent='';
     if($('forgedEtherscanLink'))$('forgedEtherscanLink').removeAttribute('href');
     if($('viewerCollectionAddress'))$('viewerCollectionAddress').value='';
-    for(const id of ['forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgeDeferredRevealBtn','forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn','forgeInspectBtn','openMintPageBtn','publishMintPageBtn','downloadMintPageBtn'])if($(id))$(id).disabled=true;
+    for(const id of ['forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgePrepareDelayedRevealBtn','forgeRequestDelayedRevealBtn','forgeInspectBtn','openMintPageBtn','publishMintPageBtn','downloadMintPageBtn'])if($(id))$(id).disabled=true;
   }
   const rf26OriginalGetState=getForgeProjectState;
   getForgeProjectState=function(){return {...rf26OriginalGetState(),launchChainId:activeChainId()};};
@@ -3940,7 +4143,7 @@ ${await file.text()}`;
     if($('forgeTestStatus'))$('forgeTestStatus').textContent=message;
     if($('forgeWalletStatus'))$('forgeWalletStatus').textContent=message;
   }
-  for(const id of ['forgeCollectionBtn','forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgeDeferredRevealBtn','forgeLockBatchBtn','forgeRequestBatchBtn','forgeReplayBtn','forgeSettleBtn','r24ResumeDeploymentBtn'])
+  for(const id of ['forgeCollectionBtn','forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgePrepareDelayedRevealBtn','forgeRequestDelayedRevealBtn','r24ResumeDeploymentBtn'])
     $(id)?.addEventListener('click',rf26GuardLegacyAction,true);
   window.addEventListener('relicforge:launch-network-changed',()=>{
     resetWalletSessionUi('Launch network changed. Reconnect for deployment.');
@@ -4007,7 +4210,7 @@ ${await file.text()}`;
     return getResumeContext();
   }
 
-  window.RelicForgeForge = { version: '11.1.6-r3d-b1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
+  window.RelicForgeForge = { version: '12.2-r2-ui-b1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();

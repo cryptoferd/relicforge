@@ -272,12 +272,15 @@
     if($('revealStat')) $('revealStat').textContent=state.revealMode===1?'Forge Reveal':'Deferred Reveal';
     if($('networkStat')) $('networkStat').textContent=networkLabel(app.config.chainId);
     if($('walletMintsStat')) $('walletMintsStat').textContent=app.wallet?'Calculating…':'Connect wallet';
-    if($('mintIntro')) $('mintIntro').textContent=state.masterMintEnabled
-      ? 'Choose an open mint stage below.'
-      : 'Minting is paused by the creator. Stage settings remain intact.';
+    const soldOut=state.totalMinted>=state.maxSupply;
+    if($('mintIntro')) $('mintIntro').textContent=soldOut
+      ? 'Minting unavailable — collection maximum supply has already been minted.'
+      : (state.masterMintEnabled
+        ? 'Choose an open mint stage below.'
+        : 'Minting is paused by the creator. Stage settings remain intact.');
     const note=document.querySelector('.forge-note');
     if(note) note.textContent=state.revealMode===1
-      ? 'Forge Reveal: your mint creates an onchain reservation. The NFT settles after the batch receives verified randomness; no additional collector signature is required.'
+      ? 'Forge Reveal: your NFT is minted to your wallet immediately. It shows the collection placeholder while verified randomness is requested automatically, then reveals automatically with no additional collector action.'
       : 'Deferred Reveal: minting creates your NFT now, but its final artwork remains hidden until the collection creator requests reveal.';
     const explorer=Number(app.config.chainId)===11155111?'https://sepolia.etherscan.io':'https://etherscan.io';
     if($('contractInfo')) $('contractInfo').innerHTML=`Collection: <a target="_blank" rel="noreferrer" href="${explorer}/address/${esc(app.config.contract)}">${esc(app.config.contract)}</a> · MintPhases: <a target="_blank" rel="noreferrer" href="${explorer}/address/${esc(app.mintPhasesAddress)}">${esc(short(app.mintPhasesAddress))}</a>`;
@@ -342,9 +345,11 @@
     const totalMintedByWallet=[...walletRows.values()].reduce((sum,row)=>sum+Number(row.minted||0),0);
     if($('walletMintsStat')) $('walletMintsStat').textContent=app.wallet?String(totalMintedByWallet):'Connect wallet';
     if($('walletAllotment')) $('walletAllotment').classList.add('hidden');
-    setStatus(state.masterMintEnabled
-      ? (app.wallet?'Wallet connected. Choose an eligible open R12-v2 stage.':'R12-v2 MintPhases loaded. Connect a wallet to mint.')
-      : 'Master Mint is OFF. The creator must resume minting before any stage can execute.');
+    setStatus(soldOut
+      ? 'Minting unavailable — collection maximum supply has already been minted.'
+      : (state.masterMintEnabled
+        ? (app.wallet?'Wallet connected. Choose an eligible open R12-v2 stage.':'R12-v2 MintPhases loaded. Connect a wallet to mint.')
+        : 'Master Mint is OFF. The creator must resume minting before any stage can execute.'));
   }
 
   async function ensureChain() {
@@ -396,6 +401,7 @@
     if(!app.wallet)await connect();
     const signer=await mintSigner();
     await readState();
+    if(app.state.totalMinted>=app.state.maxSupply)throw new Error('Minting unavailable — collection maximum supply has already been minted.');
     const phase=app.phases.find(row=>row.id===Number(phaseId));
     if(!phase)throw new Error('Mint stage no longer exists.');
     if(!app.state.masterMintEnabled)throw new Error('Master Mint is paused.');
@@ -428,7 +434,7 @@
     if(!receipt || Number(receipt.status)!==1)throw new Error('Mint transaction was not confirmed.');
     window.dispatchEvent(new CustomEvent('relicforge:v2-mint-confirmed',{detail:{chainId:Number(app.config.chainId),contract:app.config.contract,wallet:app.wallet,phaseId:phase.id,quantity:qty,transactionHash:receipt.hash||tx.hash}}));
     setStatus(app.state.revealMode===1
-      ? `Reservation confirmed. ${qty} NFT${qty===1?'':'s'} will settle after verified batch randomness.`
+      ? `Mint confirmed. ${qty} NFT${qty===1?' is':'s are'} in your wallet now and will reveal automatically after verified randomness.`
       : `Mint confirmed. ${qty} NFT${qty===1?'':'s'} remain hidden until Creator Reveal.`);
     await readState();
     await render();
