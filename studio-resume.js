@@ -50,7 +50,7 @@
   function setStatus(msg,tone=''){ const n=$('r24ResumeStatus'); if(n){n.textContent=msg;n.className=`r24-status ${tone}`.trim();} }
   function step(key,label,state='pending',detail=''){ let r=ui.steps.find(x=>x.key===key); if(!r){r={key,label,state,detail};ui.steps.push(r);} else Object.assign(r,{label,state,detail}); renderSteps(); }
   function renderSteps(){ const n=$('r24ResumeSteps'); if(!n)return; if(!ui.steps.length){n.innerHTML='<div class="r24-empty">No deployment inspection has been run yet.</div>';return;} n.innerHTML=ui.steps.map(r=>`<div class="r24-step ${esc(r.state)}"><span class="r24-dot"></span><div><strong>${esc(r.label)}</strong>${r.detail?`<small>${esc(r.detail)}</small>`:''}</div><b>${r.state==='done'?'CONFIRMED':r.state==='active'?'RUNNING':r.state==='blocked'?'BLOCKED':'PENDING'}</b></div>`).join(''); }
-  function journalLabel(s){ return ({creating:'Creating collection',partial:'Interrupted','base-complete':'Base deployment complete','onchain-complete':'Onchain complete','proof-sync-pending':'Proof sync pending',complete:'Launch complete'})[s]||s||'No journal'; }
+  function journalLabel(s){ return ({creating:'Creating collection',partial:'Interrupted','base-complete':'Base deployment complete','onchain-complete':'Onchain complete','proof-sync-pending':'Proof sync pending','presentation-sync-pending':'Mint page sync pending',complete:'Launch complete'})[s]||s||'No journal'; }
   function updateJournal(j){ if($('r24ResumeBadge'))$('r24ResumeBadge').textContent=journalLabel(j?.status); if($('r24ResumeAddress'))$('r24ResumeAddress').textContent=j?.collectionAddress?short(j.collectionAddress):'No collection bound'; if($('r24ResumeFingerprint'))$('r24ResumeFingerprint').textContent=j?.provenance?`${j.provenance.slice(0,12)}…`:'Compile to generate fingerprint'; }
   function autoSave(){ clearTimeout(ui.saveTimer); ui.saveTimer=setTimeout(()=>{const b=$('saveProjectBtn'); if(b&&!b.disabled)b.click();},650); }
 
@@ -137,6 +137,50 @@
   }
 
   function fail(error){ console.error('Resume deployment:',error); setStatus(`Resume: ${error.shortMessage||error.message}`,'bad'); ui.busy=false; const b=$('r24ResumeDeploymentBtn'); if(b){b.disabled=false;b.textContent='Resume Deployment';} }
+
+
+  function hasMintPagePresentation(projectState){
+    return !!(projectState?.mintPageImageFile || projectState?.mintPageBannerFile);
+  }
+  function mintPagePresentationConfirmed(journal){
+    return journal?.steps?.mintPagePresentation?.status === 'confirmed';
+  }
+  async function syncMintPagePresentation(ctx,snap,mutate){
+    const required=hasMintPagePresentation(ctx?.projectState);
+    if(!required){
+      step('mint-page-presentation','Mint page image + banner','done','No custom launch media selected');
+      return true;
+    }
+    const journal=api().getDeploymentJournal?.();
+    if(mintPagePresentationConfirmed(journal)){
+      step('mint-page-presentation','Mint page image + banner','done','Published to this deployment');
+      return true;
+    }
+    if(!mutate){
+      step('mint-page-presentation','Mint page image + banner','pending','Saved project media still needs publishing');
+      return false;
+    }
+    if(!api().publishMintPageCloud){
+      step('mint-page-presentation','Mint page image + banner','blocked','Mint-page Cloud publisher is unavailable');
+      api().setDeploymentStatus?.('presentation-sync-pending','Mint-page Cloud publisher is unavailable.');
+      return false;
+    }
+    step('mint-page-presentation','Mint page image + banner','active','Publishing saved project media');
+    try{
+      await api().publishMintPageCloud(snap.address,false);
+      api().checkpointExternalDeployment?.('mintPagePresentation',null,'Publish mint-page image + banner');
+      if(api().getDeploymentJournal?.()?.status==='presentation-sync-pending')api().setDeploymentStatus?.('onchain-complete');
+      step('mint-page-presentation','Mint page image + banner','done','Published to this deployment');
+      return true;
+    }catch(error){
+      const message=error?.shortMessage||error?.message||String(error);
+      console.warn('Durable R12-v2 mint-page presentation sync:',message);
+      step('mint-page-presentation','Mint page image + banner','blocked',message);
+      api().setDeploymentStatus?.('presentation-sync-pending',message);
+      setStatus('Onchain deployment is intact, but the saved mint-page image/banner still needs to sync. Click Resume Deployment to retry.','warn');
+      return false;
+    }
+  }
 
   async function context(){
     const launchScope=await window.RelicForgeForgeNetwork.requireReady();
@@ -314,12 +358,12 @@ if(Boolean(await data.contentSealed())){if(String(await data.provenanceHash()).t
           provenance:c.provenance,verifiedCollection:verified,legacyJournal:ctx.journal
         });
       }else ui.recoveryJournal=null;
-      api().applyResumeBindings?.({collectionAddress:snap.address,dataAddress:snap.dataAddress,mintPhasesAddress:snap.mintPhasesAddress});if(!ctx.journal?.collectionAddress)api().adoptDeploymentJournal?.({provenance:c.provenance,factory:ctx.config.factory,collectionAddress:snap.address,dataAddress:snap.dataAddress,mintPhasesAddress:snap.mintPhasesAddress,status:'partial'});ctx=api().getResumeContext();updateJournal(ctx.journal);step('factory','Collection + ProjectData + MintPhases','done',short(snap.address));if(mutate&&!sameAddr(snap.controller,ctx.wallet))throw new Error('Connected wallet is not the active collection controller.');await reconcileData(ctx,snap,c,input,mutate);const detail=await reconcilePhases(ctx,snap,input,mutate);if(mutate){api().setDeploymentStatus?.('onchain-complete');updateJournal(api().getDeploymentJournal?.());setStatus('All onchain deployment steps are confirmed. Syncing mint-page metadata and Approved Wallet proofs…','good');if(detail)window.dispatchEvent(new CustomEvent('relicforge:v2-launch-complete',{detail}));if(api().publishMintPageCloud&&(ctx.projectState?.mintPageImageFile||ctx.projectState?.mintPageBannerFile)){try{setStatus('Onchain deployment confirmed. Publishing saved mint-page media…','good');await api().publishMintPageCloud(snap.address,false);}catch(error){console.warn('Automatic R12-v2 mint-page media publish:',error?.message||error);}}autoSave();}else{const pending=ui.steps.filter(x=>x.state==='pending').length;setStatus(pending?`${pending} missing deployment step${pending===1?'':'s'} can be resumed safely.`:'No missing onchain deployment steps were found.',pending?'warn':'good');}}
+      api().applyResumeBindings?.({collectionAddress:snap.address,dataAddress:snap.dataAddress,mintPhasesAddress:snap.mintPhasesAddress});if(!ctx.journal?.collectionAddress)api().adoptDeploymentJournal?.({provenance:c.provenance,factory:ctx.config.factory,collectionAddress:snap.address,dataAddress:snap.dataAddress,mintPhasesAddress:snap.mintPhasesAddress,status:'partial'});ctx=api().getResumeContext();updateJournal(ctx.journal);step('factory','Collection + ProjectData + MintPhases','done',short(snap.address));if(mutate&&!sameAddr(snap.controller,ctx.wallet))throw new Error('Connected wallet is not the active collection controller.');await reconcileData(ctx,snap,c,input,mutate);const detail=await reconcilePhases(ctx,snap,input,mutate);if(mutate){api().setDeploymentStatus?.('onchain-complete');updateJournal(api().getDeploymentJournal?.());setStatus('All onchain deployment steps are confirmed. Syncing mint-page metadata and Approved Wallet proofs…','good');if(detail)window.dispatchEvent(new CustomEvent('relicforge:v2-launch-complete',{detail}));const mintPageReady=await syncMintPagePresentation(ctx,snap,true);if(!mintPageReady){autoSave();return;}autoSave();}else{await syncMintPagePresentation(ctx,snap,false);const pending=ui.steps.filter(x=>x.state==='pending').length;setStatus(pending?`${pending} missing deployment step${pending===1?'':'s'} can be resumed safely.`:'No missing onchain deployment steps were found.',pending?'warn':'good');}}
     finally{rf26Leave();ui.busy=false;if(b){b.disabled=false;b.textContent='Resume Deployment';}}
   }
 
-  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);renderDeploymentHistory();updateArmedControls();if(j?.deploymentId&&!j?.collectionAddress){setStatus('A new deployment is armed. Click Start New Collection to submit Factory creation. Resume is disabled until the collection exists.','good');return;}if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and proof sync are confirmed.','good');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
-  function install(){if(!window.RelicForgeForge?.getResumeContext){setTimeout(install,80);return;}installPanel();refresh();window.addEventListener('relicforge:deployment-checkpoint',e=>{updateJournal(e.detail?.journal);autoSave();refresh();});window.addEventListener('relicforge:v2-proof-sync-complete',()=>{api().setDeploymentStatus?.('complete');updateJournal(api().getDeploymentJournal?.());setStatus('Launch complete. Onchain deployment and Approved Wallet proof sync are confirmed.','good');autoSave();});window.addEventListener('relicforge:v2-proof-sync-failed',e=>{api().setDeploymentStatus?.('proof-sync-pending',e.detail?.error||'Proof sync failed');updateJournal(api().getDeploymentJournal?.());setStatus('Onchain deployment is complete, but collector proof sync needs attention.','warn');autoSave();});}
+  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);renderDeploymentHistory();updateArmedControls();if(j?.deploymentId&&!j?.collectionAddress){setStatus('A new deployment is armed. Click Start New Collection to submit Factory creation. Resume is disabled until the collection exists.','good');return;}if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and post-deployment sync are confirmed.','good');else if(j.status==='presentation-sync-pending')setStatus('Onchain deployment is complete, but the saved mint-page image/banner still needs to sync. Click Resume Deployment to retry.','warn');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
+  function install(){if(!window.RelicForgeForge?.getResumeContext){setTimeout(install,80);return;}installPanel();refresh();window.addEventListener('relicforge:deployment-checkpoint',e=>{updateJournal(e.detail?.journal);autoSave();refresh();});window.addEventListener('relicforge:v2-proof-sync-complete',()=>{const ctx=api().getResumeContext?.();const journal=api().getDeploymentJournal?.();if(hasMintPagePresentation(ctx?.projectState)&&!mintPagePresentationConfirmed(journal)){api().setDeploymentStatus?.('presentation-sync-pending','Mint-page image/banner publication is still pending.');updateJournal(api().getDeploymentJournal?.());setStatus('Approved Wallet proofs are synced. Mint-page image/banner publication is still pending; click Resume Deployment to retry.','warn');autoSave();return;}api().setDeploymentStatus?.('complete');updateJournal(api().getDeploymentJournal?.());setStatus('Launch complete. Onchain deployment, mint-page presentation, and Approved Wallet proof sync are confirmed.','good');autoSave();});window.addEventListener('relicforge:v2-proof-sync-failed',e=>{api().setDeploymentStatus?.('proof-sync-pending',e.detail?.error||'Proof sync failed');updateJournal(api().getDeploymentJournal?.());setStatus('Onchain deployment is complete, but collector proof sync needs attention.','warn');autoSave();});}
   window.RelicForgeResume=Object.freeze({
     prepareFresh:async()=>{const ctx=await context();return {ctx,input:launchInputs(ctx)};},
     checkCandidate,findFreshCandidate,run

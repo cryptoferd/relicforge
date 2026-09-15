@@ -83,8 +83,6 @@ export function createSlugService({db,one,networkPolicy,verifyV2,readController}
          String(row.project_id||'').toLowerCase()!==body.projectId.toLowerCase())
         throw fail('Deployment project mismatch.',409);
     }
-    // Database owner remains the original creator. Never rewrite owner_wallet to
-    // the current controller: doing so would break creator attribution and FK guards.
     const creator=address(row.owner_wallet);
     const client=await db.connect();
     let begun=false;
@@ -92,19 +90,19 @@ export function createSlugService({db,one,networkPolicy,verifyV2,readController}
       await client.query('BEGIN');begun=true;
       const current=await client.query(`SELECT slug,owner_wallet FROM rf26_publications
         WHERE chain_id=$1 AND contract_address=$2 FOR UPDATE`,[id,contract]);
-      if(current.rows[0]?.slug&&current.rows[0].slug!==slug)
-        throw fail('This collection already has a permanent mint URL.',409,'SLUG_PERMANENT');
       if(current.rows[0]&&!same(current.rows[0].owner_wallet,creator))
         throw fail('Publication creator mismatch.',409);
+      const previousSlug=current.rows[0]?.slug||null;
       const result=await client.query(`INSERT INTO rf26_publications(chain_id,contract_address,owner_wallet,slug)
         VALUES($1,$2,$3,$4)
-        ON CONFLICT(chain_id,contract_address) DO UPDATE SET slug=EXCLUDED.slug
+        ON CONFLICT(chain_id,contract_address) DO UPDATE SET
+          slug=EXCLUDED.slug,updated_at=now()
         WHERE rf26_publications.owner_wallet=EXCLUDED.owner_wallet
-          AND (rf26_publications.slug IS NULL OR rf26_publications.slug=EXCLUDED.slug)
         RETURNING slug`,[id,contract,creator,slug]);
-      if(!result.rows.length)throw fail('This collection already has a permanent mint URL.',409,'SLUG_PERMANENT');
+      if(!result.rows.length)throw fail('Publication creator mismatch.',409);
       await client.query('COMMIT');begun=false;
-      return {slug,chainId:id,contract,mintPage:customMintPath(slug),permanent:true};
+      const releasedSlug=previousSlug&&previousSlug!==slug?previousSlug:null;
+      return {slug,previousSlug,releasedSlug,chainId:id,contract,mintPage:customMintPath(slug),permanent:false,editable:true};
     }catch(error){
       if(begun)await client.query('ROLLBACK');
       if(error.code==='23505')throw CONFLICT();

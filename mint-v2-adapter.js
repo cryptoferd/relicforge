@@ -319,6 +319,7 @@
       );
       const eligible=phase.accessType===0 || (!!proof?.eligible && rootMatches);
       const allowance=phase.accessType===1 && proof?.eligible ? Number(proof?.allowance||0) : null;
+      const allocationRemaining=allowance==null?null:Math.max(0,allowance-Number(row.minted||0));
       const remaining=app.wallet?remainingFor(phase,row.minted,allowance):0;
       const usable=state.masterMintEnabled&&phase.open&&eligible&&(!app.wallet||remaining>0);
       const status=phase.accessType===1
@@ -330,7 +331,7 @@
               : !rootMatches
                 ? 'Approved Wallet proof list is out of sync with the onchain stage root'
                 : eligible
-                  ? `Eligible · ${remaining} remaining`
+                  ? `Eligible · ${Number(allowance||0).toLocaleString()} allocated · ${Number(allocationRemaining||0).toLocaleString()} remaining${remaining<Number(allocationRemaining||0)?` · ${remaining.toLocaleString()} max this transaction`:''}`
                   : 'Wallet is not on this Approved Wallet stage')
           : 'Connect to check eligibility')
         : timingLabel(phase);

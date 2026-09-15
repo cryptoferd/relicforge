@@ -5,7 +5,7 @@ import {
   createCreatorUrlClient
 } from './rf26-creator-urls-core.js';
 
-const VERSION='R3C-B-R1';
+const VERSION='R3C-B-R2';
 const ids=Object.freeze({
   trigger:'rf26CreatorUrlTrigger',drawer:'rf26CreatorUrlDrawer',backdrop:'rf26CreatorUrlBackdrop',
   close:'rf26CreatorUrlClose',network:'rf26CreatorUrlNetwork',contract:'rf26CreatorUrlContract',
@@ -121,7 +121,7 @@ function installMarkup() {
   drawer.setAttribute('aria-hidden','true');
   drawer.innerHTML=`
     <div class="rf26-url-head">
-      <div><span class="rf26-url-kicker">COLLECTION MANAGEMENT</span><h2>Permanent Mint URL</h2></div>
+      <div><span class="rf26-url-kicker">COLLECTION MANAGEMENT</span><h2>Mint URL</h2></div>
       <button id="${ids.close}" class="rf26-url-icon" type="button" aria-label="Close mint URL settings">×</button>
     </div>
     <div class="rf26-url-body">
@@ -147,8 +147,8 @@ function installMarkup() {
       </section>
 
       <section id="${ids.production}" class="rf26-url-card" hidden>
-        <div class="rf26-url-card-title"><span>Custom URL</span><span class="rf26-url-badge rf26-url-badge-warn">Permanent</span></div>
-        <p>Choose a human-readable path for a verified production collection. Once claimed, it cannot be renamed or transferred through Relic Forge.</p>
+        <div class="rf26-url-card-title"><span>Custom URL</span><span class="rf26-url-badge">Editable alias</span></div>
+        <p>Choose a human-readable alias for this verified production collection. You can change it later; changing it immediately releases the old slug for someone else to claim.</p>
         <div class="rf26-url-preview"><span>${location.origin}</span><strong>/mint/</strong><span id="${ids.preview}">your-collection</span></div>
         <label class="rf26-url-label" for="${ids.slug}">Custom slug</label>
         <input id="${ids.slug}" class="rf26-url-input" type="text" minlength="3" maxlength="48"
@@ -156,21 +156,21 @@ function installMarkup() {
         <p class="rf26-url-hint">3–48 lowercase letters, numbers, and single hyphens. Reserved routes and wallet-address lookalikes are blocked.</p>
         <div class="rf26-url-actions">
           <button id="${ids.check}" class="rf26-url-button rf26-url-secondary" type="button">Check availability</button>
-          <button id="${ids.claim}" class="rf26-url-button rf26-url-primary" type="button" disabled>Claim permanently</button>
+          <button id="${ids.claim}" class="rf26-url-button rf26-url-primary" type="button" disabled>Save custom URL</button>
         </div>
         <div id="${ids.availability}" class="rf26-url-status" role="status" aria-live="polite" data-tone="neutral">
           Check a name before claiming it.
         </div>
         <label class="rf26-url-confirm">
           <input id="${ids.understand}" type="checkbox">
-          <span>I understand this mint URL becomes permanent for this collection.</span>
+          <span>I understand that changing this URL releases the old slug immediately, old shared links stop pointing here, and another collection may claim it.</span>
         </label>
         <div id="${ids.claimed}" class="rf26-url-claimed" hidden>
-          <label class="rf26-url-label">Permanent custom link</label>
+          <label class="rf26-url-label">Current custom link</label>
           <div class="rf26-url-copyrow">
             <input id="${ids.claimedUrl}" class="rf26-url-input" type="text" readonly aria-label="Permanent custom mint link">
             <button id="${ids.copyClaimed}" class="rf26-url-button rf26-url-secondary" type="button">Copy</button>
-            <a id="${ids.openClaimed}" class="rf26-url-button rf26-url-secondary" target="_blank" rel="noopener noreferrer" href="#" aria-label="Open permanent mint URL">Open</a>
+            <a id="${ids.openClaimed}" class="rf26-url-button rf26-url-secondary" target="_blank" rel="noopener noreferrer" href="#" aria-label="Open custom mint URL">Open</a>
           </div>
           <p class="rf26-url-hint">The custom link opens the verified collection mint page. The contract-address link above remains available.</p>
         </div>
@@ -308,13 +308,13 @@ function renderPublication(data) {
   if(feature){feature.checked=view.featureRequested;feature.disabled=!view.listed||!state.productionAvailable;}
   setText(ids.featured,view.featured?'Featured by Relic Forge':'Not featured');
   if(view.slug) {
-    if(slugInput){slugInput.value=view.slug;slugInput.readOnly=true;}
+    if(slugInput){slugInput.value=view.slug;slugInput.readOnly=false;}
     setText(ids.preview,view.slug);
     const claimed=byId(ids.claimedUrl);if(claimed)claimed.value=slugUrl(view.slug);
     const open=byId(ids.openClaimed);if(open)open.href=slugUrl(view.slug);
     setHidden(ids.claimed,false);
     state.availability=true;state.availabilitySlug=view.slug;
-    status('Permanent URL already claimed for this collection.','good',ids.availability);
+    status('Current custom URL loaded. Enter a different slug and check availability to change it.','good',ids.availability);
   } else {
     setHidden(ids.claimed,true);
     if(slugInput)slugInput.readOnly=false;
@@ -355,8 +355,8 @@ function localSlug() {
 async function checkAvailability() {
   if(!state.deployment||deploymentMode(state.deployment)!=='production')
     throw new CreatorUrlError('Custom URLs are production-only.');
-  if(state.publication?.slug)return;
   const slug=localSlug();
+  if(state.publication?.slug===slug){state.availability=true;state.availabilitySlug=slug;status('This is the collection\'s current custom URL.','good',ids.availability);syncControlState();return;}
   const sequence=++state.requestSequence;
   state.availability=false;state.availabilitySlug=null;
   status('Checking availability…','neutral',ids.availability);
@@ -374,18 +374,22 @@ async function checkAvailability() {
   } else if(!state.availability) {
     status('That mint URL is already claimed.','bad',ids.availability);
   } else {
-    status('Available. Claiming is permanent; confirm the acknowledgement below before continuing.','good',ids.availability);
+    status(state.publication?.slug?'Available. Confirm the release warning below to change the custom URL.':'Available. Confirm the acknowledgement below to save this custom URL.','good',ids.availability);
   }
   syncControlState();
 }
 
 async function claimSlug() {
   if(!state.loaded||!state.productionAvailable)throw new CreatorUrlError(productionLockedMessage(),{status:403,code:'PRODUCTION_DISABLED'});
-  if(state.publication?.slug)throw new CreatorUrlError('This collection already has a permanent mint URL.',{status:409,code:'SLUG_PERMANENT'});
   const slug=localSlug();
-  if(!state.availability||state.availabilitySlug!==slug)throw new CreatorUrlError('Check this name again before claiming it.');
-  if(byId(ids.understand)?.checked!==true)throw new CreatorUrlError('Confirm that you understand the mint URL is permanent.');
-  const approved=window.confirm(`Permanently assign /mint/${slug} to this collection?\n\nThis claim cannot be renamed or transferred through Relic Forge.`);
+  const previousSlug=state.publication?.slug||null;
+  if(previousSlug===slug)throw new CreatorUrlError('Enter a different slug to change this custom URL.');
+  if(!state.availability||state.availabilitySlug!==slug)throw new CreatorUrlError('Check this name again before saving it.');
+  if(byId(ids.understand)?.checked!==true)throw new CreatorUrlError('Confirm the custom URL release warning before continuing.');
+  const changing=Boolean(previousSlug);
+  const approved=window.confirm(changing
+    ? `Change this collection's custom URL from /mint/${previousSlug} to /mint/${slug}?\n\nThe old slug is released immediately after the change commits. Existing links using it will stop pointing to this collection, and another creator may claim it. The contract-address mint URL is unaffected.`
+    : `Assign /mint/${slug} to this collection?\n\nYou can change this custom alias later. If changed, the old slug will be released for other collections to claim. The contract-address mint URL is permanent and unaffected.`);
   if(!approved)return;
   status('Confirm the Relic Forge Cloud sign-in if prompted…','neutral',ids.availability);
   const result=await client().claim(state.deployment,slug,{projectId:state.projectId});
@@ -395,7 +399,8 @@ async function claimSlug() {
     featureRequested:state.publication?.featureRequested===true,
     featured:state.publication?.featured===true
   });
-  status('Permanent mint URL claimed successfully.','good',ids.availability);
+  if(result?.releasedSlug)status(`Custom URL updated. /mint/${result.releasedSlug} has been released and is available for reuse.`,'good',ids.availability);
+  else status('Custom URL saved. You can change it later from this panel.','good',ids.availability);
 }
 
 async function savePublication() {
@@ -413,11 +418,14 @@ async function savePublication() {
 function syncControlState() {
   const mode=deploymentMode(state.deployment);
   const slugClaimed=Boolean(state.publication?.slug);
-  const slugReady=state.availability&&state.availabilitySlug&&byId(ids.understand)?.checked===true;
+  let candidate=null;try{candidate=localSlug();}catch{}
+  const slugChanged=Boolean(candidate&&candidate!==state.publication?.slug);
+  const slugReady=state.availability&&state.availabilitySlug===candidate&&byId(ids.understand)?.checked===true&&slugChanged;
   setDisabled(ids.copyDirect,state.busy||!byId(ids.direct)?.value);
   setDisabled(ids.load,state.busy||mode!=='production');
-  setDisabled(ids.check,state.busy||mode!=='production'||slugClaimed);
-  setDisabled(ids.claim,state.busy||!state.loaded||!state.productionAvailable||slugClaimed||!slugReady);
+  setDisabled(ids.check,state.busy||mode!=='production');
+  setDisabled(ids.claim,state.busy||!state.loaded||!state.productionAvailable||!slugReady);
+  if(byId(ids.claim))byId(ids.claim).textContent=slugClaimed?'Change custom URL':'Save custom URL';
   setDisabled(ids.save,state.busy||!state.loaded||!state.productionAvailable);
   setDisabled(ids.copyClaimed,state.busy||!slugClaimed);
   const feature=byId(ids.feature);
@@ -437,7 +445,7 @@ function discoverDeployment(eventDetail=null) {
   try{forgeState=window.RelicForgeForge?.getForgeProjectState?.()??null;}catch{}
   try{resumeContext=window.RelicForgeForge?.getResumeContext?.()??null;}catch{}
   return selectDeploymentContext({
-    explicit:state.explicitDeployment,
+    explicit:state.explicitDeployment??window.RELICFORGE_CREATOR_DASHBOARD_DEPLOYMENT??null,
     eventDetail,
     forgeState,resumeContext,
     querySearch:location.search
@@ -471,7 +479,7 @@ function wireEvents() {
     state.requestSequence++;state.availability=false;state.availabilitySlug=null;
     const raw=byId(ids.slug)?.value.trim().toLowerCase()??'';
     setText(ids.preview,raw||'your-collection');
-    if(!state.publication?.slug)status('Check availability before claiming.','neutral',ids.availability);
+    status(state.publication?.slug?'Check availability before changing the custom URL.':'Check availability before saving the custom URL.','neutral',ids.availability);
     syncControlState();
   });
   byId(ids.slug)?.addEventListener('blur',()=>{
@@ -486,6 +494,7 @@ function wireEvents() {
   });
   window.addEventListener('relicforge:v2-launch-complete',event=>refreshContext(event.detail));
   window.addEventListener('relicforge:deployment-checkpoint',event=>refreshContext(event.detail));
+  window.addEventListener('relicforge:creator-dashboard-selection',event=>{try{setDeployment(event.detail);}catch(error){console.warn('Creator URL dashboard selection:',error?.message||error);}});
   window.addEventListener('popstate',()=>refreshContext());
 }
 

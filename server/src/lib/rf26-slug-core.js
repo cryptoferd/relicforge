@@ -53,5 +53,5 @@ export function publicTarget(row) {
   const id=chainId(row.chain_id),contract=address(row.contract_address);
   return {chainId:id,contract,slug:normalizeSlug(row.slug),
     listed:row.listed===true,featured:row.featured===true,
-    mintPage:canonicalMintPath(id,contract),permanent:true};
+    mintPage:canonicalMintPath(id,contract),permanent:false,editable:true};
 }

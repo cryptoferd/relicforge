@@ -87,7 +87,7 @@ test('availability is public, normalized and production-only',async()=>{
   assert.deepEqual(calls,[slugAvailabilityPath('my-relic')]);
   await assert.rejects(client.availability(sepolia,'my-relic'));
 });
-test('permanent claim uses the dedicated authenticated endpoint and project identity',async()=>{
+test('editable slug save uses the dedicated authenticated endpoint and project identity',async()=>{
   const calls=[];
   const client=createCreatorUrlClient({
     publicRequest:async()=>({}),
@@ -116,7 +116,6 @@ test('server authorization and permanence errors map to creator-safe messages',(
   assert.match(friendlyError({status:401}),/Sign in/);
   assert.match(friendlyError({status:403,code:'PRODUCTION_DISABLED'}),/not active yet/i);
   assert.match(friendlyError({status:409,code:'SLUG_TAKEN'}),/already claimed/i);
-  assert.match(friendlyError({status:409,code:'SLUG_PERMANENT'}),/cannot be renamed/i);
   assert.match(friendlyError({status:404}),/not registered/i);
 });
 test('UI source does not guess credentials or expose secret storage conventions',()=>{

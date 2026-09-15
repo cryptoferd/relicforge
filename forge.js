@@ -3390,6 +3390,10 @@ ${await file.text()}`;
     forgeState.collectionAddress = snap.address;
     forgeState.dataAddress = snap.dataAddress;
     forgeState.mintPhasesAddress = snap.mintPhasesAddress;
+    const rf26DashboardDeployment={chainId:activeChainId()||11155111,contract:snap.address};
+    window.RELICFORGE_CREATOR_DASHBOARD_DEPLOYMENT=rf26DashboardDeployment;
+    window.RelicForgeCreatorURLs?.setDeployment?.(rf26DashboardDeployment);
+    window.dispatchEvent(new CustomEvent('relicforge:creator-dashboard-selection',{detail:rf26DashboardDeployment}));
     $('launchedCollectionList')?.querySelectorAll('[data-launched-address]').forEach(button =>
       button.classList.toggle('selected', button.dataset.launchedAddress.toLowerCase() === snap.address.toLowerCase())
     );

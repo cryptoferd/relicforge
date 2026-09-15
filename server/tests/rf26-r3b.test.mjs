@@ -52,7 +52,6 @@ function fixture({enabled=true,sealed=true,controller=A}={}){
             if(current&&current.owner_wallet!==owner)return {rows:[]};
             if(sql.includes('slug=EXCLUDED.slug')){
               const slug=params[3];
-              if(current?.slug&&current.slug!==slug)return {rows:[]};
               if([...staged].some(([other,row])=>other!==k&&row.slug===slug)){
                 const e=new Error('unique');e.code='23505';throw e;
               }
@@ -140,17 +139,20 @@ test('only authenticated active controller can claim; creator attribution is imm
   assert.equal((await service.getPublication(1,B,C)).publication.slug,'chrono');
   await rejects(service.getPublication(1,B,A),403);
 });
-test('claims are permanent and idempotent, including same-collection races',async()=>{
+test('same collection can atomically change its slug and release the old name',async()=>{
   const {service,state}=fixture();
-  const results=await Promise.allSettled([
-    service.claim(1,B,A,{slug:'first'}),
-    service.claim(1,B,A,{slug:'second'})
-  ]);
-  assert.equal(results.filter(x=>x.status==='fulfilled').length,1);
-  assert.equal(results.filter(x=>x.status==='rejected'&&x.reason.statusCode===409).length,1);
-  const winner=state.publications.get(key(1,B)).slug;
-  assert.equal((await service.claim(1,B,A,{slug:winner})).slug,winner);
-  await rejects(service.claim(1,B,A,{slug:winner==='first'?'second':'first'}),409,'SLUG_PERMANENT');
+  const first=await service.claim(1,B,A,{slug:'first'});
+  assert.equal(first.slug,'first');
+  assert.equal(first.releasedSlug,null);
+  const second=await service.claim(1,B,A,{slug:'second'});
+  assert.equal(second.slug,'second');
+  assert.equal(second.previousSlug,'first');
+  assert.equal(second.releasedSlug,'first');
+  assert.equal(second.permanent,false);
+  assert.equal(second.editable,true);
+  assert.equal(state.publications.get(key(1,B)).slug,'second');
+  assert.equal((await service.availability('first')).available,true);
+  assert.equal((await service.availability('second')).available,false);
 });
 test('cross-collection uniqueness is enforced by the database',async()=>{
   const {service,state}=fixture();
@@ -159,13 +161,15 @@ test('cross-collection uniqueness is enforced by the database',async()=>{
   await rejects(service.claim(1,C,C,{slug:'chrono'}),409,'SLUG_TAKEN');
   assert.equal(state.publications.size,1);
 });
-test('conflict rollback preserves the old claim and releases the transaction',async()=>{
+test('failed rename rolls back and preserves the old slug',async()=>{
   const {service,state}=fixture();
   await service.claim(1,B,A,{slug:'chrono'});
   state.nextFailure=Object.assign(new Error('database failure'),{code:'XX001'});
-  await assert.rejects(service.claim(1,B,A,{slug:'chrono'}),/database failure/);
+  await assert.rejects(service.claim(1,B,A,{slug:'new-chrono'}),/database failure/);
   assert.equal(state.publications.get(key(1,B)).slug,'chrono');
-  assert.equal((await service.claim(1,B,A,{slug:'chrono'})).permanent,true);
+  const changed=await service.claim(1,B,A,{slug:'new-chrono'});
+  assert.equal(changed.releasedSlug,'chrono');
+  assert.equal(changed.permanent,false);
 });
 test('project mismatch, spoofed owner and Factory mismatch are denied',async()=>{
   const {service,state}=fixture();
@@ -206,5 +210,6 @@ test('no private release settings, credentials, or untrusted JSON appear in publ
     listed:false,featured:false,configuration:{apiKey:'secret'},privateKey:'secret'};
   const result=publicTarget(row);
   assert.equal(JSON.stringify(result).includes('secret'),false);
-  assert.deepEqual(Object.keys(result),['chainId','contract','slug','listed','featured','mintPage','permanent']);
+  assert.deepEqual(Object.keys(result),['chainId','contract','slug','listed','featured','mintPage','permanent','editable']);
+  assert.equal(result.permanent,false);assert.equal(result.editable,true);
 });
