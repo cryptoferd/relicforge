@@ -88,8 +88,35 @@
       }catch(error){fail(error);}
     }));
   }
+  function updateArmedControls(){
+    const j=api().getDeploymentJournal?.(),armed=!!(j?.deploymentId&&!j?.collectionAddress);
+    if($('r24CheckDeploymentBtn'))$('r24CheckDeploymentBtn').disabled=armed;
+    if($('r24ResumeDeploymentBtn'))$('r24ResumeDeploymentBtn').disabled=armed;
+    if($('r24NewDeploymentBtn'))$('r24NewDeploymentBtn').textContent=armed?'Start New Collection':'Deploy as New Collection';
+  }
+  async function startArmedDeployment(){
+    const j=api().getDeploymentJournal?.();
+    if(!j?.deploymentId||j?.collectionAddress)throw new Error('No uncreated deployment instance is armed.');
+    if(!api().startFreshDeployment)throw new Error('Verified Fresh Forge launcher is unavailable. Reload Studio.');
+    ui.busy=true;
+    const b=$('r24NewDeploymentBtn');
+    if(b){b.disabled=true;b.textContent='Starting New Collection...';}
+    setStatus('Starting verified Factory creation for '+short(j.deploymentId)+'...','good');
+    try{
+      const result=await api().startFreshDeployment();
+      updateJournal(api().getDeploymentJournal?.());renderDeploymentHistory();autoSave();
+      if(result?.ok)setStatus('New collection Factory deployment verified. Continuing remaining deployment steps...','good');
+      else if(api().getDeploymentJournal?.()?.deploymentId&&!api().getDeploymentJournal?.()?.collectionAddress)
+        setStatus('New deployment is still armed. No collection was created. Review the Forge status above, then click Start New Collection to retry the same deployment instance.','warn');
+      return result;
+    }finally{
+      ui.busy=false;updateArmedControls();if(b)b.disabled=false;
+    }
+  }
   async function deployAsNew(){
     if(ui.busy)return;
+    const armed=api().getDeploymentJournal?.();
+    if(armed?.deploymentId&&!armed?.collectionAddress)return startArmedDeployment();
     const ctx=await context(),current=ctx.journal||api().findLocalDeploymentJournal?.(ctx.compiled.provenance)||null;
     const state=current?.status||'';
     const unfinished=current&&!['complete','onchain-complete','proof-sync-pending'].includes(state);
@@ -104,15 +131,9 @@
     if(!approved)return;
     if(!api().beginNewDeployment)throw new Error('Reusable-project deployment support is unavailable. Reload Studio.');
     const request=await api().beginNewDeployment();
-    updateJournal(api().getDeploymentJournal?.());renderDeploymentHistory();autoSave();
-    setStatus('New deployment '+short(request.deploymentId)+' is armed. Existing deployments remain untouched. Starting the verified Factory flow…','good');
-    const forgeButton=$('forgeCollectionBtn');
-    if(!forgeButton)throw new Error('Forge Collection button is unavailable.');
-    setTimeout(()=>{
-      if(forgeButton.disabled){
-        setStatus('New deployment is armed. Complete the launch-network preflight, then click Forge Collection to create the separate deployment.','warn');
-      }else forgeButton.click();
-    },80);
+    updateJournal(api().getDeploymentJournal?.());renderDeploymentHistory();autoSave();updateArmedControls();
+    setStatus('New deployment '+short(request.deploymentId)+' is armed. Starting the verified Factory flow...','good');
+    return startArmedDeployment();
   }
 
   function fail(error){ console.error('Resume deployment:',error); setStatus(`Resume: ${error.shortMessage||error.message}`,'bad'); ui.busy=false; const b=$('r24ResumeDeploymentBtn'); if(b){b.disabled=false;b.textContent='Resume Deployment';} }
@@ -288,7 +309,7 @@ if(Boolean(await data.contentSealed())){if(String(await data.provenanceHash()).t
     finally{rf26Leave();ui.busy=false;if(b){b.disabled=false;b.textContent='Resume Deployment';}}
   }
 
-  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);renderDeploymentHistory();if(j?.deploymentId&&!j?.collectionAddress){setStatus('A new deployment is armed for this reusable project. Forge Collection will create separate contracts; prior deployments remain untouched.','good');return;}if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and proof sync are confirmed.','good');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
+  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);renderDeploymentHistory();updateArmedControls();if(j?.deploymentId&&!j?.collectionAddress){setStatus('A new deployment is armed. Click Start New Collection to submit Factory creation. Resume is disabled until the collection exists.','good');return;}if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and proof sync are confirmed.','good');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
   function install(){if(!window.RelicForgeForge?.getResumeContext){setTimeout(install,80);return;}installPanel();refresh();window.addEventListener('relicforge:deployment-checkpoint',e=>{updateJournal(e.detail?.journal);autoSave();refresh();});window.addEventListener('relicforge:v2-proof-sync-complete',()=>{api().setDeploymentStatus?.('complete');updateJournal(api().getDeploymentJournal?.());setStatus('Launch complete. Onchain deployment and Approved Wallet proof sync are confirmed.','good');autoSave();});window.addEventListener('relicforge:v2-proof-sync-failed',e=>{api().setDeploymentStatus?.('proof-sync-pending',e.detail?.error||'Proof sync failed');updateJournal(api().getDeploymentJournal?.());setStatus('Onchain deployment is complete, but collector proof sync needs attention.','warn');autoSave();});}
   window.RelicForgeResume=Object.freeze({
     prepareFresh:async()=>{const ctx=await context();return {ctx,input:launchInputs(ctx)};},

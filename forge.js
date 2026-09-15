@@ -4418,7 +4418,7 @@ ${await file.text()}`;
     return getResumeContext();
   }
 
-  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, getDeploymentHistory, selectDeploymentHistory, beginNewDeployment, getFreshDeploymentRequest, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite, publishMintPageCloud };
+  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, getDeploymentHistory, selectDeploymentHistory, beginNewDeployment, getFreshDeploymentRequest, startFreshDeployment: forgeCollection, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite, publishMintPageCloud };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();
