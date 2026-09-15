@@ -123,8 +123,8 @@
     let c=api().getResumeContext();
     if(!c.compiled){ setStatus('Compiling the current Step 4 build so the immutable fingerprint can be verified…','warn'); await api().compileForOnchain(); c=api().getResumeContext(); }
     if(!c.compiled)throw new Error('Compile for Onchain did not produce a valid package.');
-    if(!c.signer||!c.wallet){ await api().connectWallet(); c=api().getResumeContext(); }
-    if(!c.signer||!c.wallet)throw new Error('Connect the creator wallet.');
+    if(!c.signer||!c.wallet){ await api().connectWallet({requireLaunch:true}); c=api().getResumeContext(); }
+    if(!c.signer||!c.wallet)throw new Error('Connect and verify the creator wallet on the selected launch network.');
     const network=await c.provider.getNetwork();
     if(Number(network.chainId)!==Number(launchScope.chainId))throw new Error('Connected wallet network does not match the selected launch network.');
     if(Number(c.config?.chainId)!==Number(launchScope.chainId))throw new Error('Resume configuration does not match the selected launch network.');
