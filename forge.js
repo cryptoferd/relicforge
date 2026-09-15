@@ -137,7 +137,7 @@
     'function payoutReceiver() view returns(address)', 'function royaltyReceiver() view returns(address)', 'function royaltyBps() view returns(uint96)',
     'function maxSupply() view returns(uint32)', 'function totalCommitted() view returns(uint32)', 'function totalMinted() view returns(uint32)', 'function pendingSupply() view returns(uint32)',
     'function futureRevealMode() view returns(uint8)', 'function platformFeeMode() view returns(uint8)', 'function lockedPlatformFeeCents() view returns(uint32)',
-    'function batchWindowSeconds() view returns(uint64)', 'function maxRandomnessCostPerBatchWei() view returns(uint256)',
+    'function batchWindowSeconds() view returns(uint64)', 'function maxRandomnessCostPerBatchWei() view returns(uint256)', 'function autoRevealCallbackGasForQuantity(uint32) view returns(uint32)',
     'function sponsoredPrepaidWei() view returns(uint256)', 'function hopperBalance() view returns(uint256)', 'function creatorEscrow() view returns(uint256)', 'function accruedCreatorProceeds() view returns(uint256)',
     'function delayedRevealRequested() view returns(bool)', 'function delayedRevealPrepared() view returns(bool)', 'function delayedRevealed() view returns(bool)',
     'function delayedRevealSupply() view returns(uint32)', 'function delayedRevealRequestId() view returns(uint256)',
@@ -452,11 +452,12 @@
 
   async function buildMintPageConfig(collectionAddress = forgeState.collectionAddress) {
     if (!collectionAddress || !window.ethers.isAddress(collectionAddress)) throw new Error('Forge a collection before generating its mint page.');
-    if (await isCanonicalV2Collection(collectionAddress)) throw new Error('R12-v2 collector mint-page publishing is intentionally disabled in Creator UI R1. Install the dedicated V2 collector-page R2 adapter first.');
+    const isV2MintPage = await isCanonicalV2Collection(collectionAddress);
     const [collectionImage, bannerImage] = await Promise.all([fileToDataUrl(forgeState.mintPageImageFile), fileToDataUrl(forgeState.mintPageBannerFile)]);
     return {
-      schema: 'relic-forge/mint-page@1',
-      chainId: 11155111,
+      schema: isV2MintPage ? 'relic-forge/mint-page@3' : 'relic-forge/mint-page@1',
+      protocol: isV2MintPage ? 'r12-v2' : 'legacy',
+      chainId: activeChainId() || 11155111,
       contract: collectionAddress,
       collectionImage,
       bannerImage,
@@ -483,7 +484,8 @@
   }
 
   async function publishMintPageCloud(collectionAddress = forgeState.collectionAddress, dashboard = false) {
-    if (await isCanonicalV2Collection(collectionAddress)) throw new Error('R12-v2 collector mint-page publishing is disabled until Creator UI R2.');
+    const isV2MintPage = await isCanonicalV2Collection(collectionAddress);
+    const mintPageChainId = activeChainId() || 11155111;
     if (!window.RelicForgeCloud?.enabled?.()) throw new Error('RelicForge Cloud API is not configured. Set apiBase in relicforge-config.js first.');
     if (!forgeState.wallet) await connectWallet();
     await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
@@ -494,9 +496,10 @@
     // from accidentally supplying another collection's local presentation settings.
     const localConfig = dashboard
       ? {
-          ...readMintPageConfig(collectionAddress, 11155111),
-          schema: 'relic-forge/mint-page@1',
-          chainId: 11155111,
+          ...readMintPageConfig(collectionAddress, mintPageChainId),
+          schema: isV2MintPage ? 'relic-forge/mint-page@3' : 'relic-forge/mint-page@1',
+          protocol: isV2MintPage ? 'r12-v2' : 'legacy',
+          chainId: mintPageChainId,
           contract: collectionAddress,
           generatedAt: new Date().toISOString(),
         }
@@ -3214,6 +3217,38 @@ ${await file.text()}`;
     }).join('');
   }
 
+  async function rf26V2CreatorMintOverrides(collection, quantity, value) {
+    const revealMode=Number(await collection.futureRevealMode());
+    if(revealMode!==1)return { value };
+
+    const gasPrice=await rf26RandomnessGasPrice();
+    const maxGroupQuantity=Math.min(20,Math.max(1,Number(quantity)));
+    const [callbackGasRaw,ceilingRaw,adapterAddress]=await Promise.all([
+      collection.autoRevealCallbackGasForQuantity(maxGroupQuantity),
+      collection.maxRandomnessCostPerBatchWei(),
+      collection.randomnessProvider(),
+    ]);
+    const callbackGas=Number(callbackGasRaw);
+    const ceiling=BigInt(ceilingRaw);
+    const adapter=new window.ethers.Contract(adapterAddress,V2_RANDOMNESS_ABI,readProvider(activeChainId() || 11155111));
+    const quote=BigInt(await adapter.estimateRequestPriceAtGasPrice(callbackGas,gasPrice));
+    if(quote>ceiling)throw new Error(
+      'Creator Mint temporarily unavailable: current randomness quote '+window.ethers.formatEther(quote)+
+      ' ETH exceeds the platform ceiling '+window.ethers.formatEther(ceiling)+' ETH.'
+    );
+
+    const estimate=BigInt(await collection.creatorMint.estimateGas(
+      forgeState.wallet,quantity,{value,gasPrice}
+    ));
+    const gasLimit=((estimate*130n)/100n)+100000n;
+    console.info('RelicForge R2 fee-aware Creator Mint',{
+      quantity:Number(quantity),callbackGas,gasPriceWei:gasPrice.toString(),
+      randomnessQuoteWei:quote.toString(),randomnessCeilingWei:ceiling.toString(),
+      gasEstimate:estimate.toString(),gasLimit:gasLimit.toString()
+    });
+    return Object.freeze({value,gasPrice,gasLimit});
+  }
+
   async function handleV2LaunchedAction(action, snap) {
     try {
       if (action !== 'mintpage') await requireForgeWrite(snap.address);
@@ -3227,7 +3262,7 @@ ${await file.text()}`;
       const collection = new window.ethers.Contract(snap.address, V2_COLLECTION_ABI, forgeState.signer);
       const phases = new window.ethers.Contract(snap.mintPhasesAddress, V2_MINT_PHASES_ABI, forgeState.signer);
       const canControl = String(snap.controller).toLowerCase() === String(forgeState.wallet).toLowerCase();
-      if (['mastermint','creatormint','preparedeferred','requestdeferred','withdraw','payout','royalty'].includes(action) && !canControl) {
+      if (['mastermint','creatormint','savemintpage','preparedeferred','requestdeferred','withdraw','payout','royalty'].includes(action) && !canControl) {
         throw new Error('Connected wallet is not the active collection controller.');
       }
 
@@ -3237,16 +3272,39 @@ ${await file.text()}`;
         await tx.wait();
       } else if (action === 'creatormint') {
         if (snap.soldOut) throw new Error('Minting unavailable — collection maximum supply has already been minted.');
-        const q = Math.max(1, Math.min(50, Math.floor(Number($('dashboardV2CreatorMintQty')?.value || 1))));
+        const remainingSupply=Math.max(0,Number(snap.maxSupply)-Number(snap.totalMinted));
+        const q = Math.max(1, Math.min(50, remainingSupply, Math.floor(Number($('dashboardV2CreatorMintQty')?.value || 1))));
         const quote = await phases.creatorTeamFeeQuote(q);
         const fee = BigInt(quote.feeWei ?? quote[0] ?? 0n);
         const healthy = Boolean(quote.oracleHealthy ?? quote[1]);
         const active = Boolean(quote.feeActive ?? quote[2]);
         const value = active && healthy ? fee : 0n;
-        launchedStatus('Creator mint fee quote: ' + window.ethers.formatEther(value) + ' ETH. Submitting immediate-ownership mint...');
-        const tx = await collection.creatorMint(forgeState.wallet, q, { value });
+        launchedStatus('Creator mint fee quote: ' + window.ethers.formatEther(value) + ' ETH. Preparing adaptive Forge gas envelope...');
+        const overrides=await rf26V2CreatorMintOverrides(collection,q,value);
+        const tx = await collection.creatorMint(forgeState.wallet, q, overrides);
         await tx.wait();
         launchedStatus('Creator mint confirmed. NFT ownership is immediate; Forge reveal continues automatically when configured.');
+      } else if (action === 'savemintpage') {
+        const chainId=activeChainId() || 11155111;
+        const existing={...readMintPageConfig(snap.address,chainId),...(await publishedMintPageConfig(snap.address,chainId))};
+        const config={
+          ...existing,
+          schema:'relic-forge/mint-page@3',
+          protocol:'r12-v2',
+          chainId,
+          contract:snap.address,
+          title:String($('dashboardV2MintPageTitle')?.value || snap.name || 'Relic Forge Collection').trim(),
+          description:String($('dashboardV2MintPageDescription')?.value || snap.description || '').trim(),
+          updatedAt:new Date().toISOString(),
+        };
+        delete config.collectionImage;
+        delete config.bannerImage;
+        writeMintPageConfig(config);
+        launchedStatus('Publishing R12-v2 mint-page settings and media…');
+        await publishMintPageCloud(snap.address,true);
+        forgeState.dashboardMintPageImageFile=null;
+        forgeState.dashboardMintPageBannerFile=null;
+        launchedStatus('Mint page updated. Replaced media is removed from RelicForge storage when no longer referenced.');
       } else if (action === 'withdraw') {
         launchedStatus('Withdrawing accrued creator proceeds to ' + snap.payoutReceiver + '...');
         const tx = await collection.withdraw();
@@ -3324,6 +3382,15 @@ ${await file.text()}`;
       revealActions = '<button class="primary-btn" type="button" disabled>REVEAL COLLECTION — STEP 1 OF 2</button>';
     }
 
+    const v2MintPageConfig={...readMintPageConfig(snap.address,activeChainId() || 11155111),...(await publishedMintPageConfig(snap.address,activeChainId() || 11155111))};
+    forgeState.dashboardMintPageImageFile=null;
+    forgeState.dashboardMintPageBannerFile=null;
+    const v2MintPageImage=v2MintPageConfig.collectionImage || '';
+    const v2MintPageBanner=v2MintPageConfig.bannerImage || '';
+    const savedProjectMatches=String(forgeState.deploymentJournal?.collectionAddress || '').toLowerCase()===String(snap.address).toLowerCase();
+    if(savedProjectMatches && !v2MintPageImage && forgeState.mintPageImageFile)forgeState.dashboardMintPageImageFile=forgeState.mintPageImageFile;
+    if(savedProjectMatches && !v2MintPageBanner && forgeState.mintPageBannerFile)forgeState.dashboardMintPageBannerFile=forgeState.mintPageBannerFile;
+
     const soldOutBanner = snap.soldOut
       ? '<div class="forge-check warn">Minting unavailable — collection maximum supply has already been minted.</div>'
       : '';
@@ -3337,11 +3404,40 @@ ${await file.text()}`;
       '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="' + (snap.masterMintEnabled ? 'ghost-btn danger-btn' : 'primary-btn') + '" data-v2-dashboard-action="mastermint" ' + (canControl ? '' : 'disabled') + '>' + (snap.masterMintEnabled ? 'Pause Minting' : 'Enable Minting') + '</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="' + Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted)) + '" value="1" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="' + esc(snap.payoutReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="payout" ' + (canControl ? '' : 'disabled') + '>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="' + esc(snap.royaltyReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="' + (snap.royaltyBps / 100).toFixed(2) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" ' + (canControl ? '' : 'disabled') + '>Update Royalty</button></div></div>' +
       '<div class="launched-section"><h4>Reveal</h4><div class="launched-stats"><div><span>State</span><strong>' + revealTitle + '</strong></div><div><span>Frozen delayed supply</span><strong>' + snap.delayedRevealSupply + '</strong></div><div><span>Automatic requests</span><strong>' + snap.activeAutoRevealRequests + '</strong></div></div><div class="forge-inline-status">' + esc(revealMessage) + '</div><div class="launched-actions">' + revealActions + '</div><small class="forge-footnote">Normal Studio controls do not expose batch locking, manual randomness requests, request IDs, replay, or settlement. R2 handles the normal reveal lifecycle automatically.</small></div>' +
       '<div class="launched-section"><h4>MintPhases stages</h4>' + v2PhaseRows(snap, canControl) + '<div class="prototype-note"><strong>Stage scheduling remains independent of reveal</strong><p>Existing stages can be updated, enabled, or disabled here. A sold-out collection stays closed even if a stage schedule is otherwise open.</p></div></div>' +
-      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">The R12-v2 R2 MintPhases-aware collector page uses immediate NFT ownership and automatic Forge reveal semantics.</div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/' + esc(snap.address) + '" rel="noreferrer" target="_blank">View on Etherscan</a></div></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
+      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">Edit the public R12-v2 mint page after deployment. These presentation settings do not change immutable NFT artwork or metadata.</div><div class="launched-controls-grid"><label class="field"><span>Mint page title</span><input id="dashboardV2MintPageTitle" value="' + esc(v2MintPageConfig.title || snap.name || '') + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Mint page description</span><textarea id="dashboardV2MintPageDescription" rows="4" ' + (canControl ? '' : 'disabled') + '>' + esc(v2MintPageConfig.description || snap.description || '') + '</textarea></label></div><div class="mint-page-builder-grid dashboard-mint-page-builder"><div class="mint-page-media-settings"><label class="compact-upload" for="dashboardV2MintPageImageInput"><strong>Collection image</strong><span id="dashboardV2MintPageImageName">' + (forgeState.dashboardMintPageImageFile ? 'Saved project image ready to publish' : (v2MintPageImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageImageInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label><label class="compact-upload" for="dashboardV2MintPageBannerInput"><strong>Collection banner</strong><span id="dashboardV2MintPageBannerName">' + (forgeState.dashboardMintPageBannerFile ? 'Saved project banner ready to publish' : (v2MintPageBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageBannerInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label></div><div class="mint-page-preview"><div class="mint-page-banner-preview" id="dashboardV2MintPagePreviewBanner">' + (v2MintPageBanner ? '<img src="' + esc(v2MintPageBanner) + '" alt=""/>' : '<span>BANNER</span>') + '</div><div class="mint-page-preview-body"><div class="mint-page-avatar-preview" id="dashboardV2MintPagePreviewImage">' + (v2MintPageImage ? '<img src="' + esc(v2MintPageImage) + '" alt=""/>' : '<span>RF</span>') + '</div><div><strong>' + esc(v2MintPageConfig.title || snap.name || 'Relic Forge Collection') + '</strong><p>Live mint progress · recent mints · wallet mint history</p></div></div></div></div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="savemintpage" type="button" ' + (canControl ? '' : 'disabled') + '>Save Mint Page</button><button class="ghost-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="https://sepolia.etherscan.io/address/' + esc(snap.address) + '" rel="noreferrer" target="_blank">View on Etherscan</a></div><small class="forge-footnote">Replacing a collection image or banner retires the previous stored asset when no other collection references it.</small></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
 
     detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button =>
       button.addEventListener('click', () => handleV2LaunchedAction(button.dataset.v2DashboardAction, snap))
     );
+    $('dashboardV2MintPageImageInput')?.addEventListener('change', async event => {
+      try {
+        forgeState.dashboardMintPageImageFile=validateMintPageMedia(event.target.files?.[0] || null,'Collection image');
+        if($('dashboardV2MintPageImageName'))$('dashboardV2MintPageImageName').textContent=forgeState.dashboardMintPageImageFile
+          ? forgeState.dashboardMintPageImageFile.name+' · '+(forgeState.dashboardMintPageImageFile.size/1024/1024).toFixed(2)+' MB'
+          : (v2MintPageImage?'Current image saved · choose a file to replace it':'2 MB max · image file');
+        const preview=forgeState.dashboardMintPageImageFile?await fileToDataUrl(forgeState.dashboardMintPageImageFile):v2MintPageImage;
+        setPreviewImage('dashboardV2MintPagePreviewImage',preview,'RF');
+      } catch(error) {
+        event.target.value='';
+        forgeState.dashboardMintPageImageFile=null;
+        if($('dashboardV2MintPageImageName'))$('dashboardV2MintPageImageName').textContent='Image rejected: '+error.message;
+      }
+    });
+    $('dashboardV2MintPageBannerInput')?.addEventListener('change', async event => {
+      try {
+        forgeState.dashboardMintPageBannerFile=validateMintPageMedia(event.target.files?.[0] || null,'Collection banner');
+        if($('dashboardV2MintPageBannerName'))$('dashboardV2MintPageBannerName').textContent=forgeState.dashboardMintPageBannerFile
+          ? forgeState.dashboardMintPageBannerFile.name+' · '+(forgeState.dashboardMintPageBannerFile.size/1024/1024).toFixed(2)+' MB'
+          : (v2MintPageBanner?'Current banner saved · choose a file to replace it':'2 MB max · image file');
+        const preview=forgeState.dashboardMintPageBannerFile?await fileToDataUrl(forgeState.dashboardMintPageBannerFile):v2MintPageBanner;
+        setPreviewImage('dashboardV2MintPagePreviewBanner',preview,'BANNER');
+      } catch(error) {
+        event.target.value='';
+        forgeState.dashboardMintPageBannerFile=null;
+        if($('dashboardV2MintPageBannerName'))$('dashboardV2MintPageBannerName').textContent='Banner rejected: '+error.message;
+      }
+    });
+
     detail.querySelectorAll('[data-v2-phase-toggle]').forEach(button => button.addEventListener('click', async () => {
       try {
         await requireForgeWrite(snap.address);
@@ -4207,7 +4303,7 @@ ${await file.text()}`;
     return getResumeContext();
   }
 
-  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
+  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite, publishMintPageCloud };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();
