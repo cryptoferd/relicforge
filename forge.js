@@ -219,6 +219,8 @@
     dashboardMintPageImageFile: null,
     dashboardMintPageBannerFile: null,
     deploymentJournal: null,
+    deploymentHistory: [],
+    newDeploymentRequest: null,
   };
 
 
@@ -292,28 +294,68 @@
 
 
   const DEPLOYMENT_JOURNAL_STORAGE_KEY = 'relicforge_v2_deployment_journals_v1';
+  const DEPLOYMENT_HISTORY_STORAGE_KEY = 'relicforge_v2_deployment_history_v1';
 
   function cloneDeploymentJournal(value) { return value ? JSON.parse(JSON.stringify(value)) : null; }
   function deploymentJournalMap() { try { return JSON.parse(localStorage.getItem(DEPLOYMENT_JOURNAL_STORAGE_KEY) || '{}') || {}; } catch { return {}; } }
+  function deploymentHistoryMap() { try { return JSON.parse(localStorage.getItem(DEPLOYMENT_HISTORY_STORAGE_KEY) || '{}') || {}; } catch { return {}; } }
+  function deploymentRecordKey(journal) {
+    if (!journal) return '';
+    if (journal.deploymentId) return String(journal.deploymentId);
+    const address=String(journal.collectionAddress||'').toLowerCase();
+    return [Number(journal.chainId||0),address||'pending',String(journal.startedAt||'legacy')].join(':');
+  }
+  function archiveDeploymentJournal(journal, reason='checkpoint') {
+    if (!journal?.provenance) return null;
+    const provenance=String(journal.provenance).toLowerCase();
+    const map=deploymentHistoryMap();
+    const saved=Array.isArray(map[provenance])?map[provenance]:[];
+    const record={...cloneDeploymentJournal(journal),historyKey:deploymentRecordKey(journal),archivedAt:new Date().toISOString(),archiveReason:String(reason||'checkpoint')};
+    const key=record.historyKey;
+    const next=saved.filter(row=>String(row?.historyKey||deploymentRecordKey(row))!==key);
+    next.push(record);
+    next.sort((a,b)=>String(a.updatedAt||a.archivedAt||'').localeCompare(String(b.updatedAt||b.archivedAt||'')));
+    map[provenance]=next.slice(-100);
+    try { localStorage.setItem(DEPLOYMENT_HISTORY_STORAGE_KEY, JSON.stringify(map)); } catch {}
+    forgeState.deploymentHistory=map[provenance].map(cloneDeploymentJournal);
+    return cloneDeploymentJournal(record);
+  }
+  function getDeploymentHistory(provenance=forgeState.compiled?.provenance||forgeState.deploymentJournal?.provenance) {
+    if(!provenance)return [];
+    const key=String(provenance).toLowerCase(),map=deploymentHistoryMap();
+    const rows=[...(Array.isArray(map[key])?map[key]:[]),...(Array.isArray(forgeState.deploymentHistory)?forgeState.deploymentHistory:[])];
+    const deduped=new Map();
+    for(const row of rows){
+      if(!row?.provenance||String(row.provenance).toLowerCase()!==key)continue;
+      const historyKey=String(row.historyKey||deploymentRecordKey(row));
+      deduped.set(historyKey,{...cloneDeploymentJournal(row),historyKey});
+    }
+    return [...deduped.values()].sort((a,b)=>String(b.updatedAt||b.archivedAt||'').localeCompare(String(a.updatedAt||a.archivedAt||'')));
+  }
   function persistDeploymentJournal(journal) {
     forgeState.deploymentJournal = journal ? cloneDeploymentJournal(journal) : null;
     if (journal?.provenance) {
       const map = deploymentJournalMap();
       map[String(journal.provenance).toLowerCase()] = cloneDeploymentJournal(journal);
       try { localStorage.setItem(DEPLOYMENT_JOURNAL_STORAGE_KEY, JSON.stringify(map)); } catch {}
+      if(journal.collectionAddress)archiveDeploymentJournal(journal,'checkpoint');
     }
     window.dispatchEvent(new CustomEvent('relicforge:deployment-checkpoint', { detail: { journal: cloneDeploymentJournal(forgeState.deploymentJournal) } }));
     return forgeState.deploymentJournal;
   }
   function findLocalDeploymentJournal(provenance) { if (!provenance) return null; return cloneDeploymentJournal(deploymentJournalMap()[String(provenance).toLowerCase()] || null); }
   function beginDeploymentJournal(compiled, factoryAddress) {
+    const fresh=forgeState.newDeploymentRequest;
+    if(fresh&&String(fresh.provenance).toLowerCase()===String(compiled.provenance).toLowerCase()){
+      return persistDeploymentJournal({schema:'relic-forge/deployment-journal@1',deploymentId:fresh.deploymentId,chainId:activeChainId()||11155111,provenance:compiled.provenance,factory:factoryAddress,collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,status:'creating',steps:{},startedAt:fresh.requestedAt||new Date().toISOString(),updatedAt:new Date().toISOString(),lastError:null});
+    }
     const prior = forgeState.deploymentJournal?.provenance === compiled.provenance ? forgeState.deploymentJournal : findLocalDeploymentJournal(compiled.provenance);
     if (prior?.collectionAddress && prior.status !== 'complete') throw new Error('An incomplete deployment already exists for this compiled build. Use Resume Deployment instead of creating a duplicate collection.');
     if (prior?.collectionAddress && prior.status === 'complete') throw new Error('This compiled build is already associated with a completed deployment. Open the existing collection instead of forging a duplicate.');
     return persistDeploymentJournal({schema:'relic-forge/deployment-journal@1',chainId:activeChainId()||11155111,provenance:compiled.provenance,factory:factoryAddress,collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,status:'creating',steps:{},startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),lastError:null});
   }
   function adoptDeploymentJournal(partial) {
-    const existing = forgeState.deploymentJournal || findLocalDeploymentJournal(partial?.provenance) || {};
+    const existing = forgeState.deploymentJournal || (partial?.deploymentId ? null : findLocalDeploymentJournal(partial?.provenance)) || {};
     return persistDeploymentJournal({...existing,schema:'relic-forge/deployment-journal@1',chainId:activeChainId()||11155111,...partial,steps:{...(existing.steps||{}),...(partial?.steps||{})},startedAt:existing.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()});
   }
   function bindDeploymentJournal(collectionAddress,dataAddress,mintPhasesAddress,txHash) {
@@ -2011,7 +2053,8 @@ ${await file.text()}`;
     if(!window.RF26FreshForge?.run)throw new Error('R3D-B2 R3 fresh Forge runtime is unavailable. Reload Studio.');
     return window.RF26FreshForge.run({
       quoteRandomness:()=>refreshVrfQuote(),
-      attach:rf26AttachFreshDeployment
+      attach:rf26AttachFreshDeployment,
+      deploymentRequest:getFreshDeploymentRequest()
     });
   }
 
@@ -3776,7 +3819,7 @@ ${await file.text()}`;
   function getForgeProjectState() {
     const wl = forgeState.whitelist;
     return {
-      schema: 'relic-forge/forge-settings@6',
+      schema: 'relic-forge/forge-settings@7',
       launchName: $('launchName')?.value || '',
       launchSymbol: $('launchSymbol')?.value || '',
       launchDescription: $('launchDescription')?.value || '',
@@ -3813,6 +3856,8 @@ ${await file.text()}`;
       publicPhaseId: forgeState.publicPhaseId,
       whitelistPhaseId: forgeState.whitelistPhaseId,
       deploymentJournal: cloneDeploymentJournal(forgeState.deploymentJournal),
+      deploymentHistory: getDeploymentHistory(),
+      newDeploymentRequest: forgeState.newDeploymentRequest ? JSON.parse(JSON.stringify(forgeState.newDeploymentRequest)) : null,
       whitelist: wl ? {
         entries: wl.entries,
         sourceType: wl.sourceType,
@@ -3827,8 +3872,19 @@ ${await file.text()}`;
   }
 
   function restoreForgeProjectState(saved, options = {}) {
-    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4', 'relic-forge/forge-settings@5', 'relic-forge/forge-settings@6'].includes(saved.schema)) return;
+    if (!saved || !['relic-forge/forge-settings@1', 'relic-forge/forge-settings@2', 'relic-forge/forge-settings@3', 'relic-forge/forge-settings@4', 'relic-forge/forge-settings@5', 'relic-forge/forge-settings@6', 'relic-forge/forge-settings@7'].includes(saved.schema)) return;
     forgeState.deploymentJournal = saved.deploymentJournal ? cloneDeploymentJournal(saved.deploymentJournal) : null;
+    forgeState.deploymentHistory = Array.isArray(saved.deploymentHistory) ? saved.deploymentHistory.map(cloneDeploymentJournal) : [];
+    forgeState.newDeploymentRequest = saved.newDeploymentRequest && saved.newDeploymentRequest.deploymentId ? JSON.parse(JSON.stringify(saved.newDeploymentRequest)) : null;
+    if(!forgeState.newDeploymentRequest && forgeState.deploymentJournal?.deploymentId && !forgeState.deploymentJournal?.collectionAddress){
+      forgeState.newDeploymentRequest={
+        deploymentId:String(forgeState.deploymentJournal.deploymentId),
+        provenance:String(forgeState.deploymentJournal.provenance||''),
+        chainId:Number(forgeState.deploymentJournal.chainId||activeChainId()||11155111),
+        factory:String(forgeState.deploymentJournal.factory||''),
+        requestedAt:forgeState.deploymentJournal.startedAt||new Date().toISOString()
+      };
+    }
     if (forgeState.deploymentJournal) persistDeploymentJournal(forgeState.deploymentJournal);
     const values = {
       launchName: saved.launchName,
@@ -3861,7 +3917,7 @@ ${await file.text()}`;
     if (savedFeeRadio) savedFeeRadio.checked = true;
     refreshPlatformFeeQuote().catch(() => {});
     const savedReveal = Number(saved.revealMode ?? 0);
-    const reveal = saved.schema === 'relic-forge/forge-settings@6' ? savedReveal : (savedReveal === 0 ? 1 : 0);
+    const reveal = ['relic-forge/forge-settings@6','relic-forge/forge-settings@7'].includes(saved.schema) ? savedReveal : (savedReveal === 0 ? 1 : 0);
     if ($('holderRenderModeEnabled')) $('holderRenderModeEnabled').checked = saved.holderRenderModeEnabled !== false;
     if ($('defaultRenderMode')) $('defaultRenderMode').value = String(saved.defaultRenderMode || 0);
     const radio = document.querySelector(`input[name="revealMode"][value="${reveal}"]`);
@@ -4210,11 +4266,64 @@ ${await file.text()}`;
     if($('viewerCollectionAddress'))$('viewerCollectionAddress').value='';
     for(const id of ['forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgePrepareDelayedRevealBtn','forgeRequestDelayedRevealBtn','forgeInspectBtn','openMintPageBtn','publishMintPageBtn','downloadMintPageBtn'])if($(id))$(id).disabled=true;
   }
+
+  function newDeploymentId(){
+    const uuid=window.crypto?.randomUUID?.()||([Date.now().toString(36),Math.random().toString(36).slice(2)].join('-'));
+    return 'dep-'+String(uuid).toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,80);
+  }
+  function getFreshDeploymentRequest(){return forgeState.newDeploymentRequest?JSON.parse(JSON.stringify(forgeState.newDeploymentRequest)):null;}
+  async function beginNewDeployment(){
+    if(!forgeState.compiled){await compileForOnchain();}
+    const compiled=forgeState.compiled;
+    if(!compiled?.provenance)throw new Error('Compile the project before starting a new deployment.');
+    const scope=await rf26Network().requireReady();
+    if(![1,11155111].includes(Number(scope.chainId)))throw new Error('The selected network is not approved for a new deployment.');
+    const prior=forgeState.deploymentJournal||findLocalDeploymentJournal(compiled.provenance);
+    if(prior)archiveDeploymentJournal(prior,'superseded-by-new-deployment');
+    rf26ClearDeploymentBindings();
+    const request={
+      deploymentId:newDeploymentId(),provenance:compiled.provenance,chainId:Number(scope.chainId),
+      factory:String(scope.factory),requestedAt:new Date().toISOString()
+    };
+    forgeState.newDeploymentRequest=request;
+    const journal=persistDeploymentJournal({
+      schema:'relic-forge/deployment-journal@1',deploymentId:request.deploymentId,
+      chainId:request.chainId,provenance:compiled.provenance,factory:scope.factory,
+      collectionAddress:null,dataAddress:null,mintPhasesAddress:null,publicPhaseId:null,whitelistPhaseId:null,
+      status:'creating',steps:{},startedAt:request.requestedAt,updatedAt:request.requestedAt,lastError:null
+    });
+    rf26RefreshLaunchAction();
+    window.dispatchEvent(new CustomEvent('relicforge:new-deployment-armed',{detail:{request:{...request},journal:cloneDeploymentJournal(journal)}}));
+    return {...request};
+  }
+  function selectDeploymentHistory(historyKey){
+    const row=getDeploymentHistory().find(item=>String(item.historyKey||deploymentRecordKey(item))===String(historyKey||''));
+    if(!row)throw new Error('Deployment history entry was not found.');
+    if(forgeState.deploymentJournal)archiveDeploymentJournal(forgeState.deploymentJournal,'selection-change');
+    rf26ClearDeploymentBindings();
+    forgeState.newDeploymentRequest=null;
+    if(row.chainId!=null&&[1,11155111].includes(Number(row.chainId))){
+      window.RelicForgeNetworks.chainId(Number(row.chainId));
+      if(activeChainId()!==Number(row.chainId))rf26Network().select(Number(row.chainId));
+    }
+    const restored=persistDeploymentJournal({...cloneDeploymentJournal(row),historyKey:undefined,archivedAt:undefined,archiveReason:undefined});
+    if(restored.collectionAddress)applyResumeBindings(restored);
+    else if(restored.deploymentId){
+      forgeState.newDeploymentRequest={
+        deploymentId:String(restored.deploymentId),provenance:String(restored.provenance||''),
+        chainId:Number(restored.chainId||activeChainId()||11155111),factory:String(restored.factory||''),
+        requestedAt:restored.startedAt||new Date().toISOString()
+      };
+    }
+    rf26RefreshLaunchAction();
+    return cloneDeploymentJournal(restored);
+  }
+
   const rf26OriginalGetState=getForgeProjectState;
   getForgeProjectState=function(){return {...rf26OriginalGetState(),launchChainId:activeChainId()};};
   const rf26OriginalRestore=restoreForgeProjectState;
   restoreForgeProjectState=function(saved,options={}){
-    if(!saved||!['relic-forge/forge-settings@1','relic-forge/forge-settings@2','relic-forge/forge-settings@3','relic-forge/forge-settings@4','relic-forge/forge-settings@5','relic-forge/forge-settings@6'].includes(saved.schema))return;
+    if(!saved||!['relic-forge/forge-settings@1','relic-forge/forge-settings@2','relic-forge/forge-settings@3','relic-forge/forge-settings@4','relic-forge/forge-settings@5','relic-forge/forge-settings@6', 'relic-forge/forge-settings@7'].includes(saved.schema))return;
     const journal=saved.deploymentJournal||null;
     const bound=!!(saved.collectionAddress||journal?.collectionAddress||journal?.provenance);
     const explicit=journal?.chainId??saved.chainId??saved.launchChainId??null;
@@ -4276,9 +4385,12 @@ ${await file.text()}`;
        !equal(bindings.creator,forgeState.wallet))
       throw new Error('Fresh-deployment network, Factory, or creator mismatch.');
     const loaded=forgeState.deploymentJournal;
+    const freshRequest=getFreshDeploymentRequest();
     if(loaded?.provenance&&!equal(loaded.provenance,compiled.provenance))
       throw new Error('A different deployment journal is loaded. Save and reopen the intended project.');
-    const prior=loaded||findLocalDeploymentJournal(compiled.provenance);
+    const prior=freshRequest
+      ? (loaded?.deploymentId===freshRequest.deploymentId?loaded:null)
+      : (loaded||findLocalDeploymentJournal(compiled.provenance));
     if(prior){
       if(prior.provenance&&!equal(prior.provenance,compiled.provenance))throw new Error('Deployment fingerprint mismatch.');
       if(prior.chainId!=null&&Number(prior.chainId)!==11155111)throw new Error('Deployment network mismatch.');
@@ -4297,13 +4409,16 @@ ${await file.text()}`;
     }
     adoptDeploymentJournal({
       provenance:compiled.provenance,chainId:11155111,factory:scope.factory,
+      ...(freshRequest?.deploymentId?{deploymentId:freshRequest.deploymentId}:prior?.deploymentId?{deploymentId:prior.deploymentId}:{}),
       ...target,status:prior?.status||'partial',steps
     });
     applyResumeBindings(target);
+    if(freshRequest?.deploymentId===forgeState.newDeploymentRequest?.deploymentId)forgeState.newDeploymentRequest=null;
+    if(forgeState.deploymentJournal)archiveDeploymentJournal(forgeState.deploymentJournal,'factory-attached');
     return getResumeContext();
   }
 
-  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite, publishMintPageCloud };
+  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, getDeploymentHistory, selectDeploymentHistory, beginNewDeployment, getFreshDeploymentRequest, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite, publishMintPageCloud };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();

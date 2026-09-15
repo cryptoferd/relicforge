@@ -58,12 +58,63 @@
     if($('r24ResumePanel'))return;
     const anchor=$('forgeCompiledSummary'); if(!anchor)return;
     const panel=document.createElement('section'); panel.id='r24ResumePanel'; panel.className='r24-resume-panel';
-    panel.innerHTML=`<div class="r24-head"><div><span>DEPLOYMENT RECOVERY</span><h4>Resumable R12-v2 deployment</h4><p>Relic Forge checks the selected launch network first and submits only missing deployment steps. Confirmed transactions are never blindly replayed.</p></div><b id="r24ResumeBadge">No journal</b></div><div class="r24-meta"><div><span>Collection</span><code id="r24ResumeAddress">No collection bound</code></div><div><span>Build fingerprint</span><code id="r24ResumeFingerprint">Compile to generate fingerprint</code></div></div><div class="r24-actions"><button class="ghost-btn" id="r24CheckDeploymentBtn" type="button">Check Deployment Status</button><button class="primary-btn" id="r24ResumeDeploymentBtn" type="button">Resume Deployment</button></div><div class="r24-status" id="r24ResumeStatus">No interrupted deployment detected yet.</div><div class="r24-step-list" id="r24ResumeSteps"></div>`;
+    panel.innerHTML=`<div class="r24-head"><div><span>DEPLOYMENT RECOVERY</span><h4>Resumable R12-v2 deployment</h4><p>Relic Forge checks the selected launch network first and submits only missing deployment steps. Confirmed transactions are never blindly replayed.</p></div><b id="r24ResumeBadge">No journal</b></div><div class="r24-meta"><div><span>Collection</span><code id="r24ResumeAddress">No collection bound</code></div><div><span>Build fingerprint</span><code id="r24ResumeFingerprint">Compile to generate fingerprint</code></div></div><div class="r24-actions"><button class="ghost-btn" id="r24CheckDeploymentBtn" type="button">Check Deployment Status</button><button class="primary-btn" id="r24ResumeDeploymentBtn" type="button">Resume Deployment</button><button class="ghost-btn" id="r24NewDeploymentBtn" type="button">Deploy as New Collection</button></div><div class="r24-status" id="r24ResumeStatus">No interrupted deployment detected yet.</div><div class="r24-step-list" id="r24ResumeSteps"></div><div class="r24-step-list" id="r24DeploymentHistory"></div>`;
     anchor.insertAdjacentElement('afterend',panel);
     $('r24CheckDeploymentBtn').addEventListener('click',()=>run(false).catch(fail));
     $('r24ResumeDeploymentBtn').addEventListener('click',()=>run(true).catch(fail));
+    $('r24NewDeploymentBtn').addEventListener('click',()=>deployAsNew().catch(fail));
     updateJournal(api().getDeploymentJournal?.());
+    renderDeploymentHistory();
   }
+
+  function renderDeploymentHistory(){
+    const node=$('r24DeploymentHistory');if(!node)return;
+    const rows=api().getDeploymentHistory?.()||[],current=api().getDeploymentJournal?.();
+    const currentKey=current?.deploymentId||[Number(current?.chainId||0),String(current?.collectionAddress||'').toLowerCase()||'pending',String(current?.startedAt||'legacy')].join(':');
+    const previous=rows.filter(row=>String(row.historyKey||'')!==String(currentKey||''));
+    if(!previous.length){node.innerHTML='<div class="r24-empty">No previous deployments are attached to this project yet.</div>';return;}
+    node.innerHTML='<div class="r24-empty"><strong>Previous deployments</strong><br/>Select an older deployment to inspect or resume it. Starting a new deployment never deletes these contracts.</div>'+
+      previous.map(row=>{
+        const key=encodeURIComponent(String(row.historyKey||'')),chain=Number(row.chainId)===1?'Ethereum':'Sepolia';
+        const address=row.collectionAddress?short(row.collectionAddress):'Factory attempt';
+        return '<div class="r24-step done"><span class="r24-dot"></span><div><strong>'+esc(address)+'</strong><small>'+esc(chain+' · '+journalLabel(row.status))+'</small></div><button class="ghost-btn" data-r24-select-deployment="'+key+'" type="button">Select</button></div>';
+      }).join('');
+    node.querySelectorAll('[data-r24-select-deployment]').forEach(button=>button.addEventListener('click',()=>{
+      try{
+        const selected=api().selectDeploymentHistory?.(decodeURIComponent(button.dataset.r24SelectDeployment||''));
+        if(!selected)throw new Error('Deployment selection is unavailable.');
+        updateJournal(selected);renderDeploymentHistory();autoSave();
+        setStatus('Selected '+(selected.collectionAddress?short(selected.collectionAddress):'historical deployment attempt')+'. Recovery now applies only to this deployment instance.','good');
+      }catch(error){fail(error);}
+    }));
+  }
+  async function deployAsNew(){
+    if(ui.busy)return;
+    const ctx=await context(),current=ctx.journal||api().findLocalDeploymentJournal?.(ctx.compiled.provenance)||null;
+    const state=current?.status||'';
+    const unfinished=current&&!['complete','onchain-complete','proof-sync-pending'].includes(state);
+    const existing=current?.collectionAddress?('Existing collection: '+current.collectionAddress+'\n'):'';
+    const warning=unfinished
+      ? 'An incomplete deployment is attached to this project. It will remain onchain and in deployment history; Relic Forge will NOT delete or overwrite it.'
+      : 'This project may already have a completed deployment. The existing collection will remain unchanged and available in deployment history.';
+    const approved=window.confirm(
+      'Deploy this project as a NEW collection?\n\n'+existing+warning+
+      '\n\nA separate Collection + ProjectData + MintPhases deployment will be created from the same reusable project source.'
+    );
+    if(!approved)return;
+    if(!api().beginNewDeployment)throw new Error('Reusable-project deployment support is unavailable. Reload Studio.');
+    const request=await api().beginNewDeployment();
+    updateJournal(api().getDeploymentJournal?.());renderDeploymentHistory();autoSave();
+    setStatus('New deployment '+short(request.deploymentId)+' is armed. Existing deployments remain untouched. Starting the verified Factory flow…','good');
+    const forgeButton=$('forgeCollectionBtn');
+    if(!forgeButton)throw new Error('Forge Collection button is unavailable.');
+    setTimeout(()=>{
+      if(forgeButton.disabled){
+        setStatus('New deployment is armed. Complete the launch-network preflight, then click Forge Collection to create the separate deployment.','warn');
+      }else forgeButton.click();
+    },80);
+  }
+
   function fail(error){ console.error('Resume deployment:',error); setStatus(`Resume: ${error.shortMessage||error.message}`,'bad'); ui.busy=false; const b=$('r24ResumeDeploymentBtn'); if(b){b.disabled=false;b.textContent='Resume Deployment';} }
 
   async function context(){
@@ -109,6 +160,7 @@
   }
   async function verifyShardPrefix(data,provider,expected,getter,label){ for(let i=0;i<expected.length;i++){let p;try{p=await data[getter](i);}catch{return;}if((await provider.getCode(p)).toLowerCase()!==shardCode(expected[i]))throw new Error(`${label} shard ${i+1} does not match this compiled build.`);} }
   async function resolve(ctx,compiled,input){
+    if(ctx.journal?.deploymentId&&!ctx.journal?.collectionAddress)throw new Error('A new deployment instance is armed but its Factory collection has not been created yet. Use Forge Collection to start this deployment; recovery will not adopt an older matching collection.');
     const addresses=[]; const add=a=>{if(a&&window.ethers.isAddress(a)&&!addresses.some(x=>x.toLowerCase()===a.toLowerCase()))addresses.push(window.ethers.getAddress(a));}; add(ctx.collectionAddress);add(ctx.journal?.collectionAddress);add(api().findLocalDeploymentJournal?.(compiled.provenance)?.collectionAddress);
     for(const a of addresses){const s=await checkCandidate(a,ctx,compiled,input,true);if(s&&!s.bad?.length)return s;}
     const factory=new window.ethers.Contract(ctx.config.factory,FACTORY_ABI,ctx.provider), count=Number(await factory.creatorCollectionCount(ctx.wallet)), matches=[];
@@ -236,7 +288,7 @@ if(Boolean(await data.contentSealed())){if(String(await data.provenanceHash()).t
     finally{rf26Leave();ui.busy=false;if(b){b.disabled=false;b.textContent='Resume Deployment';}}
   }
 
-  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and proof sync are confirmed.','good');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
+  function refresh(){const j=api().getDeploymentJournal?.();updateJournal(j);renderDeploymentHistory();if(j?.deploymentId&&!j?.collectionAddress){setStatus('A new deployment is armed for this reusable project. Forge Collection will create separate contracts; prior deployments remain untouched.','good');return;}if(j?.collectionAddress){if(j.status==='complete')setStatus('Launch complete. Onchain deployment and proof sync are confirmed.','good');else if(j.status==='proof-sync-pending')setStatus('Onchain deployment is complete, but collector proof sync needs attention. Use Repair / Sync Mint Proofs.','warn');else setStatus('An incomplete deployment checkpoint is attached to this project. Check status or Resume Deployment.','warn');}}
   function install(){if(!window.RelicForgeForge?.getResumeContext){setTimeout(install,80);return;}installPanel();refresh();window.addEventListener('relicforge:deployment-checkpoint',e=>{updateJournal(e.detail?.journal);autoSave();refresh();});window.addEventListener('relicforge:v2-proof-sync-complete',()=>{api().setDeploymentStatus?.('complete');updateJournal(api().getDeploymentJournal?.());setStatus('Launch complete. Onchain deployment and Approved Wallet proof sync are confirmed.','good');autoSave();});window.addEventListener('relicforge:v2-proof-sync-failed',e=>{api().setDeploymentStatus?.('proof-sync-pending',e.detail?.error||'Proof sync failed');updateJournal(api().getDeploymentJournal?.());setStatus('Onchain deployment is complete, but collector proof sync needs attention.','warn');autoSave();});}
   window.RelicForgeResume=Object.freeze({
     prepareFresh:async()=>{const ctx=await context();return {ctx,input:launchInputs(ctx)};},

@@ -69,13 +69,36 @@
     if(!scope||!wallet)throw fail('Verify the launch network and connect the creator wallet before using a deployment journal.');
     return {scope,wallet};
   }
-  function store(){
-    const {scope,wallet}=context();
-    return core.createStore({storage:localStorage,legacyStorage:localStorage,scope,wallet});
+  function normalizeDeploymentId(value){
+    if(value==null||value==='')return null;
+    const id=String(value).trim().toLowerCase();
+    if(!/^[a-z0-9][a-z0-9._-]{7,95}$/.test(id))throw fail('Invalid deployment instance id.','RF26_RECOVERY_MISMATCH');
+    return id;
   }
-  function read(provenance){return store().read(provenance);}
-  function save(journal,options){return store().save(journal,options);}
-  function begin(provenance,factory){return store().begin(provenance,factory);}
+  function deploymentStorage(deploymentId){
+    const id=normalizeDeploymentId(deploymentId);
+    if(!id)return localStorage;
+    const suffix=':deployment:'+id;
+    return Object.freeze({
+      getItem:key=>localStorage.getItem(String(key)+suffix),
+      setItem:(key,value)=>localStorage.setItem(String(key)+suffix,String(value)),
+      removeItem:key=>localStorage.removeItem(String(key)+suffix)
+    });
+  }
+  function store(deploymentId=null){
+    const {scope,wallet}=context();
+    return core.createStore({storage:deploymentStorage(deploymentId),legacyStorage:localStorage,scope,wallet});
+  }
+  function journalStore(journal){return store(journal?.deploymentId||null);}
+  function read(provenance,deploymentId=null){return store(deploymentId).read(provenance);}
+  function save(journal,options){return journalStore(journal).save(journal,options);}
+  function begin(provenance,factory,deploymentId=null){
+    const id=normalizeDeploymentId(deploymentId);
+    const s=store(id);
+    let journal=s.begin(provenance,factory);
+    if(id)journal=s.save({...journal,deploymentId:id});
+    return journal;
+  }
   function adoptLegacy(provenance,verifiedCollection,projectId){
     return store().adoptLegacy(provenance,{verifiedCollection,expectedProjectId:projectId});
   }
@@ -119,33 +142,42 @@
        core.address(verified.factory)!==core.address(scope.factory)||
        core.address(verified.creator)!==core.address(wallet))
       throw fail('Verified collection does not match the active recovery scope.');
-    const s=store();
+    const deploymentId=normalizeDeploymentId(legacyJournal?.deploymentId||null);
+    const s=store(deploymentId);
     let journal=s.read(fingerprint);
-    if(!journal){
+    if(!journal&&!deploymentId){
       journal=s.adoptLegacy(fingerprint,{verifiedCollection:verified,expectedProjectId:projectId});
     }
     if(!journal&&legacyJournal){
-      const candidate={
-        ...legacyJournal,
-        schema:legacyJournal.schema||'relic-forge/deployment-journal@1',
-        chainId:scope.chainId,
-        factory:scope.factory,
-        provenance:fingerprint,
-        collectionAddress:verified.collection,
-        dataAddress:verified.data,
-        mintPhasesAddress:verified.phases,
-        status:legacyJournal.status||'partial'
-      };
-      if(projectId!=null&&candidate.projectId==null)candidate.projectId=String(projectId);
-      journal=s.save(candidate,{allowLegacy:true});
+      if(deploymentId){
+        journal=s.begin(fingerprint,scope.factory);
+        journal=s.save({
+          ...journal,deploymentId,
+          status:legacyJournal.status||'partial',
+          collectionAddress:verified.collection,dataAddress:verified.data,mintPhasesAddress:verified.phases,
+          publicPhaseId:legacyJournal.publicPhaseId??null,whitelistPhaseId:legacyJournal.whitelistPhaseId??null,
+          launchSpecHash:legacyJournal.launchSpecHash??journal.launchSpecHash,
+          steps:legacyJournal.steps||{},
+          ...(projectId!=null?{projectId:String(projectId)}:legacyJournal.projectId!=null?{projectId:String(legacyJournal.projectId)}:{})
+        });
+      }else{
+        const candidate={
+          ...legacyJournal,
+          schema:legacyJournal.schema||'relic-forge/deployment-journal@1',
+          chainId:scope.chainId,factory:scope.factory,provenance:fingerprint,
+          collectionAddress:verified.collection,dataAddress:verified.data,mintPhasesAddress:verified.phases,
+          status:legacyJournal.status||'partial'
+        };
+        if(projectId!=null&&candidate.projectId==null)candidate.projectId=String(projectId);
+        journal=s.save(candidate,{allowLegacy:true});
+      }
     }
     if(!journal){
       journal=s.begin(fingerprint,scope.factory);
       journal=s.save({
         ...journal,status:'partial',
-        collectionAddress:verified.collection,
-        dataAddress:verified.data,
-        mintPhasesAddress:verified.phases,
+        ...(deploymentId?{deploymentId}:{}),
+        collectionAddress:verified.collection,dataAddress:verified.data,mintPhasesAddress:verified.phases,
         ...(projectId!=null?{projectId:String(projectId)}:{})
       });
     }
@@ -192,7 +224,7 @@
   }
   async function executeLocked({journal,stepKey,label,contract,method,args=[],verify=null,allowFactory=false}){
     let normalized=assertJournal(journal);
-    const active=store().read(normalized.provenance);
+    const active=journalStore(normalized).read(normalized.provenance);
     if(active)normalized=core.merge(active,normalized);
     const prior=normalized.steps?.[stepKey];
     let prepared=null;
@@ -205,7 +237,7 @@
     const {provider}=await readScope();
     const verificationProvider=providerForIntent(provider,intentValue);
     return core.executeIntentStep({
-      store:store(),journal:normalized,stepKey,label,intentValue,provider:verificationProvider,
+      store:journalStore(normalized),journal:normalized,stepKey,label,intentValue,provider:verificationProvider,
       hashData:data=>window.ethers.keccak256(data),
       assertWrite:async expected=>{
         const scope=await network().assertWrite(),wallet=network().account();
@@ -233,10 +265,14 @@
       }:null
     });
   }
+  function recoveryLockKey(journal){
+    const base=core.key(journal),id=normalizeDeploymentId(journal?.deploymentId||null);
+    return id?base+':deployment:'+id:base;
+  }
   function exclusiveRecoveryLock(journal,callback){
     if(typeof navigator==='undefined'||!navigator.locks?.request)
       throw fail('This browser does not support the exclusive recovery lock. Use a current Chromium browser.','RF26_RECOVERY_LOCK_UNAVAILABLE');
-    return navigator.locks.request(core.key(journal),{mode:'exclusive'},callback);
+    return navigator.locks.request(recoveryLockKey(journal),{mode:'exclusive'},callback);
   }
   async function executeIntent({journal,stepKey,label,contract,method,args=[],verify=null}={}){
     const normalized=assertJournal(journal);
@@ -246,20 +282,22 @@
       finally{release();}
     });
   }
-  async function executeFactory({provenance,launchSpecHash,legacyJournal=null,contract,args,verify}={}){
+  async function executeFactory({provenance,launchSpecHash,legacyJournal=null,deploymentId=null,contract,args,verify}={}){
     const {scope,wallet}=context();
     if(![1,11155111].includes(Number(scope.chainId)))throw fail('The selected network is not approved for Factory execution.','RF26_NETWORK_LOCKED');
     if(typeof verify!=='function')throw fail('A Factory receipt and onchain postcondition verifier is required.','RF26_INTENT_MISMATCH');
     const fingerprint=core.hash(provenance),spec=core.hash(launchSpecHash);
     const identity=core.identity(scope,wallet,fingerprint);
-    return exclusiveRecoveryLock(identity,async()=>{
+    const recoveryDeploymentId=normalizeDeploymentId(deploymentId||legacyJournal?.deploymentId||null);
+    return exclusiveRecoveryLock({...identity,...(recoveryDeploymentId?{deploymentId:recoveryDeploymentId}:{})},async()=>{
       const release=network().enter();
       try{
-        const s=store();
+        const s=store(recoveryDeploymentId);
         let journal=s.read(fingerprint);
         if(!journal){
-          if(legacyJournal)throw fail('A historical deployment journal already exists for this build. Inspect or resume it before creating another collection.','RF26_EXISTING_DEPLOYMENT');
+          if(legacyJournal&&!recoveryDeploymentId)throw fail('A historical deployment journal already exists for this build. Inspect or resume it before creating another collection.','RF26_EXISTING_DEPLOYMENT');
           journal=s.begin(fingerprint,scope.factory);
+          if(recoveryDeploymentId)journal=s.save({...journal,deploymentId:recoveryDeploymentId});
         }
         if(journal.status==='complete')throw fail('This launch is already complete. Open the existing collection instead of creating another.','RF26_EXISTING_DEPLOYMENT');
         if(journal.steps?.factoryCreate?.intent&&core.address(journal.steps.factoryCreate.intent.to)!==journal.factory)

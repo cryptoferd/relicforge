@@ -43,7 +43,25 @@
     await assertCurrent(id);
     return new window.ethers.Contract(id.factory,FACTORY_ABI,runner);
   }
-  async function existing(ctx,input,id){
+  async function existing(ctx,input,id,deploymentRequest=null){
+    const inferred=ctx.journal?.deploymentId&&!ctx.journal?.collectionAddress
+      ? {deploymentId:ctx.journal.deploymentId,provenance:id.provenance,chainId:id.chainId,factory:id.factory}
+      : null;
+    const requested=deploymentRequest||inferred;
+    if(requested){
+      const deploymentId=String(requested.deploymentId||'').trim().toLowerCase();
+      if(!/^[a-z0-9][a-z0-9._-]{7,95}$/.test(deploymentId))throw fail('Invalid new-deployment instance id.');
+      if(requested.provenance&&core.hash(requested.provenance)!==id.provenance)throw fail('New-deployment build fingerprint changed.');
+      if(requested.chainId!=null&&Number(requested.chainId)!==id.chainId)throw fail('New-deployment network changed.');
+      if(requested.factory&&core.address(requested.factory)!==id.factory)throw fail('New-deployment Factory changed.');
+      const scoped=recovery().read(id.provenance,deploymentId);
+      if(scoped?.collectionAddress){
+        const candidate=await resume().checkCandidate(scoped.collectionAddress,ctx,ctx.compiled,input,true);
+        if(!candidate||candidate.bad?.length)throw fail('The deployment-instance collection does not match the compiled build.');
+        return {candidate,legacy:ctx.journal?.deploymentId===deploymentId?ctx.journal:null,scoped,deploymentId,explicitNew:true};
+      }
+      return {candidate:null,legacy:ctx.journal?.deploymentId===deploymentId?ctx.journal:null,scoped,deploymentId,explicitNew:true};
+    }
     const legacy=ctx.journal||forge().findLocalDeploymentJournal?.(id.provenance)||null;
     if(legacy){
       if(core.hash(legacy.provenance)!==id.provenance)
@@ -100,7 +118,7 @@
     },null);
     return resume().run(true);
   }
-  async function run({quoteRandomness,attach}={}){
+  async function run({quoteRandomness,attach,deploymentRequest=null}={}){
     if(running)return;
     running=true;
     const button=$('forgeCollectionBtn');
@@ -114,7 +132,7 @@
       const ctx=prepared.ctx,input=prepared.input,id=freezeContext(ctx);
       await assertCurrent(id);
       status('Checking the verified Factory and existing creator deployments…');
-      const found=await existing(ctx,input,id);
+      const found=await existing(ctx,input,id,deploymentRequest);
       if(found.candidate){
         if(found.legacy?.status==='complete'||found.scoped?.status==='complete'){
           status('This compiled build is already associated with a completed collection: '+found.candidate.address+'. Open the existing collection instead of creating another.');
@@ -160,7 +178,7 @@
       }
       status('Preparing durable Factory transaction. Do not submit a duplicate if the wallet or RPC becomes unavailable.');
       const result=await recovery().executeFactory({
-        provenance:id.provenance,launchSpecHash:spec,legacyJournal:found.legacy,
+        provenance:id.provenance,launchSpecHash:spec,legacyJournal:found.legacy,deploymentId:found.deploymentId||null,
         contract:factory,args:[launch.tuple,{value:BigInt(launch.feeValue)}],
         verify:r=>verifyCreated(r,id,ctx,input,readFactory)
       });
