@@ -908,9 +908,11 @@
 
   function bindForgeGuard() {
     const forge = $('forgeCollectionBtn');
-    if (!forge || forge.dataset.r13MultiAllowlistBound === '1') return;
-    forge.dataset.r13MultiAllowlistBound = '1';
-    forge.addEventListener('click', prepareMultiAllowlistForge, true);
+    if (!forge || forge.dataset.r13MultiAllowlistBound === 'durable-resume') return;
+    forge.dataset.r13MultiAllowlistBound = 'durable-resume';
+    // Modern R12-v2 deployment reads every configured allowlist through
+    // RelicForgeStudioR13.getAllowlistPhases() and creates/reconciles the phases
+    // in studio-resume.js. Do not attach the historical post-Forge appender.
   }
 
   function install() {
@@ -969,9 +971,22 @@
     document.body.dataset.r13Studio = 'multi-allowlist-nav';
   }
 
+  function deploymentAllowlistPhases() {
+    if (!state.phases.length && state.originalGetForgeState) {
+      const current = state.originalGetForgeState();
+      if (current.whitelistEnabled || current.whitelist?.entries?.length) {
+        const phase = phaseFromLegacy(current);
+        state.phases = [phase];
+        state.activeId = phase.id;
+      }
+    }
+    captureActivePhase();
+    return state.phases.map(serializePhase);
+  }
+
   window.RelicForgeStudioR13 = Object.freeze({
     getPublicationDetail: publicationDetail,
-    getAllowlistPhases: () => state.phases.map(serializePhase),
+    getAllowlistPhases: deploymentAllowlistPhases,
     applyResumedPhaseBindings,
   });
 

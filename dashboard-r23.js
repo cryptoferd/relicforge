@@ -90,7 +90,7 @@
   function currentR12Address() {
     const detail=$('launchedCollectionDetail'); if(!detail)return null;
     const eyebrow=detail.querySelector('.launched-detail-head .eyebrow')?.textContent||'';
-    if(!/R12-v2 COLLECTION/i.test(eyebrow))return null;
+    if(!/R12-v2\b/i.test(eyebrow))return null;
     const text=detail.querySelector('.launched-detail-head p')?.textContent?.trim()||'';
     return window.ethers?.isAddress(text)?window.ethers.getAddress(text):null;
   }
