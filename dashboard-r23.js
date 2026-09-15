@@ -214,7 +214,30 @@
     const countdown=p.enabled&&p.startTime>dashboardChainNow()
       ? `<small class="r25-phase-countdown" data-r25-dashboard-countdown="${p.id}" data-start="${p.startTime}"><span>Opens in</span><b>${dashboardCountdown(p.startTime)}</b><em>${esc(dashboardStartLabel(p.startTime))}</em></small>`
       : '';
-    return `<div class="r23-stage-row"><div><strong>Stage ${p.id} · ${type}</strong><small>${esc(window.ethers.formatEther(p.price))} ETH · ${p.minted}${p.phaseSupply?` / ${p.phaseSupply}`:''} minted · priority ${p.priority}</small>${countdown}</div>${p.accessType===1?`<button class="ghost-btn" data-r23-manage="${p.id}" type="button">Manage Wallets</button>`:'<span class="r23-public-pill">PUBLIC</span>'}</div>`;
+    const cap=p.accessType===1?(p.maxPerWallet?` · stage cap ${p.maxPerWallet}/wallet`:' · per-wallet allowances'):(p.maxPerWallet?` · ${p.maxPerWallet} max/wallet`:' · unlimited/wallet');
+    return `<div class="r23-stage-row"><div><strong>Stage ${p.id} · ${type}</strong><small>${esc(window.ethers.formatEther(p.price))} ETH · ${p.minted}${p.phaseSupply?` / ${p.phaseSupply}`:''} minted · priority ${p.priority}${cap}</small>${countdown}</div>${p.accessType===1?`<button class="ghost-btn" data-r23-manage="${p.id}" type="button">Manage Wallets</button>`:'<span class="r23-public-pill">PUBLIC</span>'}</div>`;
+  }
+
+  function syncNewStageAccessUi(){
+    const approved=Number($('r23NewAccess')?.value||0)===1;
+    $('r23NewWalletsWrap')?.classList.toggle('hidden',!approved);
+    $('r23NewAllowanceTools')?.classList.toggle('hidden',!approved);
+    const max=$('r23NewWalletMax');
+    if(max){
+      if(approved)max.value='0';
+      max.disabled=approved;
+      max.title=approved?'Approved Wallet stages use max/wallet = 0 so the Merkle allowance controls each wallet.':'0 = unlimited';
+    }
+  }
+
+  function applyAllowanceToTextarea(textareaId,inputId,statusLabel='wallet list'){
+    const amount=Math.floor(Number($(inputId)?.value||1));
+    if(!Number.isInteger(amount)||amount<1||amount>4294967295)throw new Error('Allowance must be between 1 and 4,294,967,295.');
+    const entries=parseBulk($(textareaId)?.value||'',amount);
+    if(!entries.length)throw new Error('No valid EVM wallet addresses were found.');
+    $(textareaId).value=entries.map(row=>row.address+', '+amount).join('\n');
+    setStatus('Applied allowance '+amount.toLocaleString()+' to '+entries.length.toLocaleString()+' valid wallet'+(entries.length===1?'':'s')+' in the '+statusLabel+'. Customize individual rows afterward if needed.','warn');
+    return entries;
   }
 
   function renderPanel(){
@@ -236,29 +259,36 @@
           <label class="field"><span>End date / time</span><input id="r23NewEnd" type="datetime-local" disabled/></label>
           <label class="project-toggle-row"><span><strong>No end date</strong><small>Stage stays available until disabled.</small></span><input id="r23NewNoEnd" type="checkbox" checked/></label>
           <label class="field"><span>Stage supply (0 = unlimited)</span><input id="r23NewSupply" type="number" min="0" value="0"/></label>
-          <label class="field"><span>Max / wallet (0 = unlimited)</span><input id="r23NewWalletMax" type="number" min="0" value="0"/></label>
+          <label class="field"><span>Max / wallet (0 = unlimited)</span><input id="r23NewWalletMax" type="number" min="0" value="0"/><small>For Approved Wallet stages this is locked to Unlimited so each wallet's custom allowance is authoritative.</small></label>
           <label class="project-toggle-row"><span><strong>Enable immediately</strong><small>Schedule rules still apply.</small></span><input id="r23NewEnabled" type="checkbox" checked/></label>
         </div>
-        <label class="field r23-new-wallets hidden" id="r23NewWalletsWrap"><span>Initial Approved Wallets</span><textarea id="r23NewWallets" rows="5" placeholder="0xWallet, allowance&#10;0xWallet, allowance"></textarea><small>One wallet per line. Allowance defaults to 1 when omitted.</small></label>
+        <label class="field r23-new-wallets hidden" id="r23NewWalletsWrap"><span>Initial Approved Wallets</span><textarea id="r23NewWallets" rows="5" placeholder="0xWallet&#10;0xWallet, 5"></textarea><small>One wallet per line. Apply one baseline allowance to every valid address, then customize individual rows.</small></label>
+        <div class="r23-add-wallet hidden" id="r23NewAllowanceTools"><label class="field"><span>Allowance for all valid wallets</span><input id="r23NewDefaultAllowance" type="number" min="1" value="1"/></label><button class="ghost-btn" id="r23ApplyNewAllowanceBtn" type="button">Apply to Valid Wallets</button></div>
         <button class="primary-btn" id="r23CreateStageBtn" type="button">Create Stage</button>
       </div>
       <div class="r23-status" id="r23ManagerStatus">Ready. Select an Approved Wallet stage to manage its wallets, or create a new stage.</div>`;
     detail.appendChild(panel);
 
     panel.querySelectorAll('[data-r23-manage]').forEach(button=>button.addEventListener('click',()=>openWalletEditor(Number(button.dataset.r23Manage))));
-    $('r23NewAccess')?.addEventListener('change',()=>{$('r23NewWalletsWrap')?.classList.toggle('hidden',Number($('r23NewAccess').value)!==1);});
+    $('r23NewAccess')?.addEventListener('change',syncNewStageAccessUi);
+    $('r23ApplyNewAllowanceBtn')?.addEventListener('click',()=>{try{applyAllowanceToTextarea('r23NewWallets','r23NewDefaultAllowance','new-stage list');}catch(error){setStatus(error.message,'bad');}});
+    syncNewStageAccessUi();
     $('r23NewNoEnd')?.addEventListener('change',()=>{if($('r23NewEnd')){$('r23NewEnd').disabled=$('r23NewNoEnd').checked;if($('r23NewNoEnd').checked)$('r23NewEnd').value='';}});
     $('r23CreateStageBtn')?.addEventListener('click',()=>createStage().catch(error=>setStatus(`Create stage: ${error.shortMessage||error.message}`,'bad')));
     if(state.retryPayload)renderRetry();
     startDashboardCountdowns();
   }
 
-  function parseBulk(text){
+  function parseBulk(text,fallbackAllowance=1){
     const rows=[];
     for(const raw of String(text||'').split(/\r?\n/)){
       const line=raw.trim();if(!line)continue;
       const parts=line.split(/[,\s]+/).filter(Boolean);
-      rows.push({address:parts[0],allowance:parts[1]||1});
+      const candidate=parts.find(part=>window.ethers?.isAddress?.(part));
+      if(!candidate)continue;
+      const index=parts.indexOf(candidate);
+      const custom=parts.slice(index+1).find(part=>/^\d+$/.test(part));
+      rows.push({address:candidate,allowance:custom||fallbackAllowance});
     }
     return normalizeEntries(rows);
   }
@@ -269,7 +299,9 @@
     wrap.innerHTML=`<div class="r23-wallet-editor">
       <div class="r23-head"><div><h4>Stage ${phase.id} Approved Wallets</h4><p>${state.listPublished?(state.listInSync?'Cloud proof list matches the current onchain root.':'Cloud proof list is OUT OF SYNC with the current onchain root.'):'No Cloud proof list is currently published for this stage.'}</p></div><code>${esc(short(phase.merkleRoot))}</code></div>
       ${!state.listPublished?'<div class="r23-warning bad"><strong>Proof table missing</strong><span>If this stage came from a pre-R2 Studio launch, open that saved Studio project and use <b>Repair / Sync Mint Proofs</b> to restore the original list without changing the onchain root. If you save a new list here, it replaces the stage root.</span></div>':''}
+      ${phase.maxPerWallet?`<div class="r23-warning bad"><strong>Stage wallet cap overrides higher custom allowances</strong><span>This deployed stage is capped at ${phase.maxPerWallet} mint${phase.maxPerWallet===1?'':'s'} per wallet. A Merkle allowance above ${phase.maxPerWallet} cannot override that onchain cap. For custom wallet allocations, set the stage cap to Unlimited (0).</span><button class="ghost-btn" id="r23SetUnlimitedCapBtn" type="button">Set Stage Cap to Unlimited</button></div>`:'<div class="r23-warning"><strong>Per-wallet allowances control this stage</strong><span>Stage max/wallet is Unlimited (0), so each wallet’s Approved Wallet allowance is its wallet-specific limit.</span></div>'}
       <div class="r23-add-wallet"><label class="field"><span>Wallet</span><input id="r23WalletAddress" placeholder="0x..."/></label><label class="field"><span>Allowance</span><input id="r23WalletAllowance" type="number" min="1" value="1"/></label><button class="ghost-btn" id="r23AddWalletBtn" type="button">Add Wallet</button></div>
+      <div class="r23-add-wallet"><label class="field"><span>Allowance for every loaded wallet</span><input id="r23AllWalletAllowance" type="number" min="1" value="1"/><small>Set a baseline for all valid wallets, then customize individual rows below.</small></label><button class="ghost-btn" id="r23ApplyAllWalletAllowanceBtn" type="button">Apply to All Wallets</button></div>
       <div class="r23-wallet-list" id="r23WalletList"></div>
       <label class="field"><span>Bulk wallet list</span><textarea id="r23BulkWallets" rows="4" placeholder="0xWallet, allowance&#10;0xWallet, allowance"></textarea><small>Paste one wallet per line. Save & Publish automatically applies this list when the editor is empty; use Apply Bulk List to preview it first.</small></label>
       <div class="launched-actions"><button class="ghost-btn" id="r23ImportWalletsBtn" type="button">Apply Bulk List</button><button class="primary-btn" id="r23SaveWalletsBtn" type="button">Save & Publish Eligibility</button></div>
@@ -281,6 +313,17 @@
         state.entries=normalizeEntries([...state.entries,added]);$('r23WalletAddress').value='';$('r23WalletAllowance').value='1';renderWalletRows();
       }catch(error){setStatus(error.message,'bad');}
     });
+    $('r23ApplyAllWalletAllowanceBtn')?.addEventListener('click',()=>{
+      try{
+        const amount=Math.floor(Number($('r23AllWalletAllowance')?.value||0));
+        if(!Number.isInteger(amount)||amount<1||amount>4294967295)throw new Error('Allowance must be between 1 and 4,294,967,295.');
+        if(!state.entries.length)throw new Error('Load or add at least one valid wallet first.');
+        state.entries=normalizeEntries(state.entries.map(row=>({address:row.address,allowance:amount})));
+        renderWalletRows();
+        setStatus('Applied allowance '+amount.toLocaleString()+' to all '+state.entries.length.toLocaleString()+' loaded wallet'+(state.entries.length===1?'':'s')+'. Customize individual rows, then Save & Publish Eligibility.','warn');
+      }catch(error){setStatus(error.message,'bad');}
+    });
+    $('r23SetUnlimitedCapBtn')?.addEventListener('click',()=>setStageCapUnlimited().catch(error=>setStatus('Stage cap: '+(error.shortMessage||error.message),'bad')));
     $('r23ImportWalletsBtn')?.addEventListener('click',()=>{
       try{
         state.entries=parseBulk($('r23BulkWallets').value);
@@ -333,6 +376,8 @@
       setStatus(`Applied ${state.entries.length} wallet${state.entries.length===1?'':'s'} from the bulk list. Preparing eligibility update…`,'warn');
     }
     const entries=normalizeEntries(state.entries);if(!entries.length)throw new Error('No wallets are loaded. Paste a wallet list or use Add Wallet before Save & Publish Eligibility.');
+    const highestAllowance=Math.max(...entries.map(row=>Number(row.allowance||0)));
+    if(phase.maxPerWallet>0&&highestAllowance>phase.maxPerWallet)throw new Error(`Stage ${phase.id} is capped at ${phase.maxPerWallet} per wallet, but this list contains an allowance of ${highestAllowance}. Use “Set Stage Cap to Unlimited” first so the custom wallet allowance is not overridden.`);
     if(!state.listPublished){
       const ok=window.confirm('No published source list exists for this stage. Saving will replace the current onchain Merkle root with the wallets shown in this editor. The old root cannot be reverse-engineered into its prior wallet list. Continue?');
       if(!ok)return;
@@ -345,6 +390,31 @@
       setStatus(`Stage ${phase.id} root submitted ${short(tx.hash)}. Waiting for confirmation…`,'warn');await tx.wait();
       try{await publishCloudList(phase.id,tree);state.retryPayload=null;setStatus(`Stage ${phase.id} eligibility updated and ${tree.entries.length} wallet proof${tree.entries.length===1?'':'s'} published.`,'good');}
       catch(error){state.retryPayload={phaseId:phase.id,tree};setStatus(`Onchain root updated, but Cloud proof publishing failed: ${error.message}. Do NOT change the stage again; use Retry Proof Sync below.`,'bad');renderRetry();return;}
+      await reloadAfterChange(phase.id);
+    }finally{state.busy=false;}
+  }
+
+
+  async function setStageCapUnlimited(){
+    if(state.busy)return;
+    const phase=state.phases.find(p=>p.id===state.listPhaseId);
+    if(!phase||phase.accessType!==1)throw new Error('Choose an Approved Wallet stage first.');
+    if(!phase.maxPerWallet){setStatus(`Stage ${phase.id} is already Unlimited at the phase level.`,'good');return;}
+    const ok=window.confirm(`Set Stage ${phase.id} max/wallet from ${phase.maxPerWallet} to Unlimited (0)?
+
+This preserves the stage price, schedule, supply, Approved Wallet Merkle root, access type, and priority. Each wallet's Merkle allowance will then control its wallet-specific mint total.`);
+    if(!ok)return;
+    state.busy=true;
+    try{
+      const signer=await creatorSigner(),mp=new window.ethers.Contract(state.mintPhasesAddress,MINT_PHASES_ABI,signer),raw=await mp.phases(phase.id);
+      setStatus(`Confirm Stage ${phase.id} wallet-cap update in your wallet…`,'warn');
+      const tx=await mp.updatePhase(
+        phase.id,BigInt(raw.price??raw[0]),Number(raw.startTime??raw[1]),Number(raw.endTime??raw[2]),
+        Number(raw.phaseSupply??raw[3]),0,String(raw.merkleRoot??raw[6]),Number(raw.accessType??raw[7]),Number(raw.priority??raw[8])
+      );
+      setStatus(`Stage ${phase.id} cap update ${short(tx.hash)} submitted. Waiting for confirmation…`,'warn');
+      await tx.wait();
+      setStatus(`Stage ${phase.id} max/wallet is now Unlimited. Per-wallet Approved Wallet allowances can control each wallet's total.`,'good');
       await reloadAfterChange(phase.id);
     }finally{state.busy=false;}
   }
@@ -371,10 +441,10 @@
     try{
       const access=Number($('r23NewAccess')?.value||0),price=window.ethers.parseEther(String(Math.max(0,Number($('r23NewPrice')?.value||0)))),start=parseDate('r23NewStart',true),noEnd=!!$('r23NewNoEnd')?.checked,end=noEnd?0:parseDate('r23NewEnd',false);
       if(end&&end<=start)throw new Error('End date/time must be later than start.');
-      const supply=Math.max(0,Math.floor(Number($('r23NewSupply')?.value||0))),maxWallet=Math.max(0,Math.floor(Number($('r23NewWalletMax')?.value||0))),enabled=!!$('r23NewEnabled')?.checked;
+      const supply=Math.max(0,Math.floor(Number($('r23NewSupply')?.value||0))),maxWallet=access===1?0:Math.max(0,Math.floor(Number($('r23NewWalletMax')?.value||0))),enabled=!!$('r23NewEnabled')?.checked;
       const signer=await creatorSigner(),mp=new window.ethers.Contract(state.mintPhasesAddress,MINT_PHASES_ABI,signer),freshCount=Number(await mp.phaseCount()),phaseId=freshCount+1,maxPriority=state.phases.reduce((max,row)=>Math.max(max,Number(row.priority||0)),99),priority=Math.min(65535,maxPriority+1);
       let tree=null,root=ZERO;
-      if(access===1){const entries=parseBulk($('r23NewWallets')?.value||'');if(!entries.length)throw new Error('Approved Wallet stage requires at least one initial wallet.');tree=buildBoundMerkle(entries,state.collection,phaseId);root=tree.root;}
+      if(access===1){const defaultAllowance=Math.floor(Number($('r23NewDefaultAllowance')?.value||1));if(!Number.isInteger(defaultAllowance)||defaultAllowance<1||defaultAllowance>4294967295)throw new Error('Default Approved Wallet allowance is invalid.');const entries=parseBulk($('r23NewWallets')?.value||'',defaultAllowance);if(!entries.length)throw new Error('Approved Wallet stage requires at least one initial wallet.');tree=buildBoundMerkle(entries,state.collection,phaseId);root=tree.root;}
       setStatus(`Confirm creation of Stage ${phaseId} in your wallet…`,'warn');
       const tx=await mp.createPhase(price,start,end,supply,maxWallet,root,access,priority,enabled);
       setStatus(`Stage ${phaseId} transaction ${short(tx.hash)} submitted. Waiting for confirmation…`,'warn');await tx.wait();

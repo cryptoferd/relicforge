@@ -196,6 +196,8 @@
     wallet: null,
     gasPrice: null,
     placeholderFile: null,
+    placeholderConversionMode: 'vectorize',
+    placeholderVectorizedFile: null,
     collectionAddress: null,
     dataAddress: null,
     mintPhasesAddress: null,
@@ -1034,6 +1036,31 @@
     }
   }
 
+
+  async function applyAllowanceToValidWhitelistWallets() {
+    try{
+      const amount=Math.floor(Number($('whitelistBulkAllowance')?.value||$('whitelistDefaultAllowance')?.value||1));
+      if(!Number.isInteger(amount)||amount<1||amount>4294967295)throw new Error('Allowance must be between 1 and 4,294,967,295.');
+      let text=$('whitelistCustomText')?.value||'';
+      const selectedFile=$('whitelistFileInput')?.files?.[0]||null;
+      if(selectedFile)text=text+'\n'+await selectedFile.text();
+      const parsed=parseCustomWhitelistText(text,amount);
+      if(!parsed.length)throw new Error('No valid EVM wallet addresses were found.');
+      const forced=normalizeWhitelistEntries(parsed.map(row=>({address:row.address,allowance:amount})),amount);
+      if($('whitelistCustomText'))$('whitelistCustomText').value=forced.map(row=>row.address+','+amount).join('\n');
+      if($('whitelistDefaultAllowance'))$('whitelistDefaultAllowance').value=String(amount);
+      if($('whitelistBulkAllowance'))$('whitelistBulkAllowance').value=String(amount);
+      const input=$('whitelistFileInput');if(input)input.value='';
+      if($('whitelistFileName'))$('whitelistFileName').textContent='CSV, TXT, or JSON';
+      forgeState.whitelist=null;
+      $('whitelistCustomText')?.dispatchEvent(new Event('input',{bubbles:true}));
+      $('whitelistDefaultAllowance')?.dispatchEvent(new Event('input',{bubbles:true}));
+      if($('whitelistStatus'))$('whitelistStatus').textContent='Applied allowance '+amount.toLocaleString()+' to '+forced.length.toLocaleString()+' valid wallet'+(forced.length===1?'':'s')+'. Adjust any individual “address, allowance” rows, then Build Custom Whitelist.';
+    }catch(error){
+      if($('whitelistStatus'))$('whitelistStatus').textContent='Apply allowance: '+error.message;
+    }
+  }
+
   async function buildCustomWhitelist() {
     try {
       const allowance = whitelistDefaultAllowance();
@@ -1209,6 +1236,60 @@ ${await file.text()}`;
     const chunk = 0x8000;
     for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
     return btoa(binary);
+  }
+
+
+  function placeholderConversionMode() {
+    return document.querySelector('input[name="placeholderConversionMode"]:checked')?.value || forgeState.placeholderConversionMode || 'vectorize';
+  }
+  function placeholderFileKey(file) {
+    return window.RelicForgePlaceholderVectorizer?.fileKey?.(file) || [file?.name||'',file?.size||0,file?.lastModified||0].join(':');
+  }
+  function placeholderConversionStatus(message) {
+    if ($('creatorPlaceholderConversionStatus')) $('creatorPlaceholderConversionStatus').textContent = message;
+  }
+  function syncPlaceholderConversionCards() {
+    const mode=placeholderConversionMode();
+    forgeState.placeholderConversionMode=mode;
+    document.querySelectorAll('[data-placeholder-conversion-card]').forEach(card =>
+      card.classList.toggle('selected',card.dataset.placeholderConversionCard===mode)
+    );
+  }
+  async function refreshPlaceholderConversion() {
+    syncPlaceholderConversionCards();
+    const source=forgeState.placeholderFile;
+    forgeState.placeholderVectorizedFile=null;
+    if(!source){placeholderConversionStatus('Choose a placeholder. Small PNGs can be traced locally into true SVG shapes; your file is never sent away for conversion.');return null;}
+    const mode=placeholderConversionMode();
+    if(mode!=='vectorize'){placeholderConversionStatus('Original file selected. Relic Forge will embed it without PNG-to-SVG tracing.');return null;}
+    const vectorizer=window.RelicForgePlaceholderVectorizer;
+    if(!vectorizer){placeholderConversionStatus('PNG-to-SVG converter is unavailable. The original file will be used.');return null;}
+    if(!vectorizer.isPng(source)){
+      placeholderConversionStatus(String(source.type||'').toLowerCase()==='image/svg+xml'||/\.svg$/i.test(source.name||'')?'This placeholder is already SVG and will remain vector.':'Auto-convert applies only to PNG placeholders. This file will be kept as-is.');
+      return null;
+    }
+    try{
+      placeholderConversionStatus('Checking whether this PNG is suitable for a compact onchain SVG trace...');
+      const result=await vectorizer.convert(source);
+      if(result.converted){
+        forgeState.placeholderVectorizedFile={key:placeholderFileKey(source),file:result.file,result};
+        placeholderConversionStatus(result.reason+' The generated SVG uses real vector paths, not an embedded PNG.');
+        return result.file;
+      }
+      placeholderConversionStatus(result.reason+' The original PNG will be used.');
+      return null;
+    }catch(error){
+      placeholderConversionStatus('PNG-to-SVG check failed: '+error.message+'. The original PNG will be used.');
+      return null;
+    }
+  }
+  async function placeholderCompileFile(source) {
+    if(!source)return null;
+    if(placeholderConversionMode()!=='vectorize'||!window.RelicForgePlaceholderVectorizer?.isPng?.(source))return source;
+    const key=placeholderFileKey(source);
+    if(forgeState.placeholderVectorizedFile?.key===key)return forgeState.placeholderVectorizedFile.file;
+    await refreshPlaceholderConversion();
+    return forgeState.placeholderVectorizedFile?.key===key?forgeState.placeholderVectorizedFile.file:source;
   }
 
   async function compilePlaceholderFile(file, expectedWidth, expectedHeight) {
@@ -1426,8 +1507,9 @@ ${await file.text()}`;
       setCompileProgress(73, 'Packing exact recipe DNA…');
       const dna = buildDna(studio, layerDefs);
       setCompileProgress(81, 'Compiling reveal placeholder…');
-      const placeholder = forgeState.placeholderFile
-        ? await compilePlaceholderFile(forgeState.placeholderFile, studio.imageWidth, studio.imageHeight)
+      const placeholderSource = forgeState.placeholderFile ? await placeholderCompileFile(forgeState.placeholderFile) : null;
+      const placeholder = placeholderSource
+        ? await compilePlaceholderFile(placeholderSource, studio.imageWidth, studio.imageHeight)
         : { fragment: defaultForgePlaceholderFragment(studio.imageWidth, studio.imageHeight), encoding: 'relicforge-default' };
       const placeholderBytes = enc.encode(placeholder.fragment);
       if (placeholderBytes.length > MAX_TRAIT_BYTES) throw new Error(`Reveal placeholder compiles to ${fmtBytes(placeholderBytes.length)}, above the ${fmtBytes(MAX_TRAIT_BYTES)} test limit.`);
@@ -3839,6 +3921,7 @@ ${await file.text()}`;
       holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
       defaultRenderMode: Number($('defaultRenderMode')?.value || 0),
       placeholderFile: forgeState.placeholderFile || null,
+      placeholderConversionMode: placeholderConversionMode(),
       publicMintEnabled: !!$('publicMintEnabled')?.checked,
       publicMintStart: $('publicMintStart')?.value || '',
       publicMintEnd: $('publicMintEnd')?.value || '',
@@ -3932,7 +4015,12 @@ ${await file.text()}`;
     const sourceRadio = document.querySelector(`input[name="whitelistSourceMode"][value="${sourceMode}"]`);
     if (sourceRadio) sourceRadio.checked = true;
     forgeState.placeholderFile = saved.placeholderFile || null;
+    forgeState.placeholderConversionMode = saved.placeholderConversionMode || (forgeState.placeholderFile ? 'original' : 'vectorize');
+    forgeState.placeholderVectorizedFile = null;
+    const placeholderModeRadio=document.querySelector('input[name="placeholderConversionMode"][value="'+forgeState.placeholderConversionMode+'"]');
+    if(placeholderModeRadio)placeholderModeRadio.checked=true;
     if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
+    refreshPlaceholderConversion().catch(()=>{});
     forgeState.mintPageImageFile = saved.mintPageImageFile || null;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
     if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max · any image format · animated GIF supported';
@@ -4011,9 +4099,17 @@ ${await file.text()}`;
     document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', () => { updateRevealUi(); refreshVrfQuote().catch(() => {}); }));
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
+      forgeState.placeholderVectorizedFile = null;
       $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
+      refreshPlaceholderConversion().catch(()=>{});
       invalidateCompile('Placeholder changed — recompile for onchain.');
     });
+    document.querySelectorAll('input[name="placeholderConversionMode"]').forEach(input=>input.addEventListener('change',()=>{
+      forgeState.placeholderConversionMode=placeholderConversionMode();
+      forgeState.placeholderVectorizedFile=null;
+      refreshPlaceholderConversion().catch(()=>{});
+      invalidateCompile('Placeholder conversion changed — recompile for onchain.');
+    }));
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
     $('refreshForgeCostBtn')?.addEventListener('click', refreshCostEstimate);
     $('connectForgeWalletBtn')?.addEventListener('click', () => connectWallet().catch(() => {}));
@@ -4072,6 +4168,7 @@ ${await file.text()}`;
     }));
     $('snapshotWhitelistBtn')?.addEventListener('click', snapshotCollectionHolders);
     $('buildCustomWhitelistBtn')?.addEventListener('click', buildCustomWhitelist);
+    $('applyWhitelistAllowanceBtn')?.addEventListener('click', applyAllowanceToValidWhitelistWallets);
     $('downloadWhitelistBtn')?.addEventListener('click', () => { try { exportWhitelistProofs(); } catch (error) { $('whitelistStatus').textContent = error.message; } });
     $('whitelistFileInput')?.addEventListener('change', event => {
       const file = event.target.files?.[0];

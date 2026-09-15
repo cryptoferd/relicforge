@@ -267,6 +267,26 @@
     return Math.max(0,Math.min(50,collectionLeft,phaseLeft,walletLeft,allowLeft));
   }
 
+
+  function approvedWalletAllowanceStatus(phase,row,allowance,allocationRemaining,remaining){
+    const allocated=Math.max(0,Number(allowance||0));
+    const minted=Math.max(0,Number(row?.minted||0));
+    const bits=[allocated.toLocaleString()+' allocated',Math.max(0,Number(allocationRemaining||0)).toLocaleString()+' allowance remaining'];
+    if(phase.maxPerWallet){
+      const capRemaining=Math.max(0,Number(phase.maxPerWallet)-minted);
+      if(Number(phase.maxPerWallet)<allocated){
+        bits.push('stage cap '+Number(phase.maxPerWallet).toLocaleString()+'/wallet overrides higher allocation');
+        bits.push(capRemaining>0?capRemaining.toLocaleString()+' remaining under stage cap':'stage cap reached');
+      }else if(capRemaining<Number(allocationRemaining||0)){
+        bits.push(capRemaining.toLocaleString()+' remaining under stage cap');
+      }
+    }
+    if(remaining>0&&remaining<Number(allocationRemaining||0)&&(!phase.maxPerWallet||Number(phase.maxPerWallet)>=allocated)){
+      bits.push(remaining.toLocaleString()+' currently mintable');
+    }
+    return 'Eligible · '+bits.join(' · ');
+  }
+
   async function render() {
     const state=app.state;
     document.title=`${app.config.title||state.name} — Mint`;
@@ -331,7 +351,7 @@
               : !rootMatches
                 ? 'Approved Wallet proof list is out of sync with the onchain stage root'
                 : eligible
-                  ? `Eligible · ${Number(allowance||0).toLocaleString()} allocated · ${Number(allocationRemaining||0).toLocaleString()} remaining${remaining<Number(allocationRemaining||0)?` · ${remaining.toLocaleString()} max this transaction`:''}`
+                  ? approvedWalletAllowanceStatus(phase,row,allowance,allocationRemaining,remaining)
                   : 'Wallet is not on this Approved Wallet stage')
           : 'Connect to check eligibility')
         : timingLabel(phase);
