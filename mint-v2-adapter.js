@@ -10,6 +10,7 @@
     'function totalMinted() view returns(uint32)',
     'function futureRevealMode() view returns(uint8)',
     'function maxRandomnessCostPerBatchWei() view returns(uint256)',
+    'function autoRevealCallbackGasForQuantity(uint32) view returns(uint32)',
     'function randomnessProvider() view returns(address)',
     'function mintPhases() view returns(address)',
     'function balanceOf(address) view returns(uint256)',
@@ -24,6 +25,7 @@
     'function quoteMint(uint32,uint32) view returns(uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
   ];
   const RANDOMNESS_ADAPTER_ABI = [
+    'function estimateRequestPriceAtGasPrice(uint32 requestedConsumerCallbackGas,uint256 requestGasPriceWei) view returns(uint256)',
     'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)',
   ];  const PUBLIC_RPCS = {
     11155111: ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://rpc.sepolia.org'],
@@ -427,17 +429,31 @@
     const gasPrice=await liveMintGasPrice();
     const reader=await getReadProvider(Number(app.config.chainId));
     const readCollection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,reader);
+    const maxGroupQuantity=Math.min(20,Math.max(1,Number(qty)));
     const [ceilingRaw,adapterAddress]=await Promise.all([
       readCollection.maxRandomnessCostPerBatchWei(),
       readCollection.randomnessProvider(),
     ]);
     const ceiling=BigInt(ceilingRaw);
     const adapter=new window.ethers.Contract(adapterAddress,RANDOMNESS_ADAPTER_ABI,reader);
-    const quote=BigInt(await adapter.estimateRequestPriceAtGasPrice(gasPrice));
+
+    // New adaptive R2 collections expose the canonical tier helper. Preserve the
+    // existing fixed-envelope path for already-deployed legacy R2/Mainnet collections.
+    let callbackGas=1_500_000;
+    let adaptiveGas=false;
+    try {
+      callbackGas=Number(await readCollection.autoRevealCallbackGasForQuantity(maxGroupQuantity));
+      adaptiveGas=true;
+    } catch (_) {}
+
+    const quote=adaptiveGas
+      ? BigInt(await adapter['estimateRequestPriceAtGasPrice(uint32,uint256)'](callbackGas,gasPrice))
+      : BigInt(await adapter['estimateRequestPriceAtGasPrice(uint256)'](gasPrice));
 
     if(quote>ceiling){
+      const scope=adaptiveGas ? `largest ${maxGroupQuantity}-NFT reveal group` : 'automatic-reveal request';
       throw new Error(
-        `Mint temporarily unavailable: the current automatic-reveal randomness quote (${fmtEth(quote)}) exceeds this collection's configured ceiling (${fmtEth(ceiling)}).`
+        `Mint temporarily unavailable: the current randomness quote for the ${scope} (${fmtEth(quote)}) exceeds this collection's platform ceiling (${fmtEth(ceiling)}).`
       );
     }
 
@@ -452,6 +468,9 @@
       chainId:Number(app.config.chainId),
       phaseId:Number(phaseId),
       quantity:Number(qty),
+      adaptiveRandomness:adaptiveGas,
+      adaptiveRevealGroupQuantity:maxGroupQuantity,
+      consumerCallbackGas:callbackGas,
       gasPriceWei:gasPrice.toString(),
       gasEstimate:estimate.toString(),
       gasLimit:gasLimit.toString(),

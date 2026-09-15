@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#080808" />
   <title>Relic Forge - Creator Guide</title>
-  <meta name="description" content="Creator guide for the Relic Forge R12-v2 Sepolia preproduction workflow." />
+  <meta name="description" content="Creator guide for the Relic Forge R12-v2 R2 adaptive Sepolia workflow." />
   <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
-  <link rel="stylesheet" href="./styles.css?v=r12v2-r1" />
+  <link rel="stylesheet" href="./styles.css?v=r12v2-r2-adaptive1" />
   <style>
-    body{background:#080808;color:#e8e8e8}.rf-doc{max-width:1040px;margin:0 auto;padding:28px 20px 80px}.rf-doc h1{font-size:clamp(2rem,6vw,4rem);margin:.25rem 0}.rf-doc h2{margin-top:2.5rem}.rf-doc h3{margin-top:1.5rem}.rf-doc p,.rf-doc li{line-height:1.65;color:#c7c7c7}.rf-doc code{word-break:break-word}.rf-doc .note{border:1px solid #333;background:#111;padding:16px;margin:18px 0}.rf-doc .warn{border-left:3px solid #ee9922}.rf-doc .steps{counter-reset:step;display:grid;gap:14px}.rf-doc .step{border:1px solid #2a2a2a;background:#0f0f0f;padding:18px;display:grid;grid-template-columns:136px minmax(0,1fr);column-gap:18px;row-gap:8px;align-items:start}.rf-doc .step h3{grid-column:1;margin:0;line-height:1.45}.rf-doc .step h3:before{counter-increment:step;content:counter(step) ". ";color:#ee9922}.rf-doc .step p{grid-column:2;margin:0}.rf-doc .step p+p{margin-top:2px}.rf-doc a{color:#fff}@media(max-width:700px){.rf-doc .step{grid-template-columns:1fr}.rf-doc .step h3,.rf-doc .step p{grid-column:1}.rf-doc .step h3{margin-bottom:4px}}.rf-doc .badge{display:inline-block;border:1px solid #444;padding:4px 8px;font-size:.78rem;letter-spacing:.08em}.rf-doc table{width:100%;border-collapse:collapse}.rf-doc th,.rf-doc td{border:1px solid #2b2b2b;padding:10px;text-align:left;vertical-align:top}.rf-doc th{background:#111}
+    body{background:#080808;color:#e8e8e8}.rf-doc{max-width:1040px;margin:0 auto;padding:28px 20px 80px}.rf-doc h1{font-size:clamp(2rem,6vw,4rem);margin:.25rem 0}.rf-doc h2{margin-top:2.5rem}.rf-doc h3{margin-top:1.5rem}.rf-doc p,.rf-doc li{line-height:1.65;color:#c7c7c7}.rf-doc code{word-break:break-word}.rf-doc .note{border:1px solid #333;background:#111;padding:16px;margin:18px 0}.rf-doc .warn{border-left:3px solid #ee9922}.rf-doc .good{border-left:3px solid #6dbb78}.rf-doc .steps{counter-reset:step;display:grid;gap:14px}.rf-doc .step{border:1px solid #2a2a2a;background:#0f0f0f;padding:18px;display:grid;grid-template-columns:136px minmax(0,1fr);column-gap:18px;row-gap:8px;align-items:start}.rf-doc .step h3{grid-column:1;margin:0;line-height:1.45}.rf-doc .step h3:before{counter-increment:step;content:counter(step) ". ";color:#ee9922}.rf-doc .step p{grid-column:2;margin:0}.rf-doc .step p+p{margin-top:2px}.rf-doc a{color:#fff}@media(max-width:700px){.rf-doc .step{grid-template-columns:1fr}.rf-doc .step h3,.rf-doc .step p{grid-column:1}.rf-doc .step h3{margin-bottom:4px}}.rf-doc .badge{display:inline-block;border:1px solid #444;padding:4px 8px;font-size:.78rem;letter-spacing:.08em}.rf-doc table{width:100%;border-collapse:collapse}.rf-doc th,.rf-doc td{border:1px solid #2b2b2b;padding:10px;text-align:left;vertical-align:top}.rf-doc th{background:#111}.rf-doc .tiers{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:14px 0}.rf-doc .tier{border:1px solid #2d2d2d;background:#101010;padding:12px}.rf-doc .tier strong{display:block;color:#ee9922}.rf-doc .quiet{color:#8d8d8d}@media(max-width:760px){.rf-doc .tiers{grid-template-columns:1fr 1fr}}
   </style>
   <link rel="stylesheet" href="./relicforge-product.css?v=r26-p2a1"/>
 </head>
@@ -17,59 +17,69 @@
 <div class="rf-doc">
   <a class="ghost-btn link-btn" href="./index.html">Relic Forge Home</a>
   <a class="ghost-btn link-btn" href="./studio.html">Open Studio</a>
-  <span class="badge">R12-v2 · Sepolia preproduction</span>
+  <span class="badge">R12-v2 R2 ADAPTIVE · Sepolia certified</span>
   <h1>Creator Guide</h1>
-  <p>Relic Forge R12-v2 creates immutable EIP-1167 Collection, ProjectData, and MintPhases clones. Mainnet is not deployed or enabled in this build. This guide describes the certified Sepolia preproduction architecture used by the Creator UI.</p>
+  <p>Relic Forge R12-v2 R2 is running its adaptive reveal architecture on Ethereum Sepolia. The collector receives the NFT in the mint transaction, Forge reveal randomness is requested automatically, and the callback budget scales with the size of each reveal group. Ethereum Mainnet remains on the existing R1 release until the R2 Mainnet rollout is separately certified.</p>
 
-  <div class="note warn"><strong>Important:</strong> R12-v2 public collector mint-page publishing is intentionally disabled in Creator UI R1. The older V1 collector page does not understand Forge reservations, the separate MintPhases contract, or the request/replay/settle lifecycle. A dedicated V2 collector-page rewrite is required before publishing a V2 mint page.</div>
+  <div class="note good"><strong>What changed in Adaptive R2:</strong> Forge mints no longer create reservations that need a later settle transaction. Ownership is immediate. The mint transaction automatically requests verified randomness, and the collection reveals after the exact Chainlink word is delivered. The 30-second batch policy and 0.005 ETH maximum randomness cost per request/group are platform-managed—not creator settings.</div>
 
   <div class="steps">
-    <section class="step"><h3>Connect a wallet and save your project</h3><p>Connect the EVM wallet that will own the creator controls. Cloud project saves are wallet-scoped. Downloaded project backups remain a separate recovery path. Founder Support can inspect an opted-in cloud project but never receives your private key or your onchain signing authority.</p></section>
-    <section class="step"><h3>Add artwork</h3><p>Upload an organized folder, create empty layers and add artwork later, add multiple traits to an existing layer, or create a category from loose files. Categories remain editable before the final onchain compile.</p></section>
-    <section class="step"><h3>Set rarity and exact counts</h3><p>Use percentages, exact quantities, manual token curation, or a collection manifest. Auto Fill preserves values you entered and distributes only the remainder. Optional full 1/1 artwork occupies its own recipe slot and can carry token-specific name, description, and metadata attributes.</p></section>
-    <section class="step"><h3>Choose metadata visibility</h3><p>You can hide selected None traits, hide a whole rendered category from metadata, or hide individual traits only on tokens that use them. These controls affect token attributes, not the visual render.</p></section>
-    <section class="step"><h3>Build rules and preview</h3><p>Resolve every rule, exact-count, and distribution conflict before launch. Preview the collection and compile the exact recipe set. Relic Forge validates recipes before the ProjectData content can be sealed.</p></section>
-    <section class="step"><h3>Set collection identity, payout, and royalty</h3><p>Confirm the name, symbol, description, maximum supply, payout receiver, royalty receiver, and royalty percentage. Creator proceeds are tracked separately from reveal funding. Withdrawing creator proceeds always sends them to the configured payout receiver.</p></section>
-    <section class="step"><h3>Choose reveal mode</h3><p><strong>Deferred Reveal = 0.</strong> Hidden ERC-721s mint immediately. When you request reveal, one verified Chainlink word permanently fixes the collection-wide assignment permutation. There is no creator reroll.</p><p><strong>Forge Reveal = 1.</strong> A collector mint creates a reservation instead of calling Chainlink. Reservations are batched, randomized later, and settled in deterministic order. A collector transaction may therefore succeed without immediately emitting the final NFT Transfer events.</p></section>
-    <section class="step"><h3>Set Forge execution limits</h3><p><strong>Batch window</strong> controls how long a partial Forge batch can remain open before anyone may lock it. Full 20-NFT batches lock automatically. <strong>Maximum randomness cost per batch</strong> is an onchain ceiling. If the current request quote is above that ceiling, the randomness request reverts instead of silently overspending.</p></section>
-    <section class="step"><h3>Choose the platform-fee model</h3><p><strong>Creator Covers Platform Fee</strong> pays the quoted fee at collection creation. That ETH enters the collection reveal hopper. Collectors do not pay a Relic Forge per-mint platform fee.</p><p><strong>Collector Covers Platform Fee</strong> adds the active current fee to collector mints when the ETH/USD quote is healthy. If the quote is unhealthy, the current R12-v2 minter-supported path fails open to a $0 platform fee rather than blocking the collector mint.</p><p>Platform fee value first supports verified-randomness and reveal execution through the collection hopper and shared Reserve. Protected Reserve ETH is not releasable platform revenue. Only surplus above required Reserve safety can be released.</p></section>
-    <section class="step"><h3>Configure Minting stages</h3><p>R12-v2 stores mint-stage policy in the separate MintPhases clone, not in the Collection. Public and Approved Wallet stages can have their own price, time window, supply cap, wallet cap, access root, priority, and enabled state. The top-level Minting switch is also stored in MintPhases.</p></section>
-    <section class="step"><h3>Forge the collection</h3><p>The Factory receives one <code>createCollectionV2(LaunchConfig)</code> call and creates the Collection, ProjectData, and MintPhases clones. The Studio then writes artwork shards, metadata settings, traits, DNA shards, placeholder art, validates recipes, seals content, creates mint stages through MintPhases, and verifies the Collection/MintPhases binding.</p></section>
-    <section class="step"><h3>Review the launch before enabling minting</h3><p>Check the Collection, ProjectData, and MintPhases addresses, content seal, payout receiver, royalty receiver, reveal mode, fee mode, hopper state, batch window, randomness ceiling, and phase schedule. Relic Forge R1 does not publish a V2 collector mint page.</p></section>
+    <section class="step"><h3>Connect and save</h3><p>Connect the EVM wallet that owns the creator controls. Cloud project saves are wallet-scoped. Downloaded project backups remain a separate recovery path.</p></section>
+    <section class="step"><h3>Add artwork</h3><p>Upload an organized folder, create empty layers, add traits later, upload several traits to an existing layer, or create a category from loose files. Categories remain editable before final compile.</p></section>
+    <section class="step"><h3>Set rarity and counts</h3><p>Use percentages, exact quantities, manual token curation, or a collection manifest. Auto Fill preserves entered values and distributes only the remainder. Optional full 1/1 artwork occupies its own recipe slot and supports token-specific metadata.</p></section>
+    <section class="step"><h3>Choose metadata visibility</h3><p>Hide selected None traits, hide a rendered category from metadata, or hide individual traits only on tokens that use them. These settings affect token attributes, not the visual render.</p></section>
+    <section class="step"><h3>Build and preview</h3><p>Resolve rule, exact-count, and rarity-distribution conflicts. Preview the collection and compile the exact recipe set. Relic Forge validates recipes before ProjectData can be sealed.</p></section>
+    <section class="step"><h3>Set collection identity</h3><p>Confirm name, symbol, description, maximum supply, payout receiver, royalty receiver, and royalty percentage. Creator proceeds stay separate from reveal funding.</p></section>
+    <section class="step"><h3>Choose reveal mode</h3><p><strong>Deferred Reveal = 0.</strong> NFTs mint immediately with the pre-reveal artwork. The creator later completes a two-transaction reveal: Step 1 freezes the minted set and prepares its randomness budget; Step 2 requests verified randomness. The callback finishes the reveal automatically—there is no third creator reveal transaction.</p><p><strong>Forge Reveal = 1.</strong> NFTs mint directly to the collector. The same mint transaction automatically requests randomness for groups of at most 20. After verified randomness arrives, the recipes are assigned and the NFTs reveal automatically.</p></section>
+    <section class="step"><h3>Review platform reveal policy</h3><p>The Forge batch window is <strong>30 seconds</strong> and the maximum randomness cost per request/group is <strong>0.005 ETH</strong>. Both are platform-managed. Studio shows them in the Technical breakdown instead of exposing creator-editable fields.</p></section>
+    <section class="step"><h3>Choose fee model</h3><p><strong>Creator Covers Platform Fee</strong> prepays the quoted platform fee at launch and initializes reveal funding. <strong>Collector Covers Platform Fee</strong> adds the active fee during mints when the ETH/USD quote is healthy. Reveal funding uses the collection hopper first and the shared Reserve only for an allowed bounded shortfall.</p></section>
+    <section class="step"><h3>Configure mint stages</h3><p>MintPhases stores public and Approved Wallet stages, including price, schedules, stage supply, wallet caps, proofs, priority, enabled state, and the master Minting switch.</p></section>
+    <section class="step"><h3>Forge the collection</h3><p>The adaptive Factory creates Collection, ProjectData, and MintPhases clones, then Studio writes artwork/DNA, validates recipes, seals content, creates stages, and verifies the final bindings.</p></section>
+    <section class="step"><h3>Test before launch</h3><p>Confirm the adaptive Factory bindings, payout and royalty receivers, fee mode, reveal mode, stage schedule, immediate ownership, and automatic reveal behavior. On Sepolia, test both a one-NFT mint and a multi-NFT mint before treating a collection as ready.</p></section>
+  </div>
+
+  <h2>Adaptive Forge callback tiers</h2>
+  <p>R2 sizes the consumer callback gas to the reveal group rather than paying for a single fixed callback envelope. Groups larger than 20 split automatically.</p>
+  <div class="tiers">
+    <div class="tier"><strong>1 NFT</strong><span>400,000 gas</span></div>
+    <div class="tier"><strong>2–4 NFTs</strong><span>550,000 gas</span></div>
+    <div class="tier"><strong>5–10 NFTs</strong><span>900,000 gas</span></div>
+    <div class="tier"><strong>11–15 NFTs</strong><span>1,150,000 gas</span></div>
+    <div class="tier"><strong>16–20 NFTs</strong><span>1,400,000 gas</span></div>
   </div>
 
   <h2>Forge Reveal execution</h2>
   <table><thead><tr><th>Stage</th><th>What happens</th></tr></thead><tbody>
-    <tr><td>Collector mint</td><td>Creates one or more reservations. No randomness-provider call occurs in the collector transaction.</td></tr>
-    <tr><td>Lock batch</td><td>A 20-NFT batch locks automatically. A partial batch can be locked permissionlessly after the configured batch window.</td></tr>
-    <tr><td>Request randomness</td><td>Anyone may call <code>requestRandomnessForBatch(batchId)</code>. Creator UI uses a conservative 1,500,000 gas limit. The Collection pays from its hopper first and may request only the exact bounded shortfall from Reserve.</td></tr>
-    <tr><td>Chainlink callback</td><td>The adapter stores the exact verified word only. It does not call the Collection inside the Chainlink callback.</td></tr>
-    <tr><td>Replay</td><td>Anyone may call <code>replayFulfillment(localRequestId)</code>. Creator UI uses a 1,000,000 gas limit and then verifies <code>deliveredForLocalRequest(localRequestId) == true</code>. A mined transaction alone is not treated as proof of delivery.</td></tr>
-    <tr><td>Settle</td><td>Anyone may call <code>settleReady(maxTokens)</code>. Ready reservations mint NFTs and receive unique recipes in batch order.</td></tr>
+    <tr><td>Collector signs mint</td><td>The Collection validates MintPhases, price, limits, and remaining supply.</td></tr>
+    <tr><td>Immediate ownership</td><td>The NFT <code>Transfer</code> events are emitted in the mint transaction. The collector owns the NFTs before the randomness request is created.</td></tr>
+    <tr><td>Automatic request</td><td>The Collection groups the newly minted NFTs into reveal groups of at most 20, selects the adaptive callback-gas tier, checks the platform 0.005 ETH ceiling, and requests randomness automatically.</td></tr>
+    <tr><td>Verified word</td><td>The Chainlink adapter records the exact verified random word first and attempts delivery to the Collection. The word is retained even if downstream delivery needs a retry.</td></tr>
+    <tr><td>Automatic reveal</td><td>Successful delivery assigns unique recipes to the group and completes reveal. The collector does not sign a second transaction.</td></tr>
+    <tr><td>Exceptional replay</td><td>If automatic downstream delivery fails, the stored exact word can be replayed permissionlessly with <code>replayFulfillment(localRequestId)</code>. Replay uses the same word—no reroll or replacement randomness.</td></tr>
   </tbody></table>
 
   <h2>Deferred Reveal execution</h2>
-  <p>Deferred mints create hidden ERC-721s immediately. When the creator calls <code>requestDelayedReveal()</code>, minting freezes until the exact verified word is delivered. Creator UI requests with a conservative 1,500,000 gas limit. After Chainlink stores the word in the adapter, <code>replayFulfillment(localRequestId)</code> delivers it to the Collection. Delivery permanently fixes the delayed permutation. There is no bounded per-token reveal-processing loop.</p>
-  <p>If delayed reveal happens before sellout, future mints irreversibly switch to Forge Reveal. Recipes already consumed by the delayed permutation are excluded from the future Forge pool.</p>
+  <p>Deferred mints create owned ERC-721s immediately with the placeholder. When the creator is ready, <code>prepareDelayedReveal()</code> is Step 1: it freezes the minted supply and prepares the request budget. <code>requestDelayedReveal()</code> is Step 2: it requests verified randomness using the prepared budget. Delivery reveals the frozen set automatically.</p>
+  <p>If Deferred Reveal happens before sellout, future unsold supply switches to Forge Reveal. Recipes consumed by the delayed permutation cannot be reused by later Forge mints.</p>
 
   <h2>Creator/team mint</h2>
-  <p><code>creatorMint(address,uint32)</code> is payable in R12-v2. In Collector Covers Platform Fee mode, MintPhases exposes <code>creatorTeamFeeQuote(quantity)</code>. When the fee is active and the oracle is healthy, the creator/team mint pays approximately half of the current per-NFT platform fee. The Studio quotes this value and attaches it automatically.</p>
+  <p>Creator Mint uses the same immediate-ownership semantics. In Collector Covers Platform Fee mode, MintPhases exposes <code>creatorTeamFeeQuote(quantity)</code>; Studio quotes and attaches the required value automatically.</p>
 
-  <h2>Creator earnings</h2>
-  <p>Collector sale proceeds do not become platform reveal funding. Deferred-mode sale proceeds accrue immediately after the hidden NFT mint succeeds. Forge-mode creator sale value stays in <code>creatorEscrow</code> while a reservation waits and moves to <code>accruedCreatorProceeds</code> when the reservation settles. Calling <code>withdraw()</code> sends only accrued creator proceeds to <code>payoutReceiver</code>.</p>
+  <h2>Creator earnings and Reserve</h2>
+  <p>Creator sale proceeds accrue separately from reveal funding and can be withdrawn to <code>payoutReceiver</code>. The reveal hopper funds requests first. If necessary, the shared Reserve may fund an allowed exact shortfall. The Reserve's 0.20 ETH retention threshold is a withdrawal/revenue-safety rule, not a collection activation gate.</p>
 
   <h2>Irreversible and security-sensitive actions</h2>
   <ul>
-    <li>ProjectData content becomes immutable after <code>sealContent()</code>.</li>
+    <li>ProjectData becomes immutable after <code>sealContent()</code>.</li>
     <li>Each Collection, ProjectData, and MintPhases clone is permanently bound to its implementation through EIP-1167 runtime bytecode.</li>
-    <li>Reveal mode is creator-selectable only while the collection is empty, except for the automatic Deferred-to-Forge transition after an early delayed reveal.</li>
-    <li>Permanent fee waivers and controller renunciation should be treated as irreversible.</li>
-    <li>FeePolicy treasury changes and Reserve revenue-treasury changes are separate two-step authority handoffs.</li>
+    <li>There is no creator reroll path for verified randomness.</li>
+    <li>Deferred Reveal's prepared/frozen supply and the eventual exact random word should be treated as security-sensitive state.</li>
+    <li>Platform batch-window and randomness-ceiling policy are not normal creator controls.</li>
   </ul>
 
-  <div class="note"><strong>Security status:</strong> the R12-v2 stack has extensive automated and live Sepolia certification, including hostile cross-contract state-machine testing, but that is not a professional audit and does not prove the absence of vulnerabilities. Mainnet remains disabled.</div>
+  <div class="note"><strong>Security status:</strong> the adaptive R12-v2 R2 stack has automated and live Sepolia certification, including adaptive callback-gas matrix testing and exact-word replay testing. That is not a professional audit and does not prove the absence of vulnerabilities. Mainnet R2 remains disabled until its separate deployment and canary certification.</div>
 </div>
-  <script src="./relicforge-v2-addresses.js?v=r26-p2a1"></script>
+  <script src="./relicforge-v2-addresses.js?v=r12v2-r2-adaptive1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>
   <script src="./relicforge-product-ui.js?v=r26-p2a1"></script>
 </body>

@@ -171,8 +171,11 @@
   ];
 
   const V2_RANDOMNESS_ABI = [
-    'function estimateRequestPriceAtGasPrice(uint256 requestGasPriceWei) view returns(uint256)'
+    'function estimateRequestPriceAtGasPrice(uint32 requestedConsumerCallbackGas,uint256 requestGasPriceWei) view returns(uint256)'
   ];
+  const RF_R2_PLATFORM_BATCH_WINDOW_SECONDS = 30;
+  const RF_R2_PLATFORM_RANDOMNESS_CEILING_ETH = '0.005';
+  const RF_R2_MAX_AUTO_REVEAL_CALLBACK_GAS = 1_400_000;
 
   const PUBLIC_SEPOLIA_GAS_RPCS = [
     'https://ethereum-sepolia-rpc.publicnode.com',
@@ -247,7 +250,7 @@
 
   async function rf26RandomnessQuoteAtGasPrice(gasPrice, callbackGas) {
     const adapter=v1RandomnessContract(readProvider(activeChainId() || 11155111));
-    const quote=await adapter.estimateRequestPriceAtGasPrice(BigInt(gasPrice));
+    const quote=await adapter.estimateRequestPriceAtGasPrice(Number(callbackGas),BigInt(gasPrice));
     return BigInt(quote);
   }
 
@@ -1757,7 +1760,7 @@ ${await file.text()}`;
         node.style.cursor = 'pointer';
       });
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
-        'R12-v2 certified Sepolia preproduction loaded. Mainnet remains disabled.';
+        'R12-v2 R2 adaptive Sepolia stack loaded. Immediate ownership and automatic reveal are active. Mainnet R2 remains disabled.';
       return cfg;
     } catch (error) {
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent = 'R12-v2 CONFIG ERROR: ' + error.message;
@@ -1802,30 +1805,24 @@ ${await file.text()}`;
   }
 
   function launchBatchWindowSeconds() {
-    const n = Math.floor(Number($('batchWindowSeconds')?.value || 30));
-    if (!Number.isFinite(n) || n < 1 || n > 86400) throw new Error('Forge batch window must be between 1 and 86400 seconds.');
-    return n;
+    return RF_R2_PLATFORM_BATCH_WINDOW_SECONDS;
   }
 
   function launchRandomnessCeilingWei() {
-    const raw = String($('maxRandomnessCostPerBatchEth')?.value || '0.02').trim();
-    const wei = window.ethers.parseEther(raw);
-    if (wei <= 0n) throw new Error('Maximum randomness cost per batch must be greater than zero.');
-    return wei;
+    return window.ethers.parseEther(RF_R2_PLATFORM_RANDOMNESS_CEILING_ETH);
   }
 
   async function refreshVrfQuote() {
     if (!window.ethers || !$('vrfQuoteStatus')) return null;
     try {
-      const cfg = canonicalV1Config();
       const batchWindowSeconds = launchBatchWindowSeconds();
       const ceiling = launchRandomnessCeilingWei();
       const gasPrice = await rf26RandomnessGasPrice();
-      const price = await rf26RandomnessQuoteAtGasPrice(gasPrice, Number(cfg.consumerWordDeliveryGas || 400000));
+      const price = await rf26RandomnessQuoteAtGasPrice(gasPrice, RF_R2_MAX_AUTO_REVEAL_CALLBACK_GAS);
       const within = price <= ceiling;
-      $('vrfQuoteStatus').textContent =
-        'Current request ~ ' + Number(window.ethers.formatEther(price)).toFixed(6) + ' ETH; ceiling ' + Number(window.ethers.formatEther(ceiling)).toFixed(6) + ' ETH; batch window ' + batchWindowSeconds + 's. ' +
-        (within ? 'Current quote is within the configured ceiling.' : 'WARNING: current quote is above the ceiling; a randomness request would revert until the quote falls or you raise the ceiling before launch.');
+      $('vrfQuoteStatus').textContent = within
+        ? 'Randomness safety check passed for the maximum 20-NFT Forge reveal group. Smaller groups use lower adaptive callback-gas tiers.'
+        : 'Randomness safety check blocked: the maximum 20-NFT Forge reveal group is temporarily above the RelicForge platform ceiling. Wait for network pricing to fall or for a platform policy adjustment.';
       return { price, ceiling, batchWindowSeconds, within };
     } catch (error) {
       $('vrfQuoteStatus').textContent = 'Randomness quote unavailable: ' + error.message;
@@ -3335,7 +3332,7 @@ ${await file.text()}`;
       '<div class="launched-detail-head"><div><span class="eyebrow">R12-v2 R2 COLLECTION</span><h3>' + esc(snap.name) + '</h3><p>' + esc(snap.address) + '</p></div><span class="launched-badge ' + (canControl ? 'good' : 'warn') + '">' + (canControl ? 'ACTIVE CONTROLLER' : 'READ ONLY') + '</span></div>' +
       soldOutBanner +
       '<div class="launched-stats"><div><span>Minted / committed / max</span><strong>' + snap.totalMinted + ' / ' + snap.totalCommitted + ' / ' + snap.maxSupply + '</strong></div><div><span>Pending ownership</span><strong>' + snap.pendingSupply + '</strong></div><div><span>Reveal</span><strong>' + (snap.futureRevealMode === 0 ? 'DEFERRED' : 'FORGE') + '</strong></div><div><span>Stages</span><strong>' + snap.phaseCount + '</strong></div></div>' +
-      '<div class="launched-section"><h4>R12-v2 R2 contract bindings</h4><div class="forge-rows"><div class="forge-row"><span>ProjectData</span><strong>' + esc(shortAddr(snap.dataAddress)) + '</strong></div><div class="forge-row"><span>MintPhases</span><strong>' + esc(shortAddr(snap.mintPhasesAddress)) + '</strong></div><div class="forge-row"><span>Content sealed</span><strong>' + (snap.contentSealed ? 'Yes' : 'No') + '</strong></div><div class="forge-row"><span>Randomness ceiling</span><strong>' + esc(window.ethers.formatEther(snap.maxRandomnessCostPerBatchWei)) + ' ETH</strong></div></div></div>' +
+      '<div class="launched-section"><h4>R12-v2 R2 contract bindings</h4><div class="forge-rows"><div class="forge-row"><span>ProjectData</span><strong>' + esc(shortAddr(snap.dataAddress)) + '</strong></div><div class="forge-row"><span>MintPhases</span><strong>' + esc(shortAddr(snap.mintPhasesAddress)) + '</strong></div><div class="forge-row"><span>Content sealed</span><strong>' + (snap.contentSealed ? 'Yes' : 'No') + '</strong></div><div class="forge-row"><span>Platform randomness ceiling</span><strong>' + esc(window.ethers.formatEther(snap.maxRandomnessCostPerBatchWei)) + ' ETH · platform managed</strong></div></div></div>' +
       '<div class="launched-section"><h4>Creator proceeds + reveal funding</h4><div class="launched-stats"><div><span>Accrued creator proceeds</span><strong>' + esc(window.ethers.formatEther(snap.accruedCreatorProceeds)) + ' ETH</strong></div><div><span>Reveal hopper</span><strong>' + esc(window.ethers.formatEther(snap.hopperBalance)) + ' ETH</strong></div><div><span>Pending Reserve refund</span><strong>' + esc(window.ethers.formatEther(snap.pendingDelayedReserveRefundWei)) + ' ETH</strong></div></div><div class="launched-actions"><button class="ghost-btn" data-v2-dashboard-action="withdraw" ' + (canControl ? '' : 'disabled') + '>Withdraw to Payout Receiver</button></div></div>' +
       '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="' + (snap.masterMintEnabled ? 'ghost-btn danger-btn' : 'primary-btn') + '" data-v2-dashboard-action="mastermint" ' + (canControl ? '' : 'disabled') + '>' + (snap.masterMintEnabled ? 'Pause Minting' : 'Enable Minting') + '</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="' + Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted)) + '" value="1" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="' + esc(snap.payoutReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="payout" ' + (canControl ? '' : 'disabled') + '>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="' + esc(snap.royaltyReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="' + (snap.royaltyBps / 100).toFixed(2) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" ' + (canControl ? '' : 'disabled') + '>Update Royalty</button></div></div>' +
       '<div class="launched-section"><h4>Reveal</h4><div class="launched-stats"><div><span>State</span><strong>' + revealTitle + '</strong></div><div><span>Frozen delayed supply</span><strong>' + snap.delayedRevealSupply + '</strong></div><div><span>Automatic requests</span><strong>' + snap.activeAutoRevealRequests + '</strong></div></div><div class="forge-inline-status">' + esc(revealMessage) + '</div><div class="launched-actions">' + revealActions + '</div><small class="forge-footnote">Normal Studio controls do not expose batch locking, manual randomness requests, request IDs, replay, or settlement. R2 handles the normal reveal lifecycle automatically.</small></div>' +
@@ -3692,8 +3689,8 @@ ${await file.text()}`;
       royalty: $('royalty')?.value || '0',
       royaltyWallet: $('royaltyWallet')?.value || '',
       payoutWallet: $('payoutWallet')?.value || '',
-      batchWindowSeconds: $('batchWindowSeconds')?.value || '30',
-      maxRandomnessCostPerBatchEth: $('maxRandomnessCostPerBatchEth')?.value || '0.02',
+      batchWindowSeconds: '30',
+      maxRandomnessCostPerBatchEth: '0.005',
       revealMode: currentRevealMode(),
       platformFeeMode: currentPlatformFeeMode(),
       holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
@@ -3748,8 +3745,8 @@ ${await file.text()}`;
       royalty: saved.royalty,
       royaltyWallet: saved.royaltyWallet,
       payoutWallet: saved.payoutWallet,
-      batchWindowSeconds: saved.batchWindowSeconds || '30',
-      maxRandomnessCostPerBatchEth: saved.maxRandomnessCostPerBatchEth || '0.02',
+      batchWindowSeconds: '30',
+      maxRandomnessCostPerBatchEth: '0.005',
       whitelistMintPrice: saved.whitelistMintPrice,
       whitelistMintStart: saved.whitelistMintStart || '',
       whitelistMintEnd: saved.whitelistMintEnd || '',
@@ -3863,8 +3860,6 @@ ${await file.text()}`;
     });
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
     $('refreshForgeCostBtn')?.addEventListener('click', refreshCostEstimate);
-    $('batchWindowSeconds')?.addEventListener('input', () => refreshVrfQuote().catch(() => {}));
-    $('maxRandomnessCostPerBatchEth')?.addEventListener('input', () => refreshVrfQuote().catch(() => {}));
     $('connectForgeWalletBtn')?.addEventListener('click', () => connectWallet().catch(() => {}));
     window.addEventListener('relicforge:wallet-disconnected', () => resetWalletSessionUi('No wallet connected.'));
     $('forgeCollectionBtn')?.addEventListener('click', forgeCollection);
@@ -4212,7 +4207,7 @@ ${await file.text()}`;
     return getResumeContext();
   }
 
-  window.RelicForgeForge = { version: '12.2-r2-ui-b1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
+  window.RelicForgeForge = { version: '12.2-r2-adaptive-ui1', getCompiledSummary, getWhitelistSummary, compileForOnchain, refreshCostEstimate, getForgeProjectState, restoreForgeProjectState, refreshLaunchedCollection: openLaunchedCollection, connectWallet, changeWallet: changeForgeWallet, disconnectWallet: disconnectForgeWallet, getResumeContext, getDeploymentJournal, findLocalDeploymentJournal, adoptDeploymentJournal, checkpointExternalDeployment, setDeploymentStatus, applyResumeBindings, activeChainId, requireForgeWrite };
   if (document.body.classList.contains('dashboard-page-body')) bindCreatorDashboardPage();
   else bind();
 })();

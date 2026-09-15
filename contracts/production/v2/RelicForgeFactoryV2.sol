@@ -36,8 +36,8 @@ contract RelicForgeFactoryV2 is IRelicForgeFactoryV2View {
     uint8 public constant REVEAL_DEFERRED = 0;
     uint8 public constant REVEAL_FORGE = 1;
 
-    uint64 public constant DEFAULT_BATCH_WINDOW_SECONDS = 180;
-    uint256 public constant DEFAULT_MAX_RANDOMNESS_COST_PER_BATCH_WEI = 0.02 ether;
+    uint64 public constant DEFAULT_BATCH_WINDOW_SECONDS = 30;
+    uint256 public constant DEFAULT_MAX_RANDOMNESS_COST_PER_BATCH_WEI = 0.005 ether;
 
     address public immutable collectionImplementation;
     address public immutable dataImplementation;
@@ -202,7 +202,11 @@ contract RelicForgeFactoryV2 is IRelicForgeFactoryV2View {
     function _createCollection(LaunchConfig memory launch) internal returns (address collection, address projectData) {
         if (!infrastructureReady()) revert RF_BadConfig();
         if (launch.initialRevealMode > REVEAL_FORGE) revert RF_BadConfig();
-        if (launch.batchWindowSeconds == 0 || launch.maxRandomnessCostPerBatchWei == 0) revert RF_BadConfig();
+
+        // R2 platform policy is not creator-configurable. These LaunchConfig fields remain
+        // in the ABI for compatibility, but every new collection receives platform defaults.
+        launch.batchWindowSeconds = DEFAULT_BATCH_WINDOW_SECONDS;
+        launch.maxRandomnessCostPerBatchWei = DEFAULT_MAX_RANDOMNESS_COST_PER_BATCH_WEI;
 
         (uint32 lockedFeeCents, uint256 upfrontFeeWei, bool oracleHealthy, bool feeActive) =
             quoteCollectionFeeTerms(launch.maxSupply, launch.feeMode);

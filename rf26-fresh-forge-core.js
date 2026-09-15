@@ -49,7 +49,7 @@
       throw fail('Randomness quote changed after launch inputs were prepared. Re-check the launch.');
     if(randomnessQuote.within!==true||BigInt(currentRandomnessPrice)>BigInt(ceiling))
       throw fail(
-        'Current automatic-reveal randomness cost exceeds the configured collection ceiling. Raise the randomness ceiling or wait for network pricing to fall before launching.',
+        'Current automatic-reveal randomness cost exceeds the RelicForge platform randomness ceiling. Wait for network pricing to fall or for RelicForge to adjust the platform policy before launching.',
         'RF26_RANDOMNESS_CEILING'
       );
     const payout=address(input.payout||wallet),royalty=address(input.royalty||wallet);
