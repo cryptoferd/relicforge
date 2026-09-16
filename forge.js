@@ -4254,19 +4254,22 @@ ${await file.text()}`;
   };
   const rf26OriginalConfig=canonicalV1Config;
   canonicalV1Config=function(){
-    if(activeChainId()!==11155111)throw new Error('Mainnet launch execution is locked. Select Sepolia to use the existing Forge.');
-    return rf26OriginalConfig();
+    const id=activeChainId();
+    if(id==null||!rf26Network().localReady(id))
+      throw new Error('The selected launch network does not have an enabled Relic Forge release.');
+    return rf26OriginalConfig(id);
   };
   const rf26OriginalRender=renderCanonicalV1;
   renderCanonicalV1=function(){
-    if(activeChainId()!==11155111){
-      for(const id of ['canonicalFactoryAddress','canonicalFeePolicyAddress','canonicalRandomnessAddress','canonicalRendererAddress','canonicalReserveAddress','canonicalMintPhasesAddress']){
-        const node=$(id);if(node){node.textContent='—';node.removeAttribute('title');const link=node.closest('a');if(link){link.removeAttribute('href');link.removeAttribute('title');}}
+    const id=activeChainId();
+    if(id==null||!rf26Network().localReady(id)){
+      for(const fieldId of ['canonicalFactoryAddress','canonicalFeePolicyAddress','canonicalRandomnessAddress','canonicalRendererAddress','canonicalReserveAddress','canonicalMintPhasesAddress']){
+        const node=$(fieldId);if(node){node.textContent='—';node.removeAttribute('title');const link=node.closest('a');if(link){link.removeAttribute('href');link.removeAttribute('title');}}
       }
-      for(const id of ['platformFeeRate','platformFeeUpfront'])if($(id))$(id).textContent='—';
+      for(const fieldId of ['platformFeeRate','platformFeeUpfront'])if($(fieldId))$(fieldId).textContent='—';
       if($('platformFeePolicyLabel'))$('platformFeePolicyLabel').textContent='Unavailable';
       if($('platformFeeQuoteStatus'))$('platformFeeQuoteStatus').textContent='Choose an enabled, verified launch network to obtain a fee quote.';
-      if($('canonicalV1Status'))$('canonicalV1Status').textContent='No executable Mainnet release is installed. Sepolia infrastructure is not a Mainnet Factory.';
+      if($('canonicalV1Status'))$('canonicalV1Status').textContent='Choose an enabled launch network to inspect its verified infrastructure.';
       return null;
     }
     return rf26OriginalRender();
@@ -4406,7 +4409,13 @@ ${await file.text()}`;
     renderCanonicalV1();refreshPlatformFeeQuote().catch(()=>{});refreshVrfQuote().catch(()=>{});
     refreshCostEstimate().catch(()=>{});rf26RefreshLaunchAction();
   });
-  window.addEventListener('relicforge:forge-preflight-complete',rf26RefreshLaunchAction);
+  window.addEventListener('relicforge:forge-preflight-complete',()=>{
+    renderCanonicalV1();
+    refreshPlatformFeeQuote().catch(()=>{});
+    refreshVrfQuote().catch(()=>{});
+    refreshCostEstimate().catch(()=>{});
+    rf26RefreshLaunchAction();
+  });
   const rf26OriginalLoadLaunches=loadLaunchedProjects;
   loadLaunchedProjects=async function(...args){
     if(activeChainId()!==11155111)throw new Error('The legacy Creator Dashboard is Sepolia-only in R3D-B R1. Select Sepolia to manage historical collections.');
@@ -4423,8 +4432,8 @@ ${await file.text()}`;
   /* R3D-B2 R3: attach only an independently verified collection binding. */
   function rf26AttachFreshDeployment(bindings,txHash=null){
     const compiled=forgeState.compiled,scope=rf26Network().scope();
-    if(!compiled||!scope||scope.chainId!==11155111)
-      throw new Error('A verified Sepolia build is required before attaching a fresh deployment.');
+    if(!compiled||!scope||![1,11155111].includes(Number(scope.chainId)))
+      throw new Error('A verified launch-network build is required before attaching a fresh deployment.');
     const equal=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
     const addr=value=>{
       if(!window.ethers.isAddress(value)||equal(value,window.ethers.ZeroAddress))
@@ -4435,7 +4444,7 @@ ${await file.text()}`;
       collectionAddress:addr(bindings.collection),dataAddress:addr(bindings.data),
       mintPhasesAddress:addr(bindings.phases)
     };
-    if(Number(bindings.chainId)!==11155111||!equal(bindings.factory,scope.factory)||
+    if(Number(bindings.chainId)!==Number(scope.chainId)||!equal(bindings.factory,scope.factory)||
        !equal(bindings.creator,forgeState.wallet))
       throw new Error('Fresh-deployment network, Factory, or creator mismatch.');
     const loaded=forgeState.deploymentJournal;
@@ -4447,7 +4456,7 @@ ${await file.text()}`;
       : (loaded||findLocalDeploymentJournal(compiled.provenance));
     if(prior){
       if(prior.provenance&&!equal(prior.provenance,compiled.provenance))throw new Error('Deployment fingerprint mismatch.');
-      if(prior.chainId!=null&&Number(prior.chainId)!==11155111)throw new Error('Deployment network mismatch.');
+      if(prior.chainId!=null&&Number(prior.chainId)!==Number(scope.chainId))throw new Error('Deployment network mismatch.');
       if(prior.factory&&!equal(prior.factory,scope.factory))throw new Error('Deployment Factory mismatch.');
       for(const field of ['collectionAddress','dataAddress','mintPhasesAddress'])
         if(prior[field]&&!equal(prior[field],target[field]))throw new Error('Existing deployment binding mismatch: '+field);
