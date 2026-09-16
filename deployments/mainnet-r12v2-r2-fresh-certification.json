@@ -1,0 +1,32 @@
+{
+    "schema":  "relic-forge/mainnet-r12v2-r2-fresh-certification@1",
+    "status":  "LIVE_CERTIFIED",
+    "certifiedAt":  "2026-09-16T05:13:08.9993535Z",
+    "sourceCommit":  "58870d152d6d46568ccf803cc83a41f98904c903",
+    "releaseId":  "RelicForge-Mainnet-R12V2-R2-FRESH",
+    "deploymentManifestHash":  "f6d70c79f814ef2ae74375f9360ff6c2e8903bd2e671c7811abf719bb726cb9c",
+    "chainId":  1,
+    "reserveBalanceWei":  "30000000000000000",
+    "maxTierLiveVrfEstimateWei":  "105378872264819",
+    "addresses":  {
+                      "factory":  "0x56C9fD8a81F5d0Ce389D04C7e5EA372093930da7",
+                      "feePolicy":  "0x0F155Ab81E61faEA80ec5Bf194f31FBc33AF2caC",
+                      "collectionImplementation":  "0x0FaD7F74e7f2Db759a9B7e3C01c0D12B52140398",
+                      "dataImplementation":  "0x22EcFEe673c4d0F6Bcff60f95eD86dEAdB982967",
+                      "mintPhasesImplementation":  "0xe502867F6e894D61d36286a68D36233101A0A754",
+                      "renderer":  "0xBFCA27d86932F644BaF2349Cc8e74fF8379CB4aC",
+                      "canonicalRegistry":  "0xC1BE92446E96B09851692aa8682C9bBde9A11e82",
+                      "reserve":  "0x9CF57a87DA3D1A594F028Add879207a1598B8DC0",
+                      "randomnessAdapter":  "0x258cf686e3BdDEB02C804739baeDDd521329a59b"
+                  },
+    "invariants":  {
+                       "infrastructureReady":  true,
+                       "registryBootstrapBurned":  true,
+                       "reserveBootstrapBurned":  true,
+                       "automaticConsumerDelivery":  true,
+                       "immediateOwnershipArchitecture":  true,
+                       "platformBatchWindowSeconds":  30,
+                       "platformMaxRandomnessCostPerRequestWei":  "5000000000000000",
+                       "maxAutoRevealGroupNfts":  20
+                   }
+}

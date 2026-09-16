@@ -48,22 +48,43 @@
       chainId: 1,
       network: 'Ethereum Mainnet',
       environment: 'production',
-      // Part 6E.2A exposes the already-certified production release to Studio.
-      // Server policy, chain verification, Factory binding checks, and wallet-chain
-      // verification still run before any transaction can be prepared.
+      architectureVersion: 'R12V2-R2-ADAPTIVE',
+      immediateOwnership: true,
+      automaticConsumerDelivery: true,
       launchEnabled: true,
-      releaseId: 'RelicForge-Mainnet-R12V2-R1',
-      deploymentManifestHash: 'ad99569e1dd416a01c0f159ab2bb6c2fe7749ee50aa44527c32639983ee57c14',
-      factory: '0xd614d4dd3757365fb456789d2669dd55b6e6d6d5',
-      feePolicy: '0x61c5c153e96a9ded09fe3afcdca65a5958281e67',
-      collectionImplementation: '0x43bc4a9181960601c13b96f630adee74a0b219cf',
-      dataImplementation: '0x5cac5280b00ee729c9351c0e3235151c645f9834',
-      mintPhasesImplementation: '0xd7ef23619fab079941b05bdc2ac0f5ff90af4e4a',
-      renderer: '0xf449700e0fafdb1d0edb1af40096f61c229bc41f',
-      randomnessAdapter: '0x231ccd119188c3e9a8ae18b62dc536d8e3ed675a',
-      reserve: '0xf20442fcf072f87bb694eb6b7697ee2362ce5a49',
-      canonicalRegistry: '0xc9a8096aa3ead34282fbf24eaacabd414a00ee31',
-      defaultBatchWindowSeconds: 30
+      releaseId: 'RelicForge-Mainnet-R12V2-R2-FRESH',
+      deploymentManifestHash: 'f6d70c79f814ef2ae74375f9360ff6c2e8903bd2e671c7811abf719bb726cb9c',
+      factory: '0x56C9fD8a81F5d0Ce389D04C7e5EA372093930da7',
+      feePolicy: '0x0F155Ab81E61faEA80ec5Bf194f31FBc33AF2caC',
+      collectionImplementation: '0x0FaD7F74e7f2Db759a9B7e3C01c0D12B52140398',
+      dataImplementation: '0x22EcFEe673c4d0F6Bcff60f95eD86dEAdB982967',
+      mintPhasesImplementation: '0xe502867F6e894D61d36286a68D36233101A0A754',
+      renderer: '0xBFCA27d86932F644BaF2349Cc8e74fF8379CB4aC',
+      randomnessAdapter: '0x258cf686e3BdDEB02C804739baeDDd521329a59b',
+      reserve: '0x9CF57a87DA3D1A594F028Add879207a1598B8DC0',
+      canonicalRegistry: '0xC1BE92446E96B09851692aa8682C9bBde9A11e82',
+      ethUsdPriceFeed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
+      chainlinkVrfWrapper: '0x02aae1A04f9828517b3007f83f6181900CaD910c',
+      requestConfirmations: 3,
+      requestGasLimit: 1400000,
+      autoRevealConsumerCallbackGas: 1400000,
+      maxAutoRevealGroupNfts: 20,
+      delayedRevealConsumerCallbackGas: 500000,
+      adapterCallbackOverheadGas: 250000,
+      deliveryGasReserve: 75000,
+      defaultBatchWindowSeconds: 30,
+      defaultMaxRandomnessCostPerBatchWei: '5000000000000000',
+      adaptiveAutoRevealGasTiers: Object.freeze({
+        one: 400000,
+        twoToFour: 550000,
+        fiveToTen: 900000,
+        elevenToFifteen: 1150000,
+        sixteenToTwenty: 1400000
+      }),
+      certifiedCollection: null,
+      certifiedForgeCollection: null,
+      certifiedDelayedCollection: null,
+      sourceCommit: '58870d152d6d46568ccf803cc83a41f98904c903'
     })
   });
 })();
