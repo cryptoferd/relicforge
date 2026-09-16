@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { getAddress } from 'ethers';
 import { db, one } from '../lib/db.js';
-import { collectionFor, providerFor, rpcUrl } from '../lib/rpc.js';
+import { collectionFor, rpcUrl } from '../lib/rpc.js';
 import { publicAlchemyNetworkCatalog } from '../lib/alchemy-networks.js';
 import { getBuffer, objectKey, putBuffer } from '../lib/storage.js';
 
@@ -131,41 +131,108 @@ export default async function publicRoutes(app) {
 
   app.post('/api/public/rpc/:chainId', { config: { rateLimit: { max: 1200, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
+      const chainId = Number(request.params.chainId);
+      if (!Number.isSafeInteger(chainId) || chainId <= 0) throw new Error('Invalid EVM chain ID.');
+
       const isBatch = Array.isArray(request.body);
       const calls = isBatch ? request.body : [request.body];
-      // ethers v6 may coalesce many simultaneous contract reads into one JSON-RPC
-      // batch. Accept a reasonable client batch here and split it into upstream-safe
-      // chunks instead of turning an otherwise healthy read into HTTP 400.
       if (!calls.length || calls.length > 100) throw new Error('RPC batch size must be 1-100.');
       calls.forEach(validateRpcCall);
-      const chainId = Number(request.params.chainId);
-      // Force an eth_chainId verification through ethers before using a mapped
-      // endpoint. This protects against an outdated/incorrect endpoint->chain
-      // mapping and fails closed instead of silently reading a different chain.
-      await providerFor(chainId).getNetwork();
 
-      const allResults = [];
-      for (let i = 0; i < calls.length; i += 20) {
-        const chunk = calls.slice(i, i + 20);
-        const upstreamBody = isBatch ? chunk : chunk[0];
-        const response = await fetch(rpcUrl(chainId), {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(upstreamBody)
+      // Ethers performs eth_chainId / net_version handshakes before ordinary
+      // contract reads. These values are already authoritative from the
+      // chain-qualified Relic Forge RPC route, so answer them locally instead
+      // of forwarding a redundant network-negotiation call upstream.
+      const localResult = call => {
+        if (call.method === 'eth_chainId') {
+          return { jsonrpc: '2.0', id: call.id ?? null, result: '0x' + chainId.toString(16) };
+        }
+        if (call.method === 'net_version') {
+          return { jsonrpc: '2.0', id: call.id ?? null, result: String(chainId) };
+        }
+        return null;
+      };
+
+      // rpcUrl() validates the requested chain and resolves the configured
+      // chain-specific upstream. Do not invoke ethers getNetwork() here: that
+      // creates a second network handshake inside the proxy itself.
+      const upstreamUrl = rpcUrl(chainId);
+
+      if (!isBatch) {
+        const local = localResult(calls[0]);
+        if (local) return reply.code(200).send(local);
+
+        const response = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(calls[0])
         });
         const text = await response.text();
         let data;
         try {
           data = JSON.parse(text);
         } catch {
-          data = { jsonrpc: '2.0', id: chunk[0]?.id ?? null, error: { code: -32000, message: text || 'Upstream RPC error.' } };
+          data = {
+            jsonrpc: '2.0',
+            id: calls[0]?.id ?? null,
+            error: { code: -32000, message: text || 'Upstream RPC error.' }
+          };
         }
-        if (!response.ok) return reply.code(response.status).send(data);
-        if (!isBatch) return reply.code(response.status).send(data);
-        if (Array.isArray(data)) allResults.push(...data);
-        else allResults.push(data);
+        return reply.code(response.status).send(data);
       }
-      return reply.code(200).send(allResults);
+
+      const resultsById = new Map();
+      const keyFor = id => typeof id + ':' + String(id);
+      const remoteCalls = [];
+
+      for (const call of calls) {
+        const local = localResult(call);
+        if (local) resultsById.set(keyFor(call.id ?? null), local);
+        else remoteCalls.push(call);
+      }
+
+      for (let i = 0; i < remoteCalls.length; i += 20) {
+        const chunk = remoteCalls.slice(i, i + 20);
+        const response = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(chunk)
+        });
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = chunk.map(call => ({
+            jsonrpc: '2.0',
+            id: call.id ?? null,
+            error: { code: -32000, message: text || 'Upstream RPC error.' }
+          }));
+        }
+
+        if (!response.ok) {
+          // Preserve the upstream status/body. This makes the real provider
+          // error visible instead of disguising it as a Relic Forge handshake
+          // failure.
+          return reply.code(response.status).send(data);
+        }
+
+        const rows = Array.isArray(data) ? data : [data];
+        for (const row of rows) resultsById.set(keyFor(row?.id ?? null), row);
+      }
+
+      const ordered = calls.map(call => resultsById.get(keyFor(call.id ?? null)) || {
+        jsonrpc: '2.0',
+        id: call.id ?? null,
+        error: { code: -32000, message: 'RPC response was missing from upstream batch.' }
+      });
+      return reply.code(200).send(ordered);
     } catch (error) {
-      reply.code(400).send({ jsonrpc: '2.0', id: request.body?.id ?? null, error: { code: -32600, message: error.message } });
+      reply.code(400).send({
+        jsonrpc: '2.0',
+        id: Array.isArray(request.body) ? null : request.body?.id ?? null,
+        error: { code: -32600, message: error.message }
+      });
     }
   });
 
