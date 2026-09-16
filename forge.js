@@ -196,8 +196,6 @@
     wallet: null,
     gasPrice: null,
     placeholderFile: null,
-    placeholderConversionMode: 'vectorize',
-    placeholderVectorizedFile: null,
     collectionAddress: null,
     dataAddress: null,
     mintPhasesAddress: null,
@@ -1239,70 +1237,24 @@ ${await file.text()}`;
   }
 
 
-  function placeholderConversionMode() {
-    return document.querySelector('input[name="placeholderConversionMode"]:checked')?.value || forgeState.placeholderConversionMode || 'vectorize';
-  }
-  function placeholderFileKey(file) {
-    return window.RelicForgePlaceholderVectorizer?.fileKey?.(file) || [file?.name||'',file?.size||0,file?.lastModified||0].join(':');
-  }
-  function placeholderConversionStatus(message) {
-    if ($('creatorPlaceholderConversionStatus')) $('creatorPlaceholderConversionStatus').textContent = message;
-  }
-  function syncPlaceholderConversionCards() {
-    const mode=placeholderConversionMode();
-    forgeState.placeholderConversionMode=mode;
-    document.querySelectorAll('[data-placeholder-conversion-card]').forEach(card =>
-      card.classList.toggle('selected',card.dataset.placeholderConversionCard===mode)
-    );
-  }
-  async function refreshPlaceholderConversion() {
-    syncPlaceholderConversionCards();
-    const source=forgeState.placeholderFile;
-    forgeState.placeholderVectorizedFile=null;
-    if(!source){placeholderConversionStatus('Choose a placeholder. Small PNGs can be traced locally into true SVG shapes; your file is never sent away for conversion.');return null;}
-    const mode=placeholderConversionMode();
-    if(mode!=='vectorize'){placeholderConversionStatus('Original file selected. Relic Forge will embed it without PNG-to-SVG tracing.');return null;}
-    const vectorizer=window.RelicForgePlaceholderVectorizer;
-    if(!vectorizer){placeholderConversionStatus('PNG-to-SVG converter is unavailable. The original file will be used.');return null;}
-    if(!vectorizer.isPng(source)){
-      placeholderConversionStatus(String(source.type||'').toLowerCase()==='image/svg+xml'||/\.svg$/i.test(source.name||'')?'This placeholder is already SVG and will remain vector.':'Auto-convert applies only to PNG placeholders. This file will be kept as-is.');
-      return null;
-    }
-    try{
-      placeholderConversionStatus('Checking whether this PNG is suitable for a compact onchain SVG trace...');
-      const result=await vectorizer.convert(source);
-      if(result.converted){
-        forgeState.placeholderVectorizedFile={key:placeholderFileKey(source),file:result.file,result};
-        placeholderConversionStatus(result.reason+' The generated SVG uses real vector paths, not an embedded PNG.');
-        return result.file;
-      }
-      placeholderConversionStatus(result.reason+' The original PNG will be used.');
-      return null;
-    }catch(error){
-      placeholderConversionStatus('PNG-to-SVG check failed: '+error.message+'. The original PNG will be used.');
-      return null;
-    }
-  }
-  async function placeholderCompileFile(source) {
-    if(!source)return null;
-    if(placeholderConversionMode()!=='vectorize'||!window.RelicForgePlaceholderVectorizer?.isPng?.(source))return source;
-    const key=placeholderFileKey(source);
-    if(forgeState.placeholderVectorizedFile?.key===key)return forgeState.placeholderVectorizedFile.file;
-    await refreshPlaceholderConversion();
-    return forgeState.placeholderVectorizedFile?.key===key?forgeState.placeholderVectorizedFile.file:source;
-  }
 
   async function compilePlaceholderFile(file, expectedWidth, expectedHeight) {
     if (!file) throw new Error('Choose a pre-reveal artwork file first.');
     const ext = String(file.name || '').split('.').pop().toLowerCase();
     const type = String(file.type || '').toLowerCase();
 
-    const embed = (mime, bytes, encoding) => {
+    const embed = (mime, bytes, encoding, pixelated = false) => {
       const data = bytesToBase64(bytes);
-      const fragment = `<image x="0" y="0" width="${expectedWidth}" height="${expectedHeight}" preserveAspectRatio="xMidYMid meet" href="data:${mime};base64,${data}"/>`;
+      const renderHint = pixelated
+        ? ' image-rendering="pixelated" style="image-rendering:pixelated;image-rendering:crisp-edges"'
+        : '';
+      const fragment = '<image x="0" y="0" width="'+expectedWidth+'" height="'+expectedHeight+'" preserveAspectRatio="xMidYMid meet"'+renderHint+' href="data:'+mime+';base64,'+data+'"/>';
       const encoded = enc.encode(fragment);
       if (encoded.length > MAX_TRAIT_BYTES) {
-        throw new Error(`Pre-reveal artwork needs ${fmtBytes(encoded.length)} when embedded onchain, above the ${fmtBytes(MAX_TRAIT_BYTES)} placeholder limit. Optimize the source file without changing its intended aspect ratio and re-upload it.`);
+        throw new Error(
+          'Pre-reveal artwork needs '+fmtBytes(encoded.length)+' when embedded onchain, above the '+fmtBytes(MAX_TRAIT_BYTES)+' placeholder limit. ' +
+          'Larger dimensions are allowed, but the compressed image bytes plus the onchain SVG wrapper must fit this limit. Optimize/compress the source and re-upload it.'
+        );
       }
       return { fragment, encoding };
     };
@@ -1324,7 +1276,7 @@ ${await file.text()}`;
         });
       });
       const serialized = new XMLSerializer().serializeToString(root);
-      return embed('image/svg+xml', enc.encode(serialized), 'native-svg-contain');
+      return embed('image/svg+xml', enc.encode(serialized), 'native-svg-contain', false);
     }
 
     const mime =
@@ -1345,8 +1297,24 @@ ${await file.text()}`;
       bitmap?.close?.();
     }
 
-    const raw = new Uint8Array(await file.arrayBuffer());
-    return embed(mime, raw, mime === 'image/gif' ? 'animated-gif-contain' : 'native-raster-contain');
+    const source = new Uint8Array(await file.arrayBuffer());
+    let bytes = source;
+    let encoding = mime === 'image/gif' ? 'animated-gif-pixelated-contain' : 'native-raster-pixelated-contain';
+
+    // PNG metadata can occasionally make a source larger than necessary.
+    // Re-encode losslessly in-browser and use it only when it is actually
+    // smaller. Tiny palette PNGs normally remain untouched.
+    if (mime === 'image/png') {
+      try {
+        const recompressed = await canvasPngBytes(file);
+        if (recompressed.length < bytes.length) {
+          bytes = recompressed;
+          encoding = 'optimized-png-pixelated-contain';
+        }
+      } catch (_) {}
+    }
+
+    return embed(mime, bytes, encoding, true);
   }
 
   function defaultForgePlaceholderFragment(width, height) {
@@ -1507,9 +1475,8 @@ ${await file.text()}`;
       setCompileProgress(73, 'Packing exact recipe DNA…');
       const dna = buildDna(studio, layerDefs);
       setCompileProgress(81, 'Compiling reveal placeholder…');
-      const placeholderSource = forgeState.placeholderFile ? await placeholderCompileFile(forgeState.placeholderFile) : null;
-      const placeholder = placeholderSource
-        ? await compilePlaceholderFile(placeholderSource, studio.imageWidth, studio.imageHeight)
+      const placeholder = forgeState.placeholderFile
+        ? await compilePlaceholderFile(forgeState.placeholderFile, studio.imageWidth, studio.imageHeight)
         : { fragment: defaultForgePlaceholderFragment(studio.imageWidth, studio.imageHeight), encoding: 'relicforge-default' };
       const placeholderBytes = enc.encode(placeholder.fragment);
       if (placeholderBytes.length > MAX_TRAIT_BYTES) throw new Error(`Reveal placeholder compiles to ${fmtBytes(placeholderBytes.length)}, above the ${fmtBytes(MAX_TRAIT_BYTES)} test limit.`);
@@ -3921,7 +3888,6 @@ ${await file.text()}`;
       holderRenderModeEnabled: !!$('holderRenderModeEnabled')?.checked,
       defaultRenderMode: Number($('defaultRenderMode')?.value || 0),
       placeholderFile: forgeState.placeholderFile || null,
-      placeholderConversionMode: placeholderConversionMode(),
       publicMintEnabled: !!$('publicMintEnabled')?.checked,
       publicMintStart: $('publicMintStart')?.value || '',
       publicMintEnd: $('publicMintEnd')?.value || '',
@@ -4015,12 +3981,7 @@ ${await file.text()}`;
     const sourceRadio = document.querySelector(`input[name="whitelistSourceMode"][value="${sourceMode}"]`);
     if (sourceRadio) sourceRadio.checked = true;
     forgeState.placeholderFile = saved.placeholderFile || null;
-    forgeState.placeholderConversionMode = saved.placeholderConversionMode || (forgeState.placeholderFile ? 'original' : 'vectorize');
-    forgeState.placeholderVectorizedFile = null;
-    const placeholderModeRadio=document.querySelector('input[name="placeholderConversionMode"][value="'+forgeState.placeholderConversionMode+'"]');
-    if(placeholderModeRadio)placeholderModeRadio.checked=true;
     if ($('creatorPlaceholderName')) $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
-    refreshPlaceholderConversion().catch(()=>{});
     forgeState.mintPageImageFile = saved.mintPageImageFile || null;
     forgeState.mintPageBannerFile = saved.mintPageBannerFile || null;
     if ($('mintPageImageName')) $('mintPageImageName').textContent = forgeState.mintPageImageFile ? forgeState.mintPageImageFile.name : '2 MB max · any image format · animated GIF supported';
@@ -4099,17 +4060,9 @@ ${await file.text()}`;
     document.querySelectorAll('input[name="revealMode"]').forEach(input => input.addEventListener('change', () => { updateRevealUi(); refreshVrfQuote().catch(() => {}); }));
     $('creatorPlaceholderInput')?.addEventListener('change', event => {
       forgeState.placeholderFile = event.target.files?.[0] || null;
-      forgeState.placeholderVectorizedFile = null;
       $('creatorPlaceholderName').textContent = forgeState.placeholderFile ? forgeState.placeholderFile.name : 'PNG, WEBP, JPG, GIF, or SVG';
-      refreshPlaceholderConversion().catch(()=>{});
       invalidateCompile('Placeholder changed — recompile for onchain.');
     });
-    document.querySelectorAll('input[name="placeholderConversionMode"]').forEach(input=>input.addEventListener('change',()=>{
-      forgeState.placeholderConversionMode=placeholderConversionMode();
-      forgeState.placeholderVectorizedFile=null;
-      refreshPlaceholderConversion().catch(()=>{});
-      invalidateCompile('Placeholder conversion changed — recompile for onchain.');
-    }));
     $('compileOnchainBtn')?.addEventListener('click', compileForOnchain);
     $('refreshForgeCostBtn')?.addEventListener('click', refreshCostEstimate);
     $('connectForgeWalletBtn')?.addEventListener('click', () => connectWallet().catch(() => {}));

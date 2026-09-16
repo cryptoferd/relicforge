@@ -577,18 +577,9 @@
         <span id="creatorPlaceholderName">PNG, WEBP, JPG, GIF, or SVG · any dimensions / aspect ratio</span>
         <input accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml,.gif,.svg" id="creatorPlaceholderInput" type="file"/>
       </label>
-      <div id="creatorPlaceholderConversion">
-        <div class="reveal-options">
-          <label class="reveal-choice selected" data-placeholder-conversion-card="vectorize">
-            <input checked name="placeholderConversionMode" type="radio" value="vectorize"/>
-            <span><strong>Auto-convert small PNG to SVG</strong><small>Recommended for small logos, icons, flat art, and pixel art. SVG stays crisp when scaled. If a lossless trace is too large or complex, Relic Forge safely keeps the original PNG.</small></span>
-          </label>
-          <label class="reveal-choice" data-placeholder-conversion-card="original">
-            <input name="placeholderConversionMode" type="radio" value="original"/>
-            <span><strong>Keep uploaded image as-is</strong><small>Best for detailed, shaded, photographic, or already high-resolution artwork. Vector tracing cannot recreate detail that is missing from the source PNG.</small></span>
-          </label>
-        </div>
-        <div class="forge-inline-status" id="creatorPlaceholderConversionStatus">Choose a placeholder. Small PNGs can be traced locally into true SVG shapes; your file is never sent away for conversion.</div>
+      <div class="prototype-note" id="creatorPlaceholderRenderInfo">
+        <strong>Crisp placeholder rendering</strong>
+        <p>PNG, WEBP, JPG, and GIF placeholders stay in their compressed native format and render with pixelated nearest-neighbor scaling inside the onchain SVG. Native SVG stays vector. Larger raster dimensions are allowed too, provided the final embedded placeholder remains within the current 22 KB onchain fragment limit.</p>
       </div>
       <div class="prototype-note">
         <strong>Verified randomness</strong>
@@ -942,8 +933,7 @@
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>
   <script src="./rf26-forge-network-core.js?v=r3d-b1" defer></script>
   <script src="./rf26-forge-network.js?v=6e2a-mainnet1" defer></script>
-  <script src="./placeholder-vectorizer.js?v=r12v2-placeholder-vector1" defer></script>
-  <script src="./forge.js?v=r12v2-allowance-placeholder1" defer></script>
+  <script src="./forge.js?v=r12v2-pixelated-placeholder1" defer></script>
   <script src="./project-storage.js?v=6e05-paced1" defer></script>
   <script src="./studio-collaboration.js?v=studio-collab-r1" defer></script>
   <script src="./founder-console.js?v=rc4.7a.1" defer></script>
