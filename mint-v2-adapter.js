@@ -23,6 +23,13 @@
     'function phaseWalletMinted(uint32,address) view returns(uint32)',
     'function phaseIsOpen(uint32) view returns(bool)',
     'function quoteMint(uint32,uint32) view returns(uint256 creatorPrice,uint256 platformFeeWei,uint256 minimumValue,bool oracleHealthy,bool feeActive)',
+    'function platformFeeMode() view returns(uint8)',
+    'function lockedPlatformFeeCents() view returns(uint32)',
+    'function feePolicy() view returns(address)',
+  ];
+  const FEE_POLICY_ABI = [
+    'function collectionFeesEnabled(address collection) view returns(bool)',
+    'function currentCollectionFeeCents(address collection,uint32 lockedFeeCents) view returns(uint32)',
   ];
   const RANDOMNESS_ADAPTER_ABI = [
     'function estimateRequestPriceAtGasPrice(uint32 requestedConsumerCallbackGas,uint256 requestGasPriceWei) view returns(uint256)',
@@ -35,6 +42,7 @@
     config:null, provider:null, browserProvider:null, signer:null, wallet:null,
     collection:null, mintPhases:null, mintPhasesAddress:null, state:null, phases:[],
     walletRows:new Map(), proofs:new Map(),
+    feeQuoteSerial:new Map(), feeQuoteTimers:new Map(),
     chainTimeOffsetMs:0, countdownTimer:null, openingPhaseWatchers:new Map(),
   };
 
@@ -45,6 +53,7 @@
     catch { return '—'; }
   };
   const networkLabel = chainId => Number(chainId) === 11155111 ? 'Sepolia' : Number(chainId) === 1 ? 'Ethereum' : `Chain ${chainId}`;
+  const fmtUsdCents = cents => `$${(Math.max(0,Number(cents)||0)/100).toFixed(2)}`;
   function setStatus(message, bad=false) {
     const node=$('mintStatus'); if(!node)return;
     node.textContent=message; node.style.color=bad?'#c9aaaa':'';
@@ -205,7 +214,30 @@
     ]);
     app.mintPhasesAddress=window.ethers.getAddress(mintPhasesAddress);
     app.mintPhases=new window.ethers.Contract(app.mintPhasesAddress,MINT_PHASES_ABI,provider);
-    const [masterMintEnabled,phaseCountRaw]=await Promise.all([app.mintPhases.masterMintEnabled(),app.mintPhases.phaseCount()]);
+    const [masterMintEnabled,phaseCountRaw,platformFeeModeRaw,lockedPlatformFeeCentsRaw,feePolicyAddressRaw]=await Promise.all([
+      app.mintPhases.masterMintEnabled(),
+      app.mintPhases.phaseCount(),
+      app.mintPhases.platformFeeMode(),
+      app.mintPhases.lockedPlatformFeeCents(),
+      app.mintPhases.feePolicy(),
+    ]);
+    const platformFeeMode=Number(platformFeeModeRaw);
+    const lockedPlatformFeeCents=Number(lockedPlatformFeeCentsRaw);
+    let currentPlatformFeeCents=platformFeeMode===2?lockedPlatformFeeCents:0;
+    let platformFeesEnabled=platformFeeMode===2;
+    if(platformFeeMode===2 && window.ethers.isAddress(feePolicyAddressRaw)){
+      try{
+        const feePolicy=new window.ethers.Contract(feePolicyAddressRaw,FEE_POLICY_ABI,provider);
+        const [enabled,currentCents]=await Promise.all([
+          feePolicy.collectionFeesEnabled(app.config.contract),
+          feePolicy.currentCollectionFeeCents(app.config.contract,lockedPlatformFeeCents),
+        ]);
+        platformFeesEnabled=Boolean(enabled);
+        currentPlatformFeeCents=platformFeesEnabled?Number(currentCents):0;
+      }catch(error){
+        console.warn('RelicForge mint-page fee policy read:',error);
+      }
+    }
     const phaseCount=Math.min(500,Number(phaseCountRaw));
     const phases=[];
     for(let start=1;start<=phaseCount;start+=25){
@@ -232,7 +264,9 @@
     phases.sort((a,b)=>Number(b.open)-Number(a.open)||b.priority-a.priority||a.id-b.id);
     app.state={
       name,description,maxSupply:Number(maxSupply),totalCommitted:Number(totalCommitted),totalMinted:Number(totalMinted),
-      revealMode:Number(revealMode),masterMintEnabled:Boolean(masterMintEnabled),phaseCount:Number(phaseCountRaw)
+      revealMode:Number(revealMode),masterMintEnabled:Boolean(masterMintEnabled),phaseCount:Number(phaseCountRaw),
+      platformFeeMode,lockedPlatformFeeCents,currentPlatformFeeCents,platformFeesEnabled,
+      feePolicyAddress:window.ethers.isAddress(feePolicyAddressRaw)?window.ethers.getAddress(feePolicyAddressRaw):null
     };
     app.phases=phases;
   }
@@ -285,6 +319,100 @@
       bits.push(remaining.toLocaleString()+' currently mintable');
     }
     return 'Eligible · '+bits.join(' · ');
+  }
+
+  function mintCostMarkup(phaseId){
+    return `<div class="mint-cost-breakdown" id="v2Cost-${phaseId}" data-v2-cost="${phaseId}">
+      <div class="mint-cost-row"><span>Mint price × 1</span><strong data-cost-creator>Calculating…</strong></div>
+      <div class="mint-cost-row platform"><span>Platform fee × 1</span><strong data-cost-platform>Calculating…</strong></div>
+      <div class="mint-cost-row total"><span>Total due</span><strong data-cost-total>Calculating…</strong></div>
+      <small class="mint-cost-note" data-cost-note>Platform fee is quoted directly from the collection.</small>
+    </div>`;
+  }
+
+  function selectedStageQuantity(phaseId){
+    const input=$(`v2Qty-${phaseId}`);
+    const raw=Math.floor(Number(input?.value||1));
+    const max=Math.max(1,Math.min(50,Math.floor(Number(input?.max||50))||50));
+    return Math.min(max,Math.max(1,Number.isFinite(raw)?raw:1));
+  }
+
+  async function refreshStageMintCost(phaseId){
+    const phase=app.phases.find(row=>row.id===Number(phaseId));
+    const node=$(`v2Cost-${phaseId}`);
+    if(!phase||!node||!app.mintPhases)return;
+    const qty=selectedStageQuantity(phaseId);
+    const serial=Number(app.feeQuoteSerial.get(Number(phaseId))||0)+1;
+    app.feeQuoteSerial.set(Number(phaseId),serial);
+    const creatorNode=node.querySelector('[data-cost-creator]');
+    const platformNode=node.querySelector('[data-cost-platform]');
+    const totalNode=node.querySelector('[data-cost-total]');
+    const noteNode=node.querySelector('[data-cost-note]');
+    const rows=node.querySelectorAll('.mint-cost-row span');
+    if(rows[0])rows[0].textContent=`Mint price × ${qty}`;
+    if(rows[1])rows[1].textContent=`Platform fee × ${qty}`;
+    if(creatorNode)creatorNode.textContent='Calculating…';
+    if(platformNode)platformNode.textContent='Calculating…';
+    if(totalNode)totalNode.textContent='Calculating…';
+    if(noteNode){noteNode.className='mint-cost-note';noteNode.textContent='Reading the current onchain fee quote…';}
+    try{
+      const quote=await app.mintPhases.quoteMint(phase.id,qty);
+      if(Number(app.feeQuoteSerial.get(Number(phaseId))||0)!==serial)return;
+      const creatorPrice=BigInt(quote.creatorPrice??quote[0]);
+      const platformFeeWei=BigInt(quote.platformFeeWei??quote[1]);
+      const minimumValue=BigInt(quote.minimumValue??quote[2]);
+      const oracleHealthy=Boolean(quote.oracleHealthy??quote[3]);
+      const feeActive=Boolean(quote.feeActive??quote[4]);
+      if(creatorNode)creatorNode.textContent=fmtEth(creatorPrice);
+      if(totalNode)totalNode.textContent=fmtEth(minimumValue);
+
+      const mode=Number(app.state?.platformFeeMode||0);
+      const centsPerNft=Math.max(0,Number(app.state?.currentPlatformFeeCents||0));
+      if(mode===1){
+        if(platformNode)platformNode.textContent='0 ETH ($0.00)';
+        if(noteNode){
+          noteNode.className='mint-cost-note sponsored';
+          noteNode.textContent='Platform fees are waived for collectors due to creator sponsorship.';
+        }
+      }else if(!feeActive || !app.state?.platformFeesEnabled){
+        if(platformNode)platformNode.textContent='0 ETH ($0.00)';
+        if(noteNode){
+          noteNode.className='mint-cost-note sponsored';
+          noteNode.textContent='Platform fee is waived for this collection.';
+        }
+      }else if(!oracleHealthy){
+        if(platformNode)platformNode.textContent='0 ETH ($0.00)';
+        if(noteNode){
+          noteNode.className='mint-cost-note warn';
+          noteNode.textContent='Platform fee is temporarily waived for this mint because the USD/ETH fee quote is unavailable.';
+        }
+      }else{
+        const totalCents=centsPerNft*qty;
+        if(platformNode)platformNode.textContent=`${fmtEth(platformFeeWei)} (${fmtUsdCents(totalCents)})`;
+        if(noteNode){
+          noteNode.className='mint-cost-note';
+          noteNode.textContent=`Relic Forge platform fee: ${fmtUsdCents(centsPerNft)} per NFT × ${qty} = ${fmtUsdCents(totalCents)}. Included in Total due above.`;
+        }
+      }
+    }catch(error){
+      if(Number(app.feeQuoteSerial.get(Number(phaseId))||0)!==serial)return;
+      if(creatorNode)creatorNode.textContent='—';
+      if(platformNode)platformNode.textContent='—';
+      if(totalNode)totalNode.textContent='—';
+      if(noteNode){noteNode.className='mint-cost-note warn';noteNode.textContent='Could not load the current platform-fee quote. Minting will still re-quote before wallet confirmation.';}
+      console.warn(`Stage ${phaseId} mint-cost quote:`,error);
+    }
+  }
+
+  function scheduleStageMintCost(phaseId){
+    const id=Number(phaseId);
+    const prior=app.feeQuoteTimers.get(id);
+    if(prior)clearTimeout(prior);
+    const timer=setTimeout(()=>{
+      app.feeQuoteTimers.delete(id);
+      refreshStageMintCost(id).catch(error=>console.warn(`Stage ${id} fee refresh:`,error));
+    },120);
+    app.feeQuoteTimers.set(id,timer);
   }
 
   async function render() {
@@ -362,12 +490,19 @@
         <div class="access-top"><strong>${esc(phaseLabel(phase))}</strong><span>${esc(fmtEth(phase.price))}</span></div>
         ${countdown}
         <small class="qtyhint">${esc(timingLabel(phase))} · ${phase.maxPerWallet?`${phase.maxPerWallet} max/wallet`:'No wallet cap'}${phase.phaseSupply?` · ${phase.minted}/${phase.phaseSupply} stage minted`:''}</small>
-        <div class="qtyrow"><input id="v2Qty-${phase.id}" min="1" max="${Math.max(1,remaining||50)}" step="1" type="number" value="1" ${app.wallet&&remaining<1?'disabled':''}/><button class="btn ${phase.accessType===1?'secondary':''}" data-v2-mint="${phase.id}" ${app.wallet&&usable?'':'disabled'}>Mint Stage ${phase.id}</button></div>
+        <div class="qtyrow"><input id="v2Qty-${phase.id}" data-v2-qty="${phase.id}" min="1" max="${Math.max(1,remaining||50)}" step="1" type="number" value="1" ${app.wallet&&remaining<1?'disabled':''}/><button class="btn ${phase.accessType===1?'secondary':''}" data-v2-mint="${phase.id}" ${app.wallet&&usable?'':'disabled'}>Mint Stage ${phase.id}</button></div>
+        ${mintCostMarkup(phase.id)}
         <small class="qtyhint" id="v2Hint-${phase.id}">${esc(status)}</small>
       </div>`;
     }).join('');
 
     access.querySelectorAll('[data-v2-mint]').forEach(button=>button.addEventListener('click',()=>mintPhase(Number(button.dataset.v2Mint)).catch(error=>setStatus(`Mint error: ${error.shortMessage||error.message}`,true))));
+    access.querySelectorAll('[data-v2-qty]').forEach(input=>{
+      const id=Number(input.dataset.v2Qty);
+      ['input','change','keyup'].forEach(eventName=>input.addEventListener(eventName,()=>scheduleStageMintCost(id)));
+      input.addEventListener('blur',()=>scheduleStageMintCost(id));
+    });
+    app.phases.forEach(phase=>scheduleStageMintCost(phase.id));
     startPhaseCountdowns();
     const totalMintedByWallet=[...walletRows.values()].reduce((sum,row)=>sum+Number(row.minted||0),0);
     if($('walletMintsStat')) $('walletMintsStat').textContent=app.wallet?String(totalMintedByWallet):'Connect wallet';
