@@ -1,0 +1,215 @@
+/* Relic Forge Launch UI cleanup — compact, ordered creator flow */
+
+.studio-page-body .forge-launch-layout.rf-launch-clean {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding-top: 20px;
+  padding-bottom: 18px;
+}
+.studio-page-body .rf-launch-clean > .launch-card,
+.studio-page-body .rf-launch-clean .rf-launch-options-grid > .launch-card,
+.studio-page-body .rf-launch-clean .rf-launch-options-stack > .launch-card { min-width: 0; }
+
+.studio-page-body .rf-launch-collection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  padding: 18px;
+}
+.studio-page-body .rf-launch-collection > h3,
+.studio-page-body .rf-launch-network-inline,
+.studio-page-body .rf-launch-collection > .rf-launch-full { grid-column: 1 / -1; }
+.studio-page-body .rf-launch-collection textarea { min-height: 74px; }
+
+.studio-page-body .rf-launch-network-inline {
+  display: grid;
+  grid-template-columns: minmax(250px, .8fr) minmax(0, 1.2fr);
+  gap: 10px 16px;
+  align-items: end;
+  padding: 12px;
+  margin: -2px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #090909;
+}
+.studio-page-body .rf-launch-network-copy { display: grid; gap: 5px; align-self: center; }
+.studio-page-body .rf-launch-network-copy strong { font-size: 12px; }
+.studio-page-body .rf-launch-network-copy small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.studio-page-body .rf-launch-network-inline .forge-inline-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 10px;
+  min-height: 0;
+  font-size: 10px;
+}
+
+.studio-page-body .rf-launch-access,
+.studio-page-body .rf-launch-reveal,
+.studio-page-body .rf-launch-rendering,
+.studio-page-body .rf-launch-fee { padding: 18px; }
+.studio-page-body .rf-launch-access > h3 { margin-bottom: 2px; }
+
+.studio-page-body .rf-launch-options-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr);
+  gap: 12px;
+  align-items: start;
+}
+.studio-page-body .rf-launch-options-stack { display: grid; gap: 12px; min-width: 0; }
+.studio-page-body .rf-launch-reveal .prototype-note,
+.studio-page-body .rf-launch-rendering .prototype-note,
+.studio-page-body .rf-launch-fee .prototype-note { padding: 11px 12px; }
+.studio-page-body .rf-launch-reveal .reveal-choice,
+.studio-page-body .rf-launch-fee .reveal-choice { min-height: 0; }
+
+.studio-page-body .rf-launch-infra { padding: 14px 18px; gap: 10px; }
+.studio-page-body .rf-launch-infra .canonical-v1-heading { margin-bottom: 0; }
+.studio-page-body .rf-infra-details {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #090909;
+  overflow: hidden;
+}
+.studio-page-body .rf-infra-details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+}
+.studio-page-body .rf-infra-details > summary::-webkit-details-marker { display: none; }
+.studio-page-body .rf-infra-details > summary::after { content: '＋'; float: right; color: var(--dim); }
+.studio-page-body .rf-infra-details[open] > summary::after { content: '−'; }
+.studio-page-body .rf-infra-details .canonical-v1-addresses { margin: 0 10px 10px; }
+.studio-page-body .rf-launch-infra #canonicalV1Status { margin: 0 10px 10px; font-size: 10px; }
+.studio-page-body .rf-launch-infra #connectForgeWalletBtn { width: min(420px, 100%); }
+
+/* Public mint-page editor: media is shown in a realistic scaled preview. */
+.studio-page-body .mint-page-builder-card { grid-column: 1 / -1; }
+.studio-page-body .mint-page-builder-grid {
+  grid-template-columns: minmax(240px, .46fr) minmax(0, .84fr);
+  justify-content: start;
+}
+.studio-page-body .mint-page-studio-preview { width: 100%; max-width: 760px; justify-self: start; }
+.studio-page-body .mint-page-preview-banner {
+  min-height: 0;
+  height: clamp(100px, 11vw, 150px);
+  max-height: 150px;
+  aspect-ratio: auto;
+}
+.studio-page-body .mint-page-preview-content { grid-template-columns: 76px minmax(0, 1fr) auto; padding: 12px; gap: 12px; }
+.studio-page-body .mint-page-preview-avatar { width: 76px; border-radius: 13px; }
+
+/* Explicit workbench rows eliminate the large empty grid cells shown in Studio. */
+.studio-page-body .forge-workbench-grid.rf-workbench-clean {
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr);
+  align-items: start;
+  gap: 12px;
+}
+.studio-page-body .rf-workbench-mintpage,
+.studio-page-body .rf-workbench-deploy { grid-column: 1 / -1; }
+.studio-page-body .rf-workbench-compiler { grid-column: 1; }
+.studio-page-body .rf-workbench-cost { grid-column: 2; }
+.studio-page-body .rf-workbench-test { grid-column: 1; }
+.studio-page-body .rf-workbench-marketplace { grid-column: 2; }
+.studio-page-body .rf-workbench-deploy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .72fr);
+  gap: 12px 18px;
+  align-items: start;
+}
+.studio-page-body .rf-workbench-deploy > .forge-card-heading,
+.studio-page-body .rf-workbench-deploy > .launch-summary,
+.studio-page-body .rf-workbench-deploy > .forge-summary,
+.studio-page-body .rf-workbench-deploy > .forge-main-action,
+.studio-page-body .rf-workbench-deploy > .forge-deploy-list,
+.studio-page-body .rf-workbench-deploy > .forge-result { grid-column: 1; }
+.studio-page-body .rf-workbench-deploy > .r24-resume-panel,
+.studio-page-body .rf-workbench-deploy > #rf26RecoveryInspector { grid-column: 2; margin-top: 0; }
+
+/* Creator Dashboard: force saved/uploaded media into the same kind of scaled preview used by Studio. */
+.dashboard-page-body .dashboard-mint-page-builder {
+  display: grid;
+  grid-template-columns: minmax(220px, .42fr) minmax(300px, .58fr);
+  gap: 14px;
+  align-items: start;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-studio-preview {
+  width: 100%;
+  max-width: 640px;
+  justify-self: start;
+  overflow: hidden;
+}
+.dashboard-page-body .rf-dashboard-preview-label {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-banner {
+  height: 120px;
+  min-height: 0;
+  max-height: 120px;
+  aspect-ratio: auto;
+  overflow: hidden;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-banner img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-content {
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-avatar {
+  width: 68px;
+  height: 68px;
+  aspect-ratio: 1;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-avatar img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (max-width: 1080px) {
+  .studio-page-body .rf-launch-options-grid,
+  .studio-page-body .forge-workbench-grid.rf-workbench-clean,
+  .studio-page-body .rf-workbench-deploy,
+  .dashboard-page-body .dashboard-mint-page-builder { grid-template-columns: 1fr; }
+  .studio-page-body .rf-workbench-compiler,
+  .studio-page-body .rf-workbench-cost,
+  .studio-page-body .rf-workbench-test,
+  .studio-page-body .rf-workbench-marketplace,
+  .studio-page-body .rf-workbench-deploy > .r24-resume-panel,
+  .studio-page-body .rf-workbench-deploy > #rf26RecoveryInspector { grid-column: 1; }
+}
+
+@media (max-width: 760px) {
+  .studio-page-body .rf-launch-collection,
+  .studio-page-body .rf-launch-network-inline { grid-template-columns: 1fr; }
+  .studio-page-body .rf-launch-collection > *,
+  .studio-page-body .rf-launch-network-inline > * { grid-column: 1; }
+  .studio-page-body .mint-page-builder-grid { grid-template-columns: 1fr; }
+  .studio-page-body .mint-page-studio-preview,
+  .dashboard-page-body .dashboard-mint-page-builder .mint-page-studio-preview { max-width: none; }
+  .studio-page-body .mint-page-preview-content,
+  .dashboard-page-body .dashboard-mint-page-builder .mint-page-preview-content { grid-template-columns: 62px minmax(0, 1fr); }
+  .studio-page-body .mint-page-preview-action,
+  .dashboard-page-body .mint-page-preview-action { grid-column: 1 / -1; }
+}

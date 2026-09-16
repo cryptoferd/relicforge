@@ -125,7 +125,32 @@
   }
   function install() {
     installNetworkControl();
-    installCreatorStatus();
+    // Studio Step 5 owns the single canonical deployment-network selector.
+    // The older injected Collection Network card is intentionally disabled.
+    if (isStudio) {
+      document.getElementById('rf26NetworkStatus')?.remove();
+      if (!document.getElementById('rfLaunchUiCss')) {
+        const link = document.createElement('link');
+        link.id = 'rfLaunchUiCss'; link.rel = 'stylesheet'; link.href = './relicforge-launch-ui.css?v=launch-clean-r1';
+        document.head.append(link);
+      }
+      if (!document.getElementById('rfLaunchUiScript')) {
+        const script = document.createElement('script');
+        script.id = 'rfLaunchUiScript'; script.src = './relicforge-launch-ui.js?v=launch-clean-r1'; script.defer = true;
+        document.body.append(script);
+      }
+    } else if (isDashboard) {
+      if (!document.getElementById('rfLaunchUiCss')) {
+        const link = document.createElement('link');
+        link.id = 'rfLaunchUiCss'; link.rel = 'stylesheet'; link.href = './relicforge-launch-ui.css?v=launch-clean-r1';
+        document.head.append(link);
+      }
+      if (!document.getElementById('rfLaunchUiScript')) {
+        const script = document.createElement('script');
+        script.id = 'rfLaunchUiScript'; script.src = './relicforge-launch-ui.js?v=launch-clean-r1'; script.defer = true;
+        document.body.append(script);
+      }
+    }
     installMintStatus();
     cleanCopy();
   }
