@@ -343,7 +343,30 @@
     window.dispatchEvent(new CustomEvent('relicforge:deployment-checkpoint', { detail: { journal: cloneDeploymentJournal(forgeState.deploymentJournal) } }));
     return forgeState.deploymentJournal;
   }
-  function findLocalDeploymentJournal(provenance) { if (!provenance) return null; return cloneDeploymentJournal(deploymentJournalMap()[String(provenance).toLowerCase()] || null); }
+  function findLocalDeploymentJournal(provenance, chainId=activeChainId()) {
+    if (!provenance) return null;
+    const key=String(provenance).toLowerCase(),map=deploymentJournalMap();
+    const direct=map[key]||null;
+    const target=chainId==null?null:Number(chainId);
+
+    // Legacy journals were stored by provenance only. Keep reading them, but
+    // never let a Sepolia journal block a Mainnet deployment (or vice versa).
+    if(direct){
+      const directChain=Number(direct.chainId??11155111);
+      if(target==null||directChain===target)return cloneDeploymentJournal(direct);
+    }
+
+    // Completed/interrupted deployments are also archived by provenance. Pick
+    // the newest record for the requested chain so one build can safely have
+    // independent deployments on multiple networks.
+    if(target!=null){
+      const historical=getDeploymentHistory(provenance)
+        .filter(row=>Number(row?.chainId??11155111)===target)
+        .sort((a,b)=>String(b.updatedAt||b.archivedAt||'').localeCompare(String(a.updatedAt||a.archivedAt||'')));
+      if(historical[0])return cloneDeploymentJournal(historical[0]);
+    }
+    return null;
+  }
   function beginDeploymentJournal(compiled, factoryAddress) {
     const fresh=forgeState.newDeploymentRequest;
     if(fresh&&String(fresh.provenance).toLowerCase()===String(compiled.provenance).toLowerCase()){
@@ -4404,7 +4427,46 @@ ${await file.text()}`;
   }
   for(const id of ['forgeCollectionBtn','forgeArmMintBtn','forgeMintTestBtn','forgeWhitelistMintBtn','forgeCreatorMintBtn','forgePrepareDelayedRevealBtn','forgeRequestDelayedRevealBtn','r24ResumeDeploymentBtn'])
     $(id)?.addEventListener('click',rf26GuardLegacyAction,true);
-  window.addEventListener('relicforge:launch-network-changed',()=>{
+
+  function rf26DetachDeploymentForNetworkSwitch(targetChainId,boundDeploymentChainId=null){
+    const target=Number(targetChainId);
+    if(![1,11155111].includes(target))throw new Error('Unsupported deployment target.');
+    const journal=forgeState.deploymentJournal;
+    const sourceChain=boundDeploymentChainId!=null
+      ? Number(boundDeploymentChainId)
+      : (journal?.chainId!=null?Number(journal.chainId):null);
+    const crossChain=sourceChain!=null&&sourceChain!==target;
+    const hasActiveBindings=!!(
+      forgeState.collectionAddress||
+      forgeState.dataAddress||
+      forgeState.mintPhasesAddress||
+      forgeState.deploymentJournal||
+      forgeState.newDeploymentRequest
+    );
+
+    if(crossChain&&journal)archiveDeploymentJournal(journal,'network-switch');
+
+    if(crossChain&&hasActiveBindings){
+      rf26ClearDeploymentBindings();
+      forgeState.newDeploymentRequest=null;
+    }else if(forgeState.newDeploymentRequest&&Number(forgeState.newDeploymentRequest.chainId)!==target){
+      // An unsubmitted deployment request belongs to its original chain. Keep
+      // its journal/history, but do not carry the armed request across chains.
+      if(journal)archiveDeploymentJournal(journal,'network-switch');
+      rf26ClearDeploymentBindings();
+      forgeState.newDeploymentRequest=null;
+    }
+
+    if(forgeState.compiled?.provenance){
+      forgeState.deploymentHistory=getDeploymentHistory(forgeState.compiled.provenance);
+    }
+    return {targetChainId:target,detachedChainId:crossChain?sourceChain:null};
+  }
+
+  window.addEventListener('relicforge:launch-network-changed',event=>{
+    const target=Number(event?.detail?.chainId??activeChainId());
+    const bound=event?.detail?.boundDeploymentChainId??null;
+    rf26DetachDeploymentForNetworkSwitch(target,bound);
     resetWalletSessionUi('Launch network changed. Reconnect for deployment.');
     renderCanonicalV1();refreshPlatformFeeQuote().catch(()=>{});refreshVrfQuote().catch(()=>{});
     refreshCostEstimate().catch(()=>{});rf26RefreshLaunchAction();

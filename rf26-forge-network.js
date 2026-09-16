@@ -64,12 +64,24 @@
   function select(id){
     id=core.chain(id);
     if(busy)throw fail('Finish or inspect the current deployment operation before changing networks.');
+    const previousChainId=selected;
     const bound=boundChain();
-    if(bound!=null&&bound!==id)throw fail('This launch is bound to '+title(bound)+'. Save the project and open a new launch draft before switching. Existing deployment records are never reassigned.','RF26_DEPLOYMENT_MISMATCH');
     if(selected===id)return id;
-    controller.select(id);selected=id;message='';
+
+    // A Relic Forge project is reusable source. A deployment is chain-bound,
+    // but the project itself is not. Switching chains therefore selects a new
+    // deployment target; the existing chain-qualified deployment is preserved.
+    controller.select(id);selected=id;
+    const switchingBoundDeployment=bound!=null&&bound!==id;
+    message=switchingBoundDeployment
+      ? 'This project already has a deployment on '+title(bound)+'. '+title(id)+' is selected as a separate deployment target. The existing '+title(bound)+' deployment remains unchanged in deployment history.'
+      : '';
     try{sessionStorage.setItem(CHOICE,String(id));localStorage.setItem(CHOICE,String(id));}catch{}
-    window.dispatchEvent(new CustomEvent('relicforge:launch-network-changed',{detail:{chainId:id}}));
+    window.dispatchEvent(new CustomEvent('relicforge:launch-network-changed',{detail:{
+      chainId:id,
+      previousChainId:previousChainId,
+      boundDeploymentChainId:switchingBoundDeployment?bound:null
+    }}));
     render();return id;
   }
   function initialPreference(){
