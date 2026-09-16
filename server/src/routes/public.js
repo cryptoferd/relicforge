@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { getAddress } from 'ethers';
 import { db, one } from '../lib/db.js';
-import { collectionFor, rpcUrl } from '../lib/rpc.js';
+import { collectionFor, rpcInfo, rpcUrl } from '../lib/rpc.js';
 import { publicAlchemyNetworkCatalog } from '../lib/alchemy-networks.js';
 import { getBuffer, objectKey, putBuffer } from '../lib/storage.js';
 
@@ -129,6 +129,36 @@ export default async function publicRoutes(app) {
     return reply.send(body);
   });
 
+  app.get('/api/public/rpc/:chainId/diagnostic', async (request, reply) => {
+    const chainId = Number(request.params.chainId);
+    if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+      return reply.code(400).send({ error: 'Invalid EVM chain ID.' });
+    }
+    let info = null;
+    let configError = null;
+    try {
+      info = rpcInfo(chainId);
+    } catch (error) {
+      configError = error.message;
+    }
+    reply.header('Cache-Control', 'no-store');
+    reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1');
+    return {
+      proxyVersion: 'handshake-r1.1',
+      chainId,
+      chainHex: '0x' + chainId.toString(16),
+      netVersion: String(chainId),
+      rpc: info ? {
+        source: info.source,
+        configured: Boolean(info.configured),
+        networkKey: info.network?.key || null,
+        networkLabel: info.network?.label || null
+      } : null,
+      configurationError: configError,
+      railwayCommit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || null
+    };
+  });
+
   app.post('/api/public/rpc/:chainId', { config: { rateLimit: { max: 1200, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
       const chainId = Number(request.params.chainId);
@@ -139,10 +169,6 @@ export default async function publicRoutes(app) {
       if (!calls.length || calls.length > 100) throw new Error('RPC batch size must be 1-100.');
       calls.forEach(validateRpcCall);
 
-      // Ethers performs eth_chainId / net_version handshakes before ordinary
-      // contract reads. These values are already authoritative from the
-      // chain-qualified Relic Forge RPC route, so answer them locally instead
-      // of forwarding a redundant network-negotiation call upstream.
       const localResult = call => {
         if (call.method === 'eth_chainId') {
           return { jsonrpc: '2.0', id: call.id ?? null, result: '0x' + chainId.toString(16) };
@@ -153,15 +179,18 @@ export default async function publicRoutes(app) {
         return null;
       };
 
-      // rpcUrl() validates the requested chain and resolves the configured
-      // chain-specific upstream. Do not invoke ethers getNetwork() here: that
-      // creates a second network handshake inside the proxy itself.
-      const upstreamUrl = rpcUrl(chainId);
-
+      // IMPORTANT: terminate network-handshake calls before resolving or touching
+      // any upstream RPC configuration. This makes eth_chainId/net_version fully
+      // local and independent of Alchemy, Railway egress, or RPC URL construction.
       if (!isBatch) {
         const local = localResult(calls[0]);
-        if (local) return reply.code(200).send(local);
+        if (local) {
+          reply.header('Cache-Control', 'no-store');
+          reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-local');
+          return reply.code(200).send(local);
+        }
 
+        const upstreamUrl = rpcUrl(chainId);
         const response = await fetch(upstreamUrl, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -178,6 +207,8 @@ export default async function publicRoutes(app) {
             error: { code: -32000, message: text || 'Upstream RPC error.' }
           };
         }
+        reply.header('Cache-Control', 'no-store');
+        reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-upstream');
         return reply.code(response.status).send(data);
       }
 
@@ -191,6 +222,15 @@ export default async function publicRoutes(app) {
         else remoteCalls.push(call);
       }
 
+      // Pure handshake batches never resolve an upstream URL.
+      if (!remoteCalls.length) {
+        const orderedLocal = calls.map(call => resultsById.get(keyFor(call.id ?? null)));
+        reply.header('Cache-Control', 'no-store');
+        reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-local-batch');
+        return reply.code(200).send(orderedLocal);
+      }
+
+      const upstreamUrl = rpcUrl(chainId);
       for (let i = 0; i < remoteCalls.length; i += 20) {
         const chunk = remoteCalls.slice(i, i + 20);
         const response = await fetch(upstreamUrl, {
@@ -211,9 +251,8 @@ export default async function publicRoutes(app) {
         }
 
         if (!response.ok) {
-          // Preserve the upstream status/body. This makes the real provider
-          // error visible instead of disguising it as a Relic Forge handshake
-          // failure.
+          reply.header('Cache-Control', 'no-store');
+          reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-upstream-error');
           return reply.code(response.status).send(data);
         }
 
@@ -226,8 +265,12 @@ export default async function publicRoutes(app) {
         id: call.id ?? null,
         error: { code: -32000, message: 'RPC response was missing from upstream batch.' }
       });
+      reply.header('Cache-Control', 'no-store');
+      reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-mixed-batch');
       return reply.code(200).send(ordered);
     } catch (error) {
+      reply.header('Cache-Control', 'no-store');
+      reply.header('X-RelicForge-RPC-Proxy', 'handshake-r1.1-error');
       reply.code(400).send({
         jsonrpc: '2.0',
         id: Array.isArray(request.body) ? null : request.body?.id ?? null,
