@@ -213,3 +213,110 @@
   .studio-page-body .mint-page-preview-action,
   .dashboard-page-body .mint-page-preview-action { grid-column: 1 / -1; }
 }
+/* R2.2 actual R12-v2 dashboard mint-page preview */
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder {
+  display: grid !important;
+  grid-template-columns: minmax(230px, .42fr) minmax(320px, .58fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder > .mint-page-preview {
+  width: 100% !important;
+  max-width: 560px !important;
+  min-width: 0 !important;
+  justify-self: start !important;
+  overflow: hidden !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 13px !important;
+  background: #090909 !important;
+  box-shadow: 0 12px 34px rgba(0,0,0,.22);
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder > .mint-page-preview::before {
+  content: 'MINT PAGE PREVIEW';
+  display: block;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-banner-preview {
+  width: 100% !important;
+  height: 112px !important;
+  min-height: 112px !important;
+  max-height: 112px !important;
+  aspect-ratio: auto !important;
+  overflow: hidden !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-banner-preview img {
+  width: 100% !important;
+  height: 112px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  min-height: 112px !important;
+  max-height: 112px !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  display: block !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-preview-body {
+  display: grid !important;
+  grid-template-columns: 66px minmax(0,1fr) !important;
+  gap: 11px !important;
+  align-items: center !important;
+  padding: 11px !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-avatar-preview {
+  width: 66px !important;
+  height: 66px !important;
+  min-width: 66px !important;
+  max-width: 66px !important;
+  min-height: 66px !important;
+  max-height: 66px !important;
+  aspect-ratio: 1 / 1 !important;
+  overflow: hidden !important;
+  border-radius: 12px !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-avatar-preview img {
+  width: 66px !important;
+  height: 66px !important;
+  min-width: 66px !important;
+  max-width: 66px !important;
+  min-height: 66px !important;
+  max-height: 66px !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  display: block !important;
+}
+
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder .mint-page-preview-body > div:last-child {
+  min-width: 0 !important;
+}
+
+/* Keep the canonical V1 dashboard preview compact too. */
+.dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder > .mint-page-studio-preview {
+  width: 100% !important;
+  max-width: 560px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 900px) {
+  .dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder > .mint-page-preview,
+  .dashboard-page-body #launchedCollectionDetail .dashboard-mint-page-builder > .mint-page-studio-preview {
+    max-width: 100% !important;
+  }
+}

@@ -201,7 +201,7 @@ function installMarkup() {
   trigger.textContent='Mint URL';
   trigger.setAttribute('aria-controls',ids.drawer);
   trigger.setAttribute('aria-expanded','false');
-  const host=document.querySelector('.topbar-actions,.studio-topbar-actions,.topbar .actions,.header-actions');
+  const host=document.querySelector('.dashboard-nav-actions,.topbar-actions,.studio-topbar-actions,.topbar .actions,.header-actions');
   if(host){trigger.classList.add('rf26-url-trigger-inline');host.appendChild(trigger);}
   else document.body.appendChild(trigger);
 }
