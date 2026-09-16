@@ -30,8 +30,13 @@
     const base=apiBase();if(!base)throw fail('RelicForge Cloud is required for deployment release verification.');
     const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),10000);
     try{
-      const response=await fetch(base+'/api/public/forge-networks/'+id+'/preflight',{
-        cache:'no-store',credentials:'omit',redirect:'error',headers:{accept:'application/json'},signal:abort.signal
+      const session=window.RelicForgeCloud?.loadSession?.();
+      const authenticated=Boolean(session?.token);
+      const endpoint=authenticated?'/api/policy/forge-networks/'+id+'/preflight':'/api/public/forge-networks/'+id+'/preflight';
+      const headers={accept:'application/json'};
+      if(authenticated)headers.authorization='Bearer '+session.token;
+      const response=await fetch(base+endpoint,{
+        cache:'no-store',credentials:'omit',redirect:'error',headers,signal:abort.signal
       });
       if(!response.ok)throw fail('Network release preflight returned HTTP '+response.status+'.');
       const payload=await response.json();

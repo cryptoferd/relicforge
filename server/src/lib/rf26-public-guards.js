@@ -1,14 +1,18 @@
 import { getAddress } from 'ethers';
 import { db, one } from './db.js';
 import { tokenMetadata, walletOwnsCanonicalToken } from './reliquary-index.js';
+import { runtimeSetting } from './founder-policy.js';
 
 const ZERO='0x0000000000000000000000000000000000000000';
 const key=(chainId,contract)=>`${Number(chainId)}:${String(contract||'').toLowerCase()}`;
+async function discoveryPaused(){return Boolean(await runtimeSetting('publicDiscoveryPaused',false));}
 async function allowed(chainId,contract){
+  if(await discoveryPaused())return false;
   return Boolean(await one('SELECT 1 FROM rf26_public_collections WHERE chain_id=$1 AND contract_address=$2',
     [Number(chainId),String(contract||'').toLowerCase()]));
 }
 async function allowedSet(items){
+  if(await discoveryPaused())return new Set();
   const references=items.map(row=>({chain_id:Number(row.chainId??row.chain_id),contract_address:String((row.contract??row.contract_address)||'').toLowerCase()}))
     .filter(row=>Number.isSafeInteger(row.chain_id)&&/^0x[0-9a-f]{40}$/.test(row.contract_address));
   if(!references.length)return new Set();
@@ -19,6 +23,7 @@ async function allowedSet(items){
   return new Set(rows.map(row=>key(row.chain_id,row.contract_address)));
 }
 async function publicStats(wallet){
+  if(await discoveryPaused())return {totalMints:0,mintTransactions:0,collectionsMinted:0,nftsHeld:0,chainsUsed:0,nativeValueSpentWei:'0',platformFeesGeneratedWei:'0',sponsoredMints:0,minterSupportedMints:0,firstMintAt:null,collectionsCreated:0,creatorCollectionMints:null,longestCurrentHoldDays:0,averageCurrentHoldDays:0,coverage:{model:'public-discovery-paused',partial:true}};
   const [mint,holding,creator,chains]=await Promise.all([
     one(`SELECT COALESCE(sum(m.quantity),0)::text AS total_mints,count(*)::int AS mint_transactions,
       count(DISTINCT(m.chain_id,m.contract_address))::int AS collections_minted,
@@ -65,6 +70,7 @@ async function publicPfp(profile){
   return p;
 }
 async function publicNfts(wallet,mode,limit){
+  if(await discoveryPaused())return [];
   const count=Number(limit);const take=Number.isSafeInteger(count)?Math.min(100,Math.max(1,count)):48;
   const minted=mode==='minted';
   const sql=minted?`WITH minted AS (

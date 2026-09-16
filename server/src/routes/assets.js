@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
 import { getBuffer, headObject, objectKey, presignGet, presignPut, putBuffer } from '../lib/storage.js';
+import { assertRuntimeAllowed, resolveWalletPolicy } from '../lib/founder-policy.js';
 
 const PROJECT_ALLOWED_TYPES = new Set(['application/json','application/zip','text/plain','application/octet-stream']);
 const PROJECT_MAX_BYTES = 25 * 1024 * 1024;
@@ -17,8 +18,13 @@ function allowedType(contentType, purpose) {
 
 export default async function assetRoutes(app) {
   app.post('/api/assets/presign', { preHandler: authenticate }, async (request, reply) => {
+    const userPolicy = await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) });
+    const PROJECT_LIMIT = userPolicy.limits.projectLimit;
+    const PROJECT_MAX_BYTES = userPolicy.limits.projectAssetMaxBytes;
+    const MINT_PAGE_MAX_BYTES = userPolicy.limits.mintPageAssetMaxBytes;
     const { filename, contentType = 'application/octet-stream', size = 0, sha256 = '', purpose = 'project', projectId = null } = request.body || {};
     const bytes = Number(size || 0);
+    if (purpose === 'project') await assertRuntimeAllowed(request.user.wallet, 'projectWritesPaused', { isFounder: Boolean(request.user.isFounder), message: 'Relic Forge cloud project writes are temporarily paused.' });
     if (!filename || !ALLOWED_PURPOSES.has(purpose) || !allowedType(contentType, purpose)) return reply.code(400).send({ error: purpose === 'mint-page' ? 'Mint-page media must be an image.' : 'Unsupported asset type.' });
     const maxBytes = purpose === 'mint-page' ? MINT_PAGE_MAX_BYTES : PROJECT_MAX_BYTES;
     if (!Number.isFinite(bytes) || bytes < 0 || bytes > maxBytes) return reply.code(400).send({ error: purpose === 'mint-page' ? 'Mint-page images are limited to 2 MB each.' : 'Asset exceeds the 25 MB cloud upload limit.' });
@@ -55,6 +61,9 @@ export default async function assetRoutes(app) {
   });
 
   app.put('/api/assets/:id/upload', { preHandler: authenticate }, async (request, reply) => {
+    const userPolicy = await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) });
+    const PROJECT_MAX_BYTES = userPolicy.limits.projectAssetMaxBytes;
+    const MINT_PAGE_MAX_BYTES = userPolicy.limits.mintPageAssetMaxBytes;
     const asset = await one(
       `SELECT id,object_key,size_bytes,content_type,purpose,status
        FROM assets WHERE id=$1 AND owner_wallet=$2`,
@@ -98,6 +107,7 @@ export default async function assetRoutes(app) {
     }
   });
   app.post('/api/assets/:id/complete', { preHandler: authenticate }, async (request, reply) => {
+    const MINT_PAGE_MAX_BYTES = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.mintPageAssetMaxBytes;
     const asset = await one('SELECT id,object_key,size_bytes,content_type,purpose FROM assets WHERE id=$1 AND owner_wallet=$2', [request.params.id, request.user.wallet]);
     if (!asset) return reply.code(404).send({ error: 'Asset not found.' });
     try {

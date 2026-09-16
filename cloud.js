@@ -312,7 +312,9 @@
     const filename = file.name || 'asset.bin';
     let contentType = file.type || 'application/octet-stream';
     if (purpose === 'mint-page') {
-      if (file.size > MINT_PAGE_MAX_BYTES) throw new Error(`${filename} exceeds the 2 MB mint-page image limit.`);
+      try { await window.RelicForgeUserPolicy?.refresh?.(); } catch {}
+      const mintPageMaxBytes = window.RelicForgeUserPolicy?.limitBytes?.('mintPageAssetMaxBytes', MINT_PAGE_MAX_BYTES) || MINT_PAGE_MAX_BYTES;
+      if (file.size > mintPageMaxBytes) throw new Error(`${filename} exceeds the ${(mintPageMaxBytes / 1024 / 1024).toFixed(1)} MB mint-page image limit for this wallet.`);
       if (!String(contentType).toLowerCase().startsWith('image/')) {
         const ext = String(filename).split('.').pop()?.toLowerCase() || '';
         const imageTypes = { apng:'image/apng', avif:'image/avif', bmp:'image/bmp', gif:'image/gif', heic:'image/heic', heif:'image/heif', ico:'image/x-icon', jfif:'image/jpeg', jpeg:'image/jpeg', jpg:'image/jpeg', png:'image/png', svg:'image/svg+xml', tif:'image/tiff', tiff:'image/tiff', webp:'image/webp' };

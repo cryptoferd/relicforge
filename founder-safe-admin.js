@@ -288,6 +288,7 @@
   }
 
   function currentAction(){return core?.byId($('founderSafeAction')?.value)||null;}
+  function actionNeedsCollection(action){return !!action&&(action.target==='collection'||action.target==='mintPhases'||action.inputs?.some(input=>input.auto==='collection'));}
   function inputId(name){return `founderSafeInput_${name}`;}
 
   function fieldHtml(spec){
@@ -305,7 +306,7 @@
   }
 
   async function prefillAction(action){
-    if(!state.selected||!state.provider)return;
+    if(!state.provider||actionNeedsCollection(action)&&!state.selected)return;
     const s=state.selected;
     const cfg=state.cfg;
     const policy=new window.ethers.Contract(cfg.feePolicy,FEE_POLICY_READ_ABI,state.provider);
@@ -366,7 +367,8 @@
   }
 
   async function authorityFor(action){
-    if(!action||!state.selected)return {required:null,label:'Unknown'};
+    if(!action)return {required:null,label:'Unknown'};
+    if(action.authority==='controller'&&!state.selected)return {required:null,label:'Collection controller unavailable'};
     const cfg=state.cfg;
     const provider=state.provider;
     const policy=new window.ethers.Contract(cfg.feePolicy,FEE_POLICY_READ_ABI,provider);
@@ -404,7 +406,7 @@
   async function refreshAuthorization(){
     const action=currentAction();
     const host=$('founderSafeAuthorization');
-    if(!host||!action||!state.selected)return;
+    if(!host||!action||actionNeedsCollection(action)&&!state.selected)return;
     const auth=await authorityFor(action);
     const safeRaw=String($('founderSafeAddress')?.value||'').trim();
     let safe={address:null,contract:false,isSafe:false,owners:[],threshold:null,version:null};
@@ -431,7 +433,7 @@
   async function renderCurrentState(){
     const action=currentAction();
     const node=$('founderSafeCurrentState');
-    if(!node||!action||!state.selected)return;
+    if(!node||!action||actionNeedsCollection(action)&&!state.selected)return;
     node.textContent='Reading current onchain state…';
     const s=state.selected,cfg=state.cfg;
     const policy=new window.ethers.Contract(cfg.feePolicy,FEE_POLICY_READ_ABI,state.provider);
@@ -523,7 +525,7 @@
     await requireFounder();
     const action=currentAction();
     if(!action)throw new Error('Select an admin action.');
-    if(!state.selected)throw new Error('Select a canonical deployed collection first.');
+    if(actionNeedsCollection(action)&&!state.selected)throw new Error('Select a canonical deployed collection first.');
     const rawValues={},args=[],safeValues={};
     for(const spec of action.inputs){
       const raw=rawInput(spec);
@@ -598,7 +600,7 @@
         const json=core.buildSafeTransactionBuilder({
           action:g.action,chainId:state.chainId,safeAddress:g.safeAddress,target:g.target,inputValues:g.safeValues,
           name:`Relic Forge — ${g.action.label}`,
-          description:`${state.cfg.network||state.chainId} · ${state.selected.name} · ${state.selected.address}`
+          description:`${state.cfg.network||state.chainId} · ${state.selected?state.selected.name+' · '+state.selected.address:'Platform-level call'}`
         });
         jsonPreview.textContent=JSON.stringify(json,null,2);
       }else jsonPreview.textContent='Enter a Safe address to generate the Safe Transaction Builder JSON.';
@@ -615,13 +617,14 @@
     const json=core.buildSafeTransactionBuilder({
       action:g.action,chainId:state.chainId,safeAddress:g.safeAddress,target:g.target,inputValues:g.safeValues,
       name:`Relic Forge — ${g.action.label}`,
-      description:`${state.cfg.network||state.chainId} · ${state.selected.name} · ${state.selected.address}`
+      description:`${state.cfg.network||state.chainId} · ${state.selected?state.selected.name+' · '+state.selected.address:'Platform-level call'}`
     });
     const blob=new Blob([JSON.stringify(json,null,2)+'\n'],{type:'application/json'});
     const a=document.createElement('a');
     const url=URL.createObjectURL(blob);
     a.href=url;
-    a.download=`relicforge-safe-${state.chainId}-${g.action.id.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-${state.selected.address.slice(2,10)}.json`;
+    const subject=state.selected?state.selected.address.slice(2,10):'platform';
+    a.download=`relicforge-safe-${state.chainId}-${g.action.id.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-${subject}.json`;
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
     status('Safe Transaction Builder JSON downloaded. Import it into the matching Safe and verify every field before signing.','success');
@@ -686,6 +689,17 @@
     $('founderSafeDownloadJsonBtn')?.addEventListener('click',()=>{try{downloadSafeJson();}catch(error){status(error.message,'error');}});
   }
 
-  window.RelicForgeSafeAdmin=Object.freeze({open,refresh:loadCollections});
+  async function openPlatform(chainId,actionId){
+    if($('founderSafeNetwork'))$('founderSafeNetwork').value=String(chainId);
+    state.chainId=Number(chainId);restoreSafeAddress();await loadCollections();
+    if(actionId&&core.byId(actionId)){$('founderSafeAction').value=actionId;await renderAction();}
+  }
+  async function openForCollection(chainId,address,actionId=null){
+    await openPlatform(chainId,actionId||'collection.randomnessCeiling');
+    if($('founderSafeManualCollection'))$('founderSafeManualCollection').value=address;
+    await manualLoad();
+    if(actionId&&core.byId(actionId)){$('founderSafeAction').value=actionId;await renderAction();}
+  }
+  window.RelicForgeSafeAdmin=Object.freeze({open,refresh:loadCollections,openPlatform,openForCollection});
   bind();
 })();

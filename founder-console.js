@@ -154,7 +154,7 @@
     return identity;
   }
 
-  function openFounderModal(tab = 'projects') {
+  function openFounderModal(tab = 'overview') {
     const modal = $('founderConsoleModal');
     if (!modal) return;
     modal.classList.remove('hidden');
@@ -163,6 +163,7 @@
     if (tab === 'projects') loadFounderProjects().catch(error => founderStatus(error.message, 'error'));
     else if (tab === 'fees') refreshFeePolicySummary().catch(error => founderStatus(error.message, 'error'));
     else if (tab === 'safe') window.RelicForgeSafeAdmin?.open?.().catch(error => founderStatus(error.message, 'error'));
+    else if (window.RelicForgeFounderOps?.handles?.(tab)) window.RelicForgeFounderOps.open(tab);
   }
 
   function closeFounderModal() {
@@ -177,6 +178,7 @@
     $('founderProjectsPanel')?.classList.toggle('hidden', tab !== 'projects');
     $('founderFeesPanel')?.classList.toggle('hidden', tab !== 'fees');
     $('founderSafePanel')?.classList.toggle('hidden', tab !== 'safe');
+    document.querySelectorAll('[data-founder-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.founderPanel !== tab));
   }
 
   async function loadFounderProjects() {
@@ -672,7 +674,7 @@
   }
 
   function bind() {
-    $('founderConsoleBtn')?.addEventListener('click', () => openFounderModal('projects'));
+    $('founderConsoleBtn')?.addEventListener('click', () => openFounderModal('overview'));
     $('founderConsoleCloseBtn')?.addEventListener('click', closeFounderModal);
     $('founderConsoleBackdrop')?.addEventListener('click', closeFounderModal);
     document.querySelectorAll('[data-founder-tab]').forEach(button => {
@@ -680,6 +682,7 @@
         selectFounderTab(button.dataset.founderTab);
         if (button.dataset.founderTab === 'fees') refreshFeePolicySummary().catch(error => founderStatus(error.message, 'error'));
         if (button.dataset.founderTab === 'safe') window.RelicForgeSafeAdmin?.open?.().catch(error => founderStatus(error.message, 'error'));
+        if (window.RelicForgeFounderOps?.handles?.(button.dataset.founderTab)) window.RelicForgeFounderOps.open(button.dataset.founderTab);
       });
     });
 
@@ -736,7 +739,8 @@
     open: openFounderModal,
     refreshIdentity: identifyFounder,
     loadProjects: loadFounderProjects,
-    loadFeeCollection
+    loadFeeCollection,
+    selectTab: selectFounderTab
   };
 
   bind();

@@ -6,6 +6,7 @@ import { networkPolicy, networkId, assertDeploymentEnabled } from '../lib/rf26-n
 import { splitLegacyProject, launchDraft } from '../lib/rf26-project-model.js';
 import { registerRf26SlugRoutes } from './rf26-slug-routes.js';
 import { publicForgeNetwork } from '../lib/rf26-release-preflight.js';
+import { effectiveNetworkPolicy } from '../lib/founder-policy.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FACTORY_ABI=['function isRelicForgeCollection(address) view returns(bool)'];
@@ -81,11 +82,13 @@ export default async function rf26Routes(app){
       factory_address,release_id,release_manifest_hash,configuration
       FROM rf26_networks ORDER BY CASE WHEN chain_id=1 THEN 0 WHEN chain_id=11155111 THEN 1 ELSE 2 END,label`);
     reply.header('Cache-Control','no-store');
-    return {networks:rows.map(publicForgeNetwork)};
+    const networks=[];
+    for(const row of rows)networks.push(publicForgeNetwork(await effectiveNetworkPolicy(row,null,false,{publicOnly:true})));
+    return {networks};
   });
 
   app.get('/api/public/forge-networks/:chainId/preflight',async(request,reply)=>{
-    const policy=await networkPolicy(request.params.chainId);
+    const policy=await effectiveNetworkPolicy(await networkPolicy(request.params.chainId),null,false,{publicOnly:true});
     reply.header('Cache-Control','no-store');
     return {network:publicForgeNetwork(policy)};
   });
@@ -137,7 +140,7 @@ export default async function rf26Routes(app){
 
   app.post('/api/rc26/deployments',{preHandler:authenticate},async request=>{
     const id=networkId(request.body?.chainId),contract=address(request.body?.contract);
-    const policy=assertDeploymentEnabled(await networkPolicy(id));
+    const policy=assertDeploymentEnabled(await effectiveNetworkPolicy(await networkPolicy(id),request.user.wallet,Boolean(request.user.isFounder)));
     const requester=address(request.user.wallet);
     const projectId=request.body?.projectId?uuid(request.body.projectId):null;
     if(projectId)await access(projectId,requester,true);

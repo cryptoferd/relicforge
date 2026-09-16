@@ -5,6 +5,7 @@ import { Contract, getAddress } from 'ethers';
 import { deleteObjects } from '../lib/storage.js';
 import { networkPolicy } from '../lib/rf26-networks.js';
 import { normalizeLegacyMintPage } from '../lib/rf26-mint-page-policy.js';
+import { assertRuntimeAllowed, resolveWalletPolicy } from '../lib/founder-policy.js';
 
 const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const V2_COLLECTION_PHASES_ABI = ['function mintPhases() view returns(address)'];
@@ -27,6 +28,8 @@ export default async function collectionRoutes(app) {
   });
 
   app.put('/api/collections/:chainId/:contract/mint-page', { preHandler: authenticate }, async (request, reply) => {
+    await assertRuntimeAllowed(request.user.wallet, 'mintPagePublishingPaused', { isFounder: Boolean(request.user.isFounder), message: 'Mint-page publishing is temporarily paused.' });
+    const MINT_PAGE_MAX_BYTES = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.mintPageAssetMaxBytes;
     const chainId = Number(request.params.chainId);
     const contract = normAddress(request.params.contract);
     try { await verifyCollectionOwner(chainId, contract, request.user.wallet); }
@@ -73,13 +76,15 @@ export default async function collectionRoutes(app) {
   });
 
   app.put('/api/collections/:chainId/:contract/whitelist', { preHandler: authenticate, bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
+    await assertRuntimeAllowed(request.user.wallet, 'whitelistPublishingPaused', { isFounder: Boolean(request.user.isFounder), message: 'Whitelist publishing is temporarily paused.' });
+    const WHITELIST_MAX_ENTRIES = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.whitelistMaxEntries;
     const chainId = Number(request.params.chainId);
     const contract = normAddress(request.params.contract);
     try { await verifyCollectionOwner(chainId, contract, request.user.wallet); }
     catch (error) { return reply.code(403).send({ error: error.message }); }
     const wl = request.body || {};
     const entries = Array.isArray(wl.entries) ? wl.entries : [];
-    if (!wl.merkleRoot || entries.length > 250000) return reply.code(400).send({ error: 'Whitelist root required; maximum 250,000 entries per publish.' });
+    if (!wl.merkleRoot || entries.length > WHITELIST_MAX_ENTRIES) return reply.code(400).send({ error: `Whitelist root required; maximum ${WHITELIST_MAX_ENTRIES.toLocaleString()} entries per publish for this wallet.` });
     const onchainRoot = String(await collectionFor(chainId, contract).whitelistRoot()).toLowerCase();
     if (onchainRoot !== String(wl.merkleRoot).toLowerCase()) return reply.code(400).send({ error: 'Published whitelist root does not match the collection whitelistRoot onchain.' });
     const client = await db.connect();
@@ -154,6 +159,8 @@ export default async function collectionRoutes(app) {
   });
 
   app.put('/api/collections/:chainId/:contract/v2/whitelist/:phaseId', { preHandler: authenticate, bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
+    await assertRuntimeAllowed(request.user.wallet, 'whitelistPublishingPaused', { isFounder: Boolean(request.user.isFounder), message: 'Whitelist publishing is temporarily paused.' });
+    const WHITELIST_MAX_ENTRIES = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.whitelistMaxEntries;
     const chainId=Number(request.params.chainId);
     const contract=normAddress(request.params.contract);
     const phaseId=Number(request.params.phaseId);
@@ -174,7 +181,7 @@ export default async function collectionRoutes(app) {
     const root=String(wl.merkleRoot||'').toLowerCase();
     if(!/^0x[0-9a-f]{64}$/.test(root)||root!==onchainRoot)return reply.code(400).send({error:'Published root does not match the canonical MintPhases stage root.'});
     const entries=Array.isArray(wl.entries)?wl.entries:[];
-    if(entries.length>250000)return reply.code(400).send({error:'Maximum 250,000 Approved Wallet entries per stage.'});
+    if(entries.length>WHITELIST_MAX_ENTRIES)return reply.code(400).send({error:`Maximum ${WHITELIST_MAX_ENTRIES.toLocaleString()} Approved Wallet entries per stage for this wallet.`});
     const normalized=[];
     try {
       for(const entry of entries){

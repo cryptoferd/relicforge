@@ -2,6 +2,7 @@ import { db, one } from '../lib/db.js';
 import { authenticate } from '../lib/auth.js';
 import { deleteObjects } from '../lib/storage.js';
 import { classifyProjectChanges } from '../lib/project-diff.js';
+import { assertRuntimeAllowed, resolveWalletPolicy } from '../lib/founder-policy.js';
 
 const PROJECT_LIMIT = Math.max(1, Number(process.env.PROJECT_LIMIT || 10));
 
@@ -46,6 +47,7 @@ async function cleanupAssets({ ownerWallet, projectId, candidateIds = new Set(),
 
 export default async function projectRoutes(app) {
   app.get('/api/projects', { preHandler: authenticate }, async request => {
+    const PROJECT_LIMIT = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.projectLimit;
     const [{ rows }, countRow] = await Promise.all([
       db.query(
         `SELECT p.id,p.name,p.current_version,p.founder_support_enabled,p.founder_support_updated_at,p.created_at,p.updated_at,
@@ -68,6 +70,8 @@ export default async function projectRoutes(app) {
   });
 
   app.put('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
+    await assertRuntimeAllowed(request.user.wallet, 'projectWritesPaused', { isFounder: Boolean(request.user.isFounder), message: 'Relic Forge cloud project writes are temporarily paused.' });
+    const PROJECT_LIMIT = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.projectLimit;
     const { name, snapshot } = request.body || {};
     if (!name || !snapshot || typeof snapshot !== 'object') return reply.code(400).send({ error: 'Project name and snapshot are required.' });
     const client = await db.connect();
@@ -145,6 +149,7 @@ export default async function projectRoutes(app) {
   });
 
   app.delete('/api/projects/:id', { preHandler: authenticate }, async (request, reply) => {
+    const PROJECT_LIMIT = (await resolveWalletPolicy(request.user.wallet, { isFounder: Boolean(request.user.isFounder) })).limits.projectLimit;
     const project = await one('SELECT id,name,snapshot FROM projects WHERE id=$1 AND owner_wallet=$2', [request.params.id, request.user.wallet]);
     if (!project) return reply.code(404).send({ error: 'Project not found.' });
     const projectRefs = collectAssetIds(project.snapshot);
