@@ -161,7 +161,8 @@
     document.body.classList.add('modal-open');
     selectFounderTab(tab);
     if (tab === 'projects') loadFounderProjects().catch(error => founderStatus(error.message, 'error'));
-    else refreshFeePolicySummary().catch(error => founderStatus(error.message, 'error'));
+    else if (tab === 'fees') refreshFeePolicySummary().catch(error => founderStatus(error.message, 'error'));
+    else if (tab === 'safe') window.RelicForgeSafeAdmin?.open?.().catch(error => founderStatus(error.message, 'error'));
   }
 
   function closeFounderModal() {
@@ -175,6 +176,7 @@
     });
     $('founderProjectsPanel')?.classList.toggle('hidden', tab !== 'projects');
     $('founderFeesPanel')?.classList.toggle('hidden', tab !== 'fees');
+    $('founderSafePanel')?.classList.toggle('hidden', tab !== 'safe');
   }
 
   async function loadFounderProjects() {
@@ -677,6 +679,7 @@
       button.addEventListener('click', () => {
         selectFounderTab(button.dataset.founderTab);
         if (button.dataset.founderTab === 'fees') refreshFeePolicySummary().catch(error => founderStatus(error.message, 'error'));
+        if (button.dataset.founderTab === 'safe') window.RelicForgeSafeAdmin?.open?.().catch(error => founderStatus(error.message, 'error'));
       });
     });
 
