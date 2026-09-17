@@ -20,9 +20,13 @@
     return session;
   }
   function clearSession() {
+    const prior = session || loadSession();
     session = null;
     authEpoch += 1;
     try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    if (prior?.token) {
+      try { window.dispatchEvent(new CustomEvent('relicforge:cloud-session-cleared', { detail: { wallet: prior.wallet || null } })); } catch {}
+    }
   }
 
   function decodeJwtPayload(token) {
@@ -156,6 +160,7 @@
     if (epochAtStart !== authEpoch) throw new Error('Wallet session changed while sign-in was in progress. Please sign in again.');
     session = { token: verified.token, wallet: verified.wallet, signedInAt: new Date().toISOString() };
     sessionStorage.setItem(TOKEN_KEY, JSON.stringify(session));
+    try { window.dispatchEvent(new CustomEvent('relicforge:cloud-signed-in', { detail: { wallet: session.wallet } })); } catch {}
     return session;
   }
 

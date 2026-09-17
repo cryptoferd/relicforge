@@ -15,6 +15,25 @@
   const title=id=>id==null?'Choose a network':meta(id).name;
   const selectedChainId=()=>selected;
   const localReady=id=>{try{return networks().isLaunchEnabled(core.chain(id))===true;}catch{return false;}};
+  const selectedWalletProvider=()=>window.RelicForgeWalletSession?.getProvider?.()||window.RelicForgeWallets?.getProvider?.()||window.ethereum||null;
+  async function currentWalletWithoutPrompt(){
+    const provider=selectedWalletProvider();
+    if(!provider?.request)return null;
+    try{
+      const accounts=await provider.request({method:'eth_accounts'});
+      return accounts?.[0]?core.address(accounts[0]):null;
+    }catch{return null;}
+  }
+  async function matchingCloudSession(){
+    const cloud=window.RelicForgeCloud,active=cloud?.loadSession?.();
+    if(!active?.token||!cloud?.sessionIsUsable?.(active,null,0))return null;
+    const current=await currentWalletWithoutPrompt();
+    if(!current||String(active.wallet||'').toLowerCase()!==String(current).toLowerCase()){
+      cloud?.clearSession?.();
+      return null;
+    }
+    return active;
+  }
   function requireSelection(){if(selected==null)throw fail('Choose Ethereum Mainnet or Sepolia in the launch network selector.');return selected;}
   function requireLocal(){const id=requireSelection();if(!localReady(id))throw fail(title(id)+' infrastructure is not available for deployment yet.');return localConfig(id);}
   function status(value){message=String(value||'');render();}
@@ -30,7 +49,7 @@
     const base=apiBase();if(!base)throw fail('RelicForge Cloud is required for deployment release verification.');
     const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),10000);
     try{
-      const session=window.RelicForgeCloud?.loadSession?.();
+      const session=await matchingCloudSession();
       const authenticated=Boolean(session?.token);
       const endpoint=authenticated?'/api/policy/forge-networks/'+id+'/preflight':'/api/public/forge-networks/'+id+'/preflight';
       const headers={accept:'application/json'};
@@ -41,6 +60,8 @@
       if(!response.ok)throw fail('Network release preflight returned HTTP '+response.status+'.');
       const payload=await response.json();
       if(!payload?.network||Number(payload.network.chainId)!==id)throw fail('Invalid network release response.');
+      if(authenticated&&(!payload.evaluatedWallet||String(payload.evaluatedWallet).toLowerCase()!==String(session.wallet||'').toLowerCase()))
+        throw fail('Network policy was evaluated for a different wallet. Reconnect and sign in again.','RF26_POLICY_WALLET_MISMATCH');
       return payload.network;
     }finally{clearTimeout(timer);}
   }
@@ -112,7 +133,6 @@
     if(scope&&scope.chainId===selected){await controller.assertScope(scope);return scope;}
     return preflight();
   }
-  const selectedWalletProvider=()=>window.RelicForgeWalletSession?.getProvider?.()||window.RelicForgeWallets?.getProvider?.()||window.ethereum||null;
   async function requestAccount(forceChooser){
     if(window.RelicForgeWalletSession?.requestAccount)return window.RelicForgeWalletSession.requestAccount({forceChooser});
     if(window.RelicForgeWallets?.requestAccount)return window.RelicForgeWallets.requestAccount({forceChooser});
@@ -120,22 +140,37 @@
     const accounts=await injected.request({method:'eth_requestAccounts'});if(!accounts?.[0])throw fail('Wallet did not return an account.');return accounts[0];
   }
   async function connect({forceChooser=false,requireLaunch=false}={}){
-    // Account-only sign-in is chain-agnostic and never switches the wallet.
+    // Wallet-specific deployment policy must be evaluated AFTER the actual
+    // signing account is known. Never let a previous wallet's Cloud JWT decide
+    // whether the new wallet may deploy.
     if(requireLaunch&&!executionAllowed(selected))throw fail('The selected network is not approved for Relic Forge execution.');
-    const ready=requireLaunch?await requireReady():null;
-    const ticket=serial;
     const requested=core.address(await requestAccount(forceChooser));
     const injected=selectedWalletProvider();if(!injected?.request)throw fail('Selected wallet provider is unavailable.');
+
     if(!requireLaunch){
+      const ticket=serial;
       if(ticket!==serial)throw fail('Wallet or network changed while connecting.');
       controller.revoke();discardSession();account=requested;
       return {provider:null,signer:null,wallet:requested,scope:null};
     }
+
+    if(window.RelicForgeCloud?.enabled?.())await window.RelicForgeCloud.ensureSignedIn(requested);
+
+    // Discard any release scope created before the exact creator authenticated.
+    controller.revoke();discardSession();
+    const ready=await preflight();
+    const ticket=serial;
+
     await networks().ensureWalletChain(injected,ready.chainId);
     const provider=new window.ethers.BrowserProvider(injected);
     await networks().assertProvider(provider,ready.chainId);
     const signer=await provider.getSigner(),wallet=core.address(await signer.getAddress());
     if(!core.same(wallet,requested))throw fail('The selected wallet account does not match the requested account.');
+
+    const activeCloud=window.RelicForgeCloud?.loadSession?.();
+    if(window.RelicForgeCloud?.enabled?.()&&!window.RelicForgeCloud?.sessionIsUsable?.(activeCloud,wallet,0))
+      throw fail('Cloud deployment authorization does not belong to the selected creator wallet. Reconnect and sign in again.','RF26_POLICY_WALLET_MISMATCH');
+
     if(ticket!==serial||scope!==ready)throw fail('Wallet or network changed while connecting.');
     guarded=controller.guardSigner(signer,ready,wallet);account=wallet;
     return {provider,signer:guarded,wallet,scope:ready};
@@ -193,8 +228,16 @@
       try{status('Verifying selected release and onchain infrastructure…');await preflight();}
       catch(error){status(error.message);}
     });
-    for(const event of ['relicforge:wallet-disconnected','relicforge:wallet-accounts-changed','relicforge:wallet-provider-changed'])
-      window.addEventListener(event,()=>revokeSession('Wallet session changed. Reconnect before deploying.'));
+    window.addEventListener('relicforge:wallet-accounts-changed',event=>{
+      const next=event?.detail?.accounts?.[0]||null,cloud=window.RelicForgeCloud,active=cloud?.loadSession?.();
+      if(active?.token&&(!next||String(active.wallet||'').toLowerCase()!==String(next).toLowerCase()))cloud?.clearSession?.();
+      revokeSession('Wallet account changed. Reconnect before deploying.');
+    });
+    for(const event of ['relicforge:wallet-disconnected','relicforge:wallet-provider-changed'])
+      window.addEventListener(event,()=>{
+        window.RelicForgeCloud?.clearSession?.();
+        revokeSession('Wallet session changed. Reconnect before deploying.');
+      });
     render();
   }
   window.RelicForgeForgeNetwork=Object.freeze({selectedChainId,requireSelection,select,localConfig,requireLocal,preflight,requireReady,connect,writeSigner,assertWrite,assertBound,assertJournal,readJournal,writeJournal,verifyCollection,enter,clear,revokeSession,meta,title,localReady,render,scope:()=>scope,account:()=>account});

@@ -12,7 +12,15 @@ export default async function policyRoutes(app){
     const raw=await networkPolicy(request.params.chainId);
     const effective=await effectiveNetworkPolicy(raw,request.user.wallet,Boolean(request.user.isFounder));
     reply.header('Cache-Control','no-store');
-    return {network:publicForgeNetwork(effective),policyMode:effective.founder_mode};
+    const resolved=await policyPayload(request.user.wallet,{isFounder:Boolean(request.user.isFounder)});
+    const walletNetwork=resolved.networks.find(row=>Number(row.chainId)===Number(request.params.chainId))||null;
+    return {
+      network:publicForgeNetwork(effective),
+      policyMode:effective.founder_mode,
+      evaluatedWallet:request.user.wallet,
+      isFounder:Boolean(request.user.isFounder),
+      explicitOverride:walletNetwork?.override?.deploy??null
+    };
   });
 
   app.get('/api/public/platform-runtime',async(_request,reply)=>{
