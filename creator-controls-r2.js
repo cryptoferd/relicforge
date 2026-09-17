@@ -221,11 +221,11 @@
     panel.innerHTML = `
       <div class="rf-r2-head">
         <div>
-          <span class="eyebrow">R2 LIVE CONTROLS</span>
+          <span class="eyebrow">LIVE COLLECTION CONTROLS</span>
           <h4>Reveal & Collection State</h4>
-          <p>R2 uses immediate NFT ownership, contract-native automatic Forge reveal, and a two-transaction creator delayed reveal.</p>
+          <p>Relic Forge uses immediate NFT ownership, contract-native automatic Forge reveal, and a two-transaction creator delayed reveal.</p>
         </div>
-        <span class="rf-r2-badge">SEP R2</span>
+        <span class="rf-r2-badge">VERIFIED</span>
       </div>
       <div class="rf-r2-grid">
         <div><span>Minted</span><strong>${s.totalMinted.toLocaleString()} / ${s.maxSupply.toLocaleString()}</strong></div>
@@ -246,7 +246,7 @@
         <strong>No keeper or settlement actions</strong>
         <span>Normal creator controls do not expose replay, batch locking, settlement, request IDs, or Reserve recovery. Recovery remains hidden unless it is actually needed.</span>
       </div>
-      <div class="forge-inline-status" id="rfR2CreatorStatus">R2 state verified against the live Sepolia collection.</div>
+      <div class="forge-inline-status" id="rfR2CreatorStatus">Collection state verified against the live network.</div>
     `;
     detail.appendChild(panel);
 

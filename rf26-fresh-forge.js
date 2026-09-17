@@ -167,9 +167,9 @@
         const mainnet=id.chainId===1;
         const warning=mainnet
           ? 'WARNING: This creates permanent Ethereum Mainnet contracts and spends REAL ETH. Verify the collection name, supply, Factory, and fee before approving the wallet transaction.'
-          : 'This creates real testnet contracts. The remaining artwork and configuration steps use durable recovery checkpoints.';
+          : 'This creates contracts on the selected development network. The remaining artwork and configuration steps use durable recovery checkpoints.';
         const approved=window.confirm(
-          'Create a new R12-v2 collection on '+name+'?\\n\\n'+
+          'Create a new Relic Forge collection on '+name+'?\\n\\n'+
           'Network: '+name+' ('+id.chainId+')\\nFactory: '+id.factory+
           '\\nCollection: '+launch.tuple[0]+'\\nSupply: '+launch.tuple[3]+
           '\\nUpfront platform fee: '+total+' ETH\\n\\n'+warning
@@ -189,7 +189,7 @@
       await resume().run(true);
       const final=forge().getDeploymentJournal?.();
       if(final?.status==='complete'||final?.status==='onchain-complete'||final?.status==='proof-sync-pending')
-        status('Fresh Forge onchain lifecycle complete. Collection: '+result.verified.collection);
+        status('Onchain launch complete. Collection: '+result.verified.collection);
       else status('Factory creation is complete. Review the recovery panel for any remaining steps.');
       return {ok:true,collection:result.verified.collection};
     }catch(error){

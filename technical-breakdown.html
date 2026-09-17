@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#080808" />
-  <title>Relic Forge - R12-v2 R2 Adaptive Architecture</title>
-  <meta name="description" content="Technical guide to the Relic Forge R12-v2 R2 adaptive Sepolia architecture." />
+  <title>Relic Forge — Technical Architecture</title>
+  <meta name="description" content="Technical guide to the current Relic Forge onchain collection, minting, reveal, and randomness architecture." />
   <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
   <link rel="stylesheet" href="./styles.css?v=r12v2-r2-adaptive1" />
   <style>
@@ -17,15 +17,15 @@
 <div class="rf-doc">
   <a class="ghost-btn link-btn" href="./index.html">Relic Forge Home</a>
   <a class="ghost-btn link-btn" href="./studio.html">Open Studio</a>
-  <span class="badge">R12-v2 R2 ADAPTIVE · Sepolia certified</span>
+  <span class="badge">CURRENT ARCHITECTURE · ETHEREUM</span>
 
-  <h1>How Adaptive R12-v2 R2 Works</h1>
-  <p class="lede">R2 keeps the same immutable collection/data/stage split, but changes Forge reveal into an immediate-ownership, automatic-randomness workflow. The collector's mint transaction creates the NFTs first, then requests verified randomness with a callback budget sized to that reveal group.</p>
-  <div class="note"><strong>Current environment:</strong> the adaptive R2 stack is certified on Ethereum Sepolia. Mainnet continues to use the existing R1 contracts until the R2 Mainnet deployment and canary are completed. Public Sepolia discovery remains disabled.</div>
+  <h1>How Relic Forge Works</h1>
+  <p class="lede">Relic Forge separates collection ownership, immutable artwork and recipe data, and mint-stage policy. Forge Reveal uses immediate NFT ownership with automatic verified randomness, sizing the callback budget to each reveal group.</p>
+  <div class="note"><strong>Current environment:</strong> Ethereum Mainnet is live for production deployments. Ethereum Sepolia remains available for rehearsals and development. Each network uses its own verified Relic Forge deployment stack.</div>
 
   <h2>The 30-second version</h2>
   <div class="grid">
-    <div class="card"><h3>Ownership is immediate</h3><p>Successful collector and creator mints emit ERC-721 Transfer events in the mint transaction. There is no reservation-to-NFT settlement step in the R2 Forge path.</p></div>
+    <div class="card"><h3>Ownership is immediate</h3><p>Successful collector and creator mints emit ERC-721 Transfer events in the mint transaction. There is no reservation-to-NFT settlement step in the Forge Reveal path.</p></div>
     <div class="card"><h3>Randomness is automatic</h3><p>Forge mints request randomness automatically after ownership is created. Collectors do not return for a second transaction to reveal.</p></div>
     <div class="card"><h3>Callback gas is adaptive</h3><p>Each reveal group uses one of five callback-gas tiers from 400k through 1.4M. Mints above 20 NFTs split into independent groups of at most 20.</p></div>
     <div class="card"><h3>Policy is platform-managed</h3><p>The Forge batch window is fixed at 30 seconds and the maximum randomness cost per request/group is 0.005 ETH for the current release. Creator LaunchConfig fields remain ABI-compatible but are overridden by the Factory defaults.</p></div>
@@ -43,15 +43,15 @@ Shared infrastructure
   |-- RelicForgeCanonicalRegistryV2
   |-- RelicForgeReserveV2
   `-- RelicForgeFeePolicyV1</pre>
-  <p>ProjectData holds immutable artwork and recipe data. MintPhases owns sale-stage policy. Collection owns ERC-721 state, creator proceeds, reveal state, recipe assignment, and request funding. The Factory binds each clone to the certified shared infrastructure.</p>
+  <p>ProjectData holds immutable artwork and recipe data. MintPhases owns sale-stage policy. Collection owns ERC-721 state, creator proceeds, reveal state, recipe assignment, and request funding. The Factory binds each clone to the verified shared infrastructure.</p>
 
-  <h2>Adaptive Sepolia release</h2>
-  <table><thead><tr><th>Component</th><th>Certified Sepolia address</th></tr></thead><tbody>
-    <tr><td>Factory</td><td><code>0xAb920d3AbeceBF506711D1817179BC1067e9E6Ca</code></td></tr>
-    <tr><td>Collection implementation</td><td><code>0x884760377f041833A5E4336d3a847306Febea738</code></td></tr>
-    <tr><td>Randomness adapter</td><td><code>0x85Bf6B934028d5E029922283CE8Cf97174ff0ecc</code></td></tr>
-    <tr><td>Reserve</td><td><code>0x5e810b6E6fa5cA34F75c79B521847F99f38180f5</code></td></tr>
-    <tr><td>Canonical registry</td><td><code>0x4cB5b8d41082cB97FC8Dc6dDb26dD9B2ca545452</code></td></tr>
+  <h2>Verified Mainnet deployment</h2>
+  <table><thead><tr><th>Component</th><th>Ethereum Mainnet address</th></tr></thead><tbody>
+    <tr><td>Factory</td><td><code>0x56C9fD8a81F5d0Ce389D04C7e5EA372093930da7</code></td></tr>
+    <tr><td>Collection implementation</td><td><code>0x0FaD7F74e7f2Db759a9B7e3C01c0D12B52140398</code></td></tr>
+    <tr><td>Randomness adapter</td><td><code>0x258cf686e3BdDEB02C804739baeDDd521329a59b</code></td></tr>
+    <tr><td>Reserve</td><td><code>0x9CF57a87DA3D1A594F028Add879207a1598B8DC0</code></td></tr>
+    <tr><td>Canonical registry</td><td><code>0xC1BE92446E96B09851692aa8682C9bBde9A11e82</code></td></tr>
   </tbody></table>
 
   <h2>What happens on a Forge mint</h2>
@@ -64,7 +64,7 @@ Shared infrastructure
     <div class="flow-row"><b>6</b><div><strong>The exact word is recorded, then delivered.</strong><span class="quiet">The adapter stores the verified word before downstream delivery. Successful delivery assigns unique recipes and completes the group's reveal automatically.</span></div></div>
   </div>
 
-  <h2>Adaptive callback tiers</h2>
+  <h2>Forge Reveal callback tiers</h2>
   <table><thead><tr><th>Reveal group</th><th>Consumer callback gas</th></tr></thead><tbody>
     <tr><td>1 NFT</td><td>400,000</td></tr>
     <tr><td>2–4 NFTs</td><td>550,000</td></tr>
@@ -103,18 +103,18 @@ Shared infrastructure
   <h2>What normal users do not need to manage</h2>
   <p>Normal Studio and collector flows do not expose keeper pools, manual batch locking, manual randomness request buttons, request IDs, replay controls, or settlement controls. Replay exists as a permissionless recovery primitive, but it is not part of the normal mint/reveal experience.</p>
 
-  <h2>Release boundary</h2>
-  <div class="note"><strong>Sepolia:</strong> adaptive R2 Factory and UI are enabled for private/certification use. <strong>Mainnet:</strong> the existing R1 Factory remains authoritative until R2 Mainnet deployment, live canary, and certification are complete. Updating the Sepolia release does not replace or mutate the Mainnet Factory.</div>
+  <h2>Network boundary</h2>
+  <div class="note"><strong>Mainnet:</strong> production deployments use the verified Mainnet stack. <strong>Sepolia:</strong> rehearsals and development use a separate deployment stack. A deployment on one network never replaces or mutates a deployment on another network.</div>
 
-  <h2>Certification already completed</h2>
+  <h2>Validation coverage</h2>
   <ul>
     <li>Adaptive live matrix: 1, 4, 10, 15, 20 and split 50-NFT mint/reveal cases.</li>
     <li>Immediate ownership ordering before randomness request.</li>
     <li>Automatic adapter delivery and reveal completion.</li>
-    <li>Unique recipe assignment across the certified canary set.</li>
+    <li>Unique recipe assignment across the validation set.</li>
     <li>Exact-word replay after deliberate automatic-delivery failure, with no replacement randomness and no reroll.</li>
   </ul>
-  <p class="quiet">Certification is evidence that the tested paths behaved as designed; it is not a professional security audit or a guarantee that no vulnerabilities exist.</p>
+  <p class="quiet">Validation evidence shows that the covered paths behaved as designed; it is not a professional security audit or a guarantee that no vulnerabilities exist.</p>
 </div>
   <script src="./relicforge-v2-addresses.js?v=r12v2-r2-adaptive1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>

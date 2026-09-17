@@ -133,8 +133,8 @@
 
   async function syncCurrentProject() {
     const detail=window.RelicForgeStudioR13?.getPublicationDetail?.();
-    if(!detail?.collectionAddress)throw new Error('No launched R12-v2 collection is loaded in this Studio project.');
-    setSyncStatus('Repairing / syncing R12-v2 mint page and Approved Wallet proofs…');
+    if(!detail?.collectionAddress)throw new Error('No launched collection is loaded in this Studio project.');
+    setSyncStatus('Repairing / syncing mint-page metadata and Approved Wallet proofs…');
     await publish(detail);
     setSyncStatus('Mint page + Approved Wallet proofs synced. Eligibility is ready for the collector page.');
     window.dispatchEvent(new CustomEvent('relicforge:v2-proof-sync-complete',{detail:{collectionAddress:detail.collectionAddress}}));
@@ -149,8 +149,8 @@
     overlay.id='r2LaunchCompleteOverlay';
     overlay.className='r2-launch-overlay';
     overlay.innerHTML=`<div class="r2-launch-modal" role="dialog" aria-modal="true" aria-labelledby="r2LaunchTitle">
-      <div class="eyebrow">R12-v2 LAUNCH COMPLETE</div>
-      <h2 id="r2LaunchTitle">Collection forged on Sepolia</h2>
+      <div class="eyebrow">LAUNCH COMPLETE</div>
+      <h2 id="r2LaunchTitle">Collection forged</h2>
       <p>Every required launch transaction and configured MintPhases stage has confirmed.</p>
       <code>${collection}</code>
       <div class="r2-launch-actions">
@@ -202,7 +202,7 @@
       ensurePermanentLinks(state.collectionAddress);
       if($('openMintPageBtn')){$('openMintPageBtn').disabled=false;$('openMintPageBtn').textContent='Open Mint Page';}
       if($('publishMintPageBtn')){$('publishMintPageBtn').disabled=!window.RelicForgeCloud?.enabled?.();$('publishMintPageBtn').textContent='Repair / Sync Proofs';}
-      setSyncStatus('Existing R12-v2 launch detected. If this collection was forged before Collector R2, use Repair / Sync Proofs once to publish its Approved Wallet proof tables.');
+      setSyncStatus('Existing launch detected. If Approved Wallet eligibility is missing or stale, use Repair / Sync Proofs to republish its proof tables.');
     }
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0));

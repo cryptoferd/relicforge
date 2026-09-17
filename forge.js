@@ -1121,7 +1121,7 @@ ${await file.text()}`;
   function cleanMetadataString(value, field, allowEmpty = false) {
     const text = String(value ?? '').trim();
     if (!text && !allowEmpty) throw new Error(`${field} is required.`);
-    if (/["\\\n\r]/.test(text)) throw new Error(`${field} cannot contain quotes, backslashes, or line breaks in this Sepolia test build.`);
+    if (/["\\\n\r]/.test(text)) throw new Error(`${field} cannot contain quotes, backslashes, or line breaks in this build.`);
     return text;
   }
 
@@ -1413,7 +1413,7 @@ ${await file.text()}`;
   }
 
   async function hashCompiled(core, artShards, dnaShards, placeholderBytes) {
-    if (!window.ethers) throw new Error('ethers.js did not load; an internet connection is required for the Sepolia Forge module.');
+    if (!window.ethers) throw new Error('ethers.js did not load; an internet connection is required for the Forge module.');
     const chunks = [window.ethers.toUtf8Bytes(JSON.stringify(core)), ...artShards, ...dnaShards, placeholderBytes];
     return window.ethers.keccak256(window.ethers.concat(chunks));
   }
@@ -1673,7 +1673,7 @@ ${await file.text()}`;
     }
     const b = roughGasBreakdown(forgeState.compiled);
     let totalText = `~${b.total.toLocaleString()} gas`;
-    let feeText = 'Live public Sepolia gas unavailable · enter custom gwei if needed';
+    let feeText = 'Live network fee data unavailable · enter a custom rate if needed';
     let liveGwei = null;
     let gasSource = '';
     try {
@@ -1696,7 +1696,7 @@ ${await file.text()}`;
     if (selectedGwei != null && window.ethers) {
       const gasWei = window.ethers.parseUnits(String(selectedGwei), 'gwei');
       const wei = BigInt(b.total) * gasWei;
-      totalText = `~${Number(window.ethers.formatEther(wei)).toFixed(5)} Sepolia ETH`;
+      totalText = `~${Number(window.ethers.formatEther(wei)).toFixed(5)} ETH`;
       feeText = `~${b.total.toLocaleString()} gas at ${selectedGwei.toFixed(2)} gwei${currentGweiMode() === 'custom' ? ' (custom)' : ''}`;
     }
     $('forgeEstimatedCost').textContent = totalText;
@@ -1877,10 +1877,10 @@ ${await file.text()}`;
         node.style.cursor = 'pointer';
       });
       if ($('canonicalV1Status')) $('canonicalV1Status').textContent =
-        'R12-v2 R2 adaptive Sepolia stack loaded. Immediate ownership and automatic reveal are active. Mainnet R2 remains disabled.';
+        'Verified deployment loaded. Immediate ownership and automatic Forge Reveal are active.';
       return cfg;
     } catch (error) {
-      if ($('canonicalV1Status')) $('canonicalV1Status').textContent = 'R12-v2 CONFIG ERROR: ' + error.message;
+      if ($('canonicalV1Status')) $('canonicalV1Status').textContent = 'DEPLOYMENT CONFIG ERROR: ' + error.message;
       return null;
     }
   }
@@ -1985,7 +1985,7 @@ ${await file.text()}`;
     if (collectionSize > eip170Limit) {
       throw new Error(`RelicCollectionV2 runtime is ${collectionSize} bytes (${collectionUsage}% of EIP-170), ${Math.abs(collectionMargin)} bytes over the ${eip170Limit}-byte limit. The shared implementation must deploy successfully before the clone factory can be deployed.`);
     }
-    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${collectionSize} / ${eip170Limit} bytes (${collectionUsage}%, ${collectionMargin} bytes free)\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime${collectionMargin < 1024 ? '\nWARNING: Implementation is deployable but has less than 1 KB of EIP-170 headroom.' : ''}\n✓ Ready for Sepolia test deployment.`);
+    log('forgeInfraStatus', `Compiled with ${result.version}.\nRelicCollectionV2: ${collectionSize} / ${eip170Limit} bytes (${collectionUsage}%, ${collectionMargin} bytes free)\nRelicRandomnessMock: ${runtimeSizes.RelicRandomnessMock} bytes runtime\nRelicForgeFactory: ${runtimeSizes.RelicForgeFactory} bytes runtime${collectionMargin < 1024 ? '\nWARNING: Implementation is deployable but has less than 1 KB of EIP-170 headroom.' : ''}\n✓ Ready for deployment.`);
     return forgeState.contractArtifacts;
   }
 
@@ -2008,7 +2008,7 @@ ${await file.text()}`;
 
       if (!forgeState.signer) await connectWallet();
       await compileContracts();
-      log('forgeInfraStatus', 'Deploying shared Sepolia TEST infrastructure…', true);
+      log('forgeInfraStatus', 'Deploying shared infrastructure…', true);
       const implementation = await deployOne('RelicCollectionV2');
       const randomness = await deployOne('RelicRandomnessMock');
       const factory = await deployOne('RelicForgeFactory', [implementation, randomness, true]);
@@ -2017,7 +2017,7 @@ ${await file.text()}`;
       rememberFactory(factory);
       $('factoryAddress').value = factory;
       $('randomnessAddress').value = randomness;
-      log('forgeInfraStatus', '✓ Infrastructure saved in this browser. Future Sepolia collections can reuse this factory.');
+      log('forgeInfraStatus', '✓ Infrastructure saved in this browser. Future collections on this network can reuse this deployment system.');
     } catch (error) {
       log('forgeInfraStatus', `ERROR: ${error.message}`);
     }
@@ -2387,10 +2387,10 @@ ${await file.text()}`;
 
   async function viewerContract() {
     const address = viewerAddressInput();
-    if (!window.ethers.isAddress(address)) throw new Error('Enter a valid Sepolia collection address.');
+    if (!window.ethers.isAddress(address)) throw new Error('Enter a valid collection address.');
     forgeState.viewerAddress = address;
     const runner = readProvider(11155111) || forgeState.provider;
-    if (!runner) throw new Error('No Sepolia read provider is available.');
+    if (!runner) throw new Error('No read provider is available for this network.');
     return new window.ethers.Contract(address, V2_COLLECTION_ABI, runner);
   }
 
@@ -2429,7 +2429,7 @@ ${await file.text()}`;
         metaBox.classList.remove('hidden');
         metaBox.innerHTML = `<strong>${esc(name)}</strong><br>${esc(description || 'No description.')}<br><br>Collection: <code>${esc(forgeState.viewerAddress)}</code>`;
       }
-      $('viewerStatus').textContent = `Loaded ${name} on Sepolia.`;
+      $('viewerStatus').textContent = `Loaded ${name}.`;
       await renderViewerPage();
     } catch (error) {
       $('viewerStatus').textContent = `Viewer error: ${error.message}`;
@@ -2442,13 +2442,13 @@ ${await file.text()}`;
     if (!grid) return;
     const total = forgeState.viewerTotalMinted || 0;
     if (!forgeState.viewerAddress) {
-      grid.innerHTML = '<div class="forge-market-empty">Deploy or enter a collection address to browse the Sepolia collection.</div>';
+      grid.innerHTML = '<div class="forge-market-empty">Deploy or enter a collection address to browse the collection.</div>';
       $('viewerPagination')?.classList.add('hidden');
       $('viewerPagerStatus')?.classList.add('hidden');
       return;
     }
     if (total <= 0) {
-      grid.innerHTML = '<div class="forge-market-empty">No NFTs have been minted yet. Mint a test NFT to populate the marketplace viewer.</div>';
+      grid.innerHTML = '<div class="forge-market-empty">No NFTs have been minted yet. Mint an NFT to populate the collection viewer.</div>';
       $('viewerPagination')?.classList.add('hidden');
       $('viewerPagerStatus')?.classList.add('hidden');
       return;
@@ -2460,7 +2460,7 @@ ${await file.text()}`;
     const start = (forgeState.viewerPage - 1) * pageSize + 1;
     const end = Math.min(total, start + pageSize - 1);
     $('viewerStatus').textContent = `Loading tokens ${start}-${end} from ${forgeState.viewerMeta?.name || shortAddr(forgeState.viewerAddress)}…`;
-    grid.innerHTML = '<div class="forge-market-empty">Loading token metadata from Sepolia…</div>';
+    grid.innerHTML = '<div class="forge-market-empty">Loading token metadata…</div>';
     const collection = await viewerContract();
     const tokenIds = []; for (let i=start; i<=end; i++) tokenIds.push(i);
     const cards = await Promise.all(tokenIds.map(async (tokenId) => {
@@ -2908,7 +2908,7 @@ ${await file.text()}`;
           <strong>${esc(item.name || 'Unnamed collection')}</strong>
           <span>${esc(item.symbol || '')} · ${item.totalMinted.toLocaleString()} / ${item.maxSupply.toLocaleString()} minted</span>
           <small>${esc(shortAddr(item.address))}${item.isV1 ? (item.controllerActive ? ' · V1' : ' · V1 · CONTROL RENOUNCED') : (item.sealed ? ' · SEALED' : '')}</small>
-        </button>`).join('') : '<div class="forge-market-empty">No launched collections found for this wallet with the known Sepolia factories.</div>';
+        </button>`).join('') : '<div class="forge-market-empty">No launched collections found for this wallet with the known deployment systems.</div>';
       list.querySelectorAll('[data-launched-address]').forEach(button => button.addEventListener('click', () => openLaunchedCollection(button.dataset.launchedAddress)));
     }
     if ($('launchedDashboardStatus')) $('launchedDashboardStatus').textContent = snapshots.length ? `Found ${snapshots.length} launched collection${snapshots.length === 1 ? '' : 's'}.` : 'No launched collections found. You can paste an older Factory or collection address below.';
@@ -4480,12 +4480,12 @@ ${await file.text()}`;
   });
   const rf26OriginalLoadLaunches=loadLaunchedProjects;
   loadLaunchedProjects=async function(...args){
-    if(activeChainId()!==11155111)throw new Error('The legacy Creator Dashboard is Sepolia-only in R3D-B R1. Select Sepolia to manage historical collections.');
+    if(activeChainId()!==11155111)throw new Error('This dashboard view manages historical Sepolia deployments. Select Sepolia to continue.');
     return rf26OriginalLoadLaunches(...args);
   };
   const rf26OriginalOpenLaunch=openLaunchedCollection;
   openLaunchedCollection=async function(...args){
-    if(activeChainId()!==11155111)throw new Error('The legacy Creator Dashboard is Sepolia-only in R3D-B R1.');
+    if(activeChainId()!==11155111)throw new Error('This dashboard view manages historical Sepolia deployments.');
     return rf26OriginalOpenLaunch(...args);
   };
   window.addEventListener('relicforge:forge-session-invalidated',()=>resetWalletSessionUi('Wallet session changed. Reconnect to authorize deployment.'));

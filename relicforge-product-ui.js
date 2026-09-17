@@ -94,7 +94,7 @@
     ['R12-v2 Collection','Collection'],
     ['R12-v2 collector page','Collector mint page'],
     ['Relic Forge R12-v2','Relic Forge Infrastructure'],
-    ['Certified Sepolia preproduction infrastructure','Ethereum Sepolia infrastructure'],
+    ['Certified Sepolia preproduction infrastructure','Verified deployment infrastructure'],
     ['How-To','How It Works'],
     ['Technical Breakdown','Technology']
   ]);
@@ -120,7 +120,7 @@
       const heading = document.querySelector('.canonical-v1-heading h3');
       if (heading && heading.textContent !== 'Relic Forge Infrastructure') heading.textContent = 'Relic Forge Infrastructure';
       const detail = document.querySelector('.canonical-v1-heading small');
-      if (detail && detail.textContent !== 'Ethereum Sepolia infrastructure') detail.textContent = 'Ethereum Sepolia infrastructure';
+      if (detail && detail.textContent !== 'Verified deployment infrastructure') detail.textContent = 'Verified deployment infrastructure';
     }
   }
   function install() {

@@ -75,7 +75,7 @@
 
   async function readProvider() {
     const scope=await window.RelicForgeForgeNetwork.requireReady();
-    if(scope.chainId!==CHAIN_ID)throw new Error('This R12-v2 Stage Manager is restricted to verified Sepolia deployments.');
+    if(scope.chainId!==CHAIN_ID)throw new Error('This Stage Manager is available for verified Sepolia deployments.');
     const provider=window.RelicForgeNetworks.readProvider(CHAIN_ID);
     await window.RelicForgeNetworks.assertProvider(provider,CHAIN_ID);
     state.provider=provider;
@@ -83,7 +83,7 @@
   }
 
   async function creatorSigner() {
-    if(!state.collection)throw new Error('Select a verified R12-v2 collection first.');
+    if(!state.collection)throw new Error('Select a verified collection first.');
     return window.RF26CreatorGuard.signer(state.collection,{controller:state.controller,chainId:CHAIN_ID});
   }
 

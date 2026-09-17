@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#080808" />
-  <title>Relic Forge - Creator Guide</title>
-  <meta name="description" content="Creator guide for the Relic Forge R12-v2 R2 adaptive Sepolia workflow." />
+  <title>Relic Forge — Creator Guide</title>
+  <meta name="description" content="Creator guide for building, launching, minting, and managing onchain NFT collections with Relic Forge." />
   <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
   <link rel="stylesheet" href="./styles.css?v=r12v2-r2-adaptive1" />
   <style>
@@ -17,11 +17,11 @@
 <div class="rf-doc">
   <a class="ghost-btn link-btn" href="./index.html">Relic Forge Home</a>
   <a class="ghost-btn link-btn" href="./studio.html">Open Studio</a>
-  <span class="badge">R12-v2 R2 ADAPTIVE · Sepolia certified</span>
+  <span class="badge">CREATOR GUIDE · MAINNET + SEPOLIA</span>
   <h1>Creator Guide</h1>
-  <p>Relic Forge R12-v2 R2 is running its adaptive reveal architecture on Ethereum Sepolia. The collector receives the NFT in the mint transaction, Forge reveal randomness is requested automatically, and the callback budget scales with the size of each reveal group. Ethereum Mainnet remains on the existing R1 release until the R2 Mainnet rollout is separately certified.</p>
+  <p>Relic Forge uses an immediate-ownership Forge Reveal architecture. The collector receives the NFT in the mint transaction, verified randomness is requested automatically, and the callback budget scales with the size of each reveal group. Ethereum Mainnet is available for production launches, while Sepolia remains available for rehearsals and development.</p>
 
-  <div class="note good"><strong>What changed in Adaptive R2:</strong> Forge mints no longer create reservations that need a later settle transaction. Ownership is immediate. The mint transaction automatically requests verified randomness, and the collection reveals after the exact Chainlink word is delivered. The 30-second batch policy and 0.005 ETH maximum randomness cost per request/group are platform-managed—not creator settings.</div>
+  <div class="note good"><strong>Forge Reveal:</strong> Ownership is immediate. The mint transaction automatically requests verified randomness, and the collection reveals after the exact Chainlink word is delivered. The 30-second batch policy and 0.005 ETH maximum randomness cost per request/group are platform-managed—not creator settings.</div>
 
   <div class="steps">
     <section class="step"><h3>Connect and save</h3><p>Connect the EVM wallet that owns the creator controls. Cloud project saves are wallet-scoped. Downloaded project backups remain a separate recovery path.</p></section>
@@ -34,12 +34,12 @@
     <section class="step"><h3>Review platform reveal policy</h3><p>The Forge batch window is <strong>30 seconds</strong> and the maximum randomness cost per request/group is <strong>0.005 ETH</strong>. Both are platform-managed. Studio shows them in the Technical breakdown instead of exposing creator-editable fields.</p></section>
     <section class="step"><h3>Choose fee model</h3><p><strong>Creator Covers Platform Fee</strong> prepays the quoted platform fee at launch and initializes reveal funding. <strong>Collector Covers Platform Fee</strong> adds the active fee during mints when the ETH/USD quote is healthy. Reveal funding uses the collection hopper first and the shared Reserve only for an allowed bounded shortfall.</p></section>
     <section class="step"><h3>Configure mint stages</h3><p>MintPhases stores public and Approved Wallet stages, including price, schedules, stage supply, wallet caps, proofs, priority, enabled state, and the master Minting switch.</p></section>
-    <section class="step"><h3>Forge the collection</h3><p>The adaptive Factory creates Collection, ProjectData, and MintPhases clones, then Studio writes artwork/DNA, validates recipes, seals content, creates stages, and verifies the final bindings.</p></section>
-    <section class="step"><h3>Test before launch</h3><p>Confirm the adaptive Factory bindings, payout and royalty receivers, fee mode, reveal mode, stage schedule, immediate ownership, and automatic reveal behavior. On Sepolia, test both a one-NFT mint and a multi-NFT mint before treating a collection as ready.</p></section>
+    <section class="step"><h3>Forge the collection</h3><p>The Relic Forge Factory creates the collection and its linked data and mint-stage contracts, then Studio writes artwork and recipe data, validates recipes, seals content, creates stages, and verifies the final bindings.</p></section>
+    <section class="step"><h3>Review before launch</h3><p>Confirm the deployment system, payout and royalty receivers, fee model, reveal mode, mint-stage schedule, immediate ownership, and automatic reveal behavior. A complete Sepolia rehearsal is strongly recommended before a production launch.</p></section>
   </div>
 
-  <h2>Adaptive Forge callback tiers</h2>
-  <p>R2 sizes the consumer callback gas to the reveal group rather than paying for a single fixed callback envelope. Groups larger than 20 split automatically.</p>
+  <h2>Forge Reveal callback tiers</h2>
+  <p>Relic Forge sizes the consumer callback gas to the reveal group rather than paying for a single fixed callback envelope. Groups larger than 20 split automatically.</p>
   <div class="tiers">
     <div class="tier"><strong>1 NFT</strong><span>400,000 gas</span></div>
     <div class="tier"><strong>2–4 NFTs</strong><span>550,000 gas</span></div>
@@ -77,7 +77,7 @@
     <li>Platform batch-window and randomness-ceiling policy are not normal creator controls.</li>
   </ul>
 
-  <div class="note"><strong>Security status:</strong> the adaptive R12-v2 R2 stack has automated and live Sepolia certification, including adaptive callback-gas matrix testing and exact-word replay testing. That is not a professional audit and does not prove the absence of vulnerabilities. Mainnet R2 remains disabled until its separate deployment and canary certification.</div>
+  <div class="note"><strong>Security status:</strong> the current Forge Reveal stack has automated and live validation coverage, including callback-gas matrix checks and exact-word replay validation. This is not a professional security audit and does not prove the absence of vulnerabilities.</div>
 </div>
   <script src="./relicforge-v2-addresses.js?v=r12v2-r2-adaptive1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>

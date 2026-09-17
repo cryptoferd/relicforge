@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>Relic Forge Studio — Build Your NFT Collection</title>
   <meta name="description" content="Create layered onchain NFT collections, control rarity and trait rules, preview every token, and prepare your collection for launch." />
-  <link rel="canonical" href="https://cryptoferd.github.io/relicforge/studio.html" />
+  <link rel="canonical" href="https://relicforge.io/studio.html" />
   <link rel="icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
   <link rel="shortcut icon" type="image/svg+xml" href="./relic-forge-logo.svg" />
   <meta name="application-name" content="Relic Forge" />
@@ -15,8 +15,8 @@
   <meta property="og:site_name" content="Relic Forge" />
   <meta property="og:title" content="Relic Forge Studio — Build Your NFT Collection" />
   <meta property="og:description" content="Create layered onchain NFT collections, control rarity and trait rules, preview every token, and prepare your collection for launch." />
-  <meta property="og:url" content="https://cryptoferd.github.io/relicforge/studio.html" />
-  <meta property="og:image" content="https://cryptoferd.github.io/relicforge/relic-forge-preview.png" />
+  <meta property="og:url" content="https://relicforge.io/studio.html" />
+  <meta property="og:image" content="https://relicforge.io/relic-forge-preview.png" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1150" />
   <meta property="og:image:height" content="404" />
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Relic Forge Studio — Build Your NFT Collection" />
   <meta name="twitter:description" content="Create layered onchain NFT collections, control rarity and trait rules, preview every token, and prepare your collection for launch." />
-  <meta name="twitter:image" content="https://cryptoferd.github.io/relicforge/relic-forge-preview.png" />
+  <meta name="twitter:image" content="https://relicforge.io/relic-forge-preview.png" />
   <meta name="twitter:image:alt" content="Relic Forge — Your artwork. Your collection. No code." />
   <link rel="stylesheet" href="./styles.css?v=6e2a1-svgcount1" />
   <link rel="stylesheet" href="./rc47b.css?v=rc4.7b" />
@@ -478,9 +478,9 @@
     <div>
       <div class="eyebrow">STEP 5</div>
       <h2>Forge on your selected network</h2>
-      <p>Compile the finished Studio collection into immutable onchain artwork + recipe DNA, then forge it through Relic Forge's canonical V1 contracts on Ethereum Sepolia. Creators never deploy shared infrastructure.</p>
+      <p>Compile the finished Studio collection into immutable onchain artwork and recipe data, then forge it through the verified Relic Forge deployment for your selected network. Creators never deploy shared infrastructure.</p>
     </div>
-    <div class="forge-test-badge">R12-v2 · NETWORK-AWARE PREPARATION</div>
+    <div class="forge-test-badge">NETWORK-AWARE LAUNCH</div>
   </div>
 
   <div class="launch-layout forge-launch-layout">
@@ -490,7 +490,7 @@
       <label class="field"><span>Deployment network</span><select id="rf26ForgeNetworkSelect"><option value="">Choose a network</option><option value="1">Ethereum Mainnet</option><option value="11155111">Ethereum Sepolia</option></select></label>
       <div class="inline-actions"><button class="ghost-btn" id="rf26ForgePreflightBtn" type="button">Verify release &amp; infrastructure</button></div>
       <div class="forge-inline-status" id="rf26ForgeNetworkStatus">Choose a network before preparing a launch.</div>
-      <small class="forge-footnote">Mainnet transaction execution remains locked in this checkpoint. A certified release and the network-aware recovery integration are required before real ETH can be spent through Studio.</small>
+      <small class="forge-footnote">Relic Forge verifies network availability, release identity, and deployed infrastructure before a launch transaction can be prepared.</small>
     </div>
     <div class="launch-card">
       <h3>Collection</h3>
@@ -584,14 +584,11 @@
         <strong>Crisp placeholder rendering</strong>
         <p>PNG, WEBP, JPG, and GIF placeholders stay in their compressed native format and render with pixelated nearest-neighbor scaling inside the onchain SVG. Native SVG stays vector. Larger raster dimensions are allowed too, provided the final embedded placeholder remains within the current 22 KB onchain fragment limit.</p>
       </div>
-      <div class="prototype-note">
-        <strong>Verified randomness</strong>
-        <p>R12-v2 collector transactions never call Chainlink. The Collection funds later randomness requests from its reveal hopper first and may use only an exact bounded Reserve shortfall.</p>
-      </div>
+      <div class="prototype-note"><strong>Verified randomness</strong><p>Forge Reveal requests verified randomness automatically after ownership is created. The Collection uses its reveal balance first and may use only an allowed bounded Reserve shortfall.</p></div>
       <div class="vrf-credit-box">
         <details class="forge-advanced-details">
           <summary>Technical breakdown</summary>
-          <div class="forge-inline-status"><strong>R2 ADAPTIVE RANDOMNESS POLICY</strong><br/>Forge batch window policy: 30 seconds (platform managed). Maximum randomness cost per reveal request/group: 0.005 ETH (platform managed). Adaptive consumer callback gas: 1 NFT = 400k; 2–4 = 550k; 5–10 = 900k; 11–15 = 1.15M; 16–20 = 1.4M. Mints above 20 NFTs split into independent groups of at most 20. NFT ownership is still minted immediately and automatic reveal randomness is requested in the mint transaction.</div>
+          <div class="forge-inline-status"><strong>FORGE RANDOMNESS POLICY</strong><br/>Forge batch window policy: 30 seconds (platform managed). Maximum randomness cost per reveal request/group: 0.005 ETH (platform managed). Adaptive consumer callback gas: 1 NFT = 400k; 2–4 = 550k; 5–10 = 900k; 11–15 = 1.15M; 16–20 = 1.4M. Mints above 20 NFTs split into independent groups of at most 20. NFT ownership is still minted immediately and automatic reveal randomness is requested in the mint transaction.</div>
         </details>
         <div class="forge-inline-status" id="vrfQuoteStatus">Loading platform randomness safety check...</div>
       </div>
@@ -601,13 +598,13 @@
       <h3>Rendering</h3>
       <label class="project-toggle-row"><span><strong>Holder render switching</strong><small>Let NFT owners switch their token between the canonical fully-onchain SVG and an offchain presentation render served by RelicForge Cloud.</small></span><input id="holderRenderModeEnabled" type="checkbox" checked/></label>
       <label class="field"><span>Default display</span><select id="defaultRenderMode"><option value="0" selected>Fully Onchain SVG</option><option value="1">Offchain Render</option></select><small>The onchain SVG always remains the canonical renderer. A holder can always switch back to it.</small></label>
-      <div class="prototype-note"><strong>Offchain renderer</strong><p id="rendererCloudStatus">Configure the Railway API URL in relicforge-config.js. RelicForge will cache a presentation render from the canonical onchain renderToken() output. V1 trait storage supports SVG, PNG, JPEG, and WEBP; raw GIF trait encoding is not part of the immutable V1 renderer.</p></div>
+      <div class="prototype-note"><strong>Cached display</strong><p id="rendererCloudStatus">Optional cached presentation renders are derived from the canonical onchain artwork. The onchain collection data remains authoritative regardless of the selected display mode.</p></div>
     </div>
 
     <div class="launch-card canonical-v1-card">
       <div class="canonical-v1-heading">
-        <div><h3>Relic Forge R12-v2</h3><small>Certified Sepolia preproduction infrastructure</small></div>
-        <span class="canonical-v1-live">SEPOLIA</span>
+        <div><h3>Relic Forge Infrastructure</h3><small>Verified deployment infrastructure</small></div>
+        <span class="canonical-v1-live">NETWORK</span>
       </div>
       <div class="canonical-v1-addresses">
         <div><span>Factory</span><code id="canonicalFactoryAddress">Loading...</code></div>
@@ -617,7 +614,7 @@
         <div><span>Reserve</span><code id="canonicalReserveAddress">Loading...</code></div>
         <div><span>MintPhases impl</span><code id="canonicalMintPhasesAddress">Loading...</code></div>
       </div>
-      <div class="forge-inline-status" id="canonicalV1Status">Loading R12-v2 Sepolia deployment...</div>
+      <div class="forge-inline-status" id="canonicalV1Status">Loading verified deployment...</div>
       <button class="primary-btn" id="connectForgeWalletBtn" type="button">Connect Creator Wallet</button>
       <div class="forge-inline-status" id="forgeWalletStatus">No wallet connected.</div>
     </div>
@@ -635,7 +632,7 @@
         <div><span>Creator upfront</span><strong id="platformFeeUpfront">—</strong></div>
       </div>
       <div class="forge-inline-status" id="platformFeeQuoteStatus">Waiting for canonical FeePolicy quote.</div>
-      <small class="forge-footnote">Platform fee value first supports verified-randomness execution through the collection hopper and shared Reserve. Only Reserve surplus above protected requirements can become releasable platform revenue. R12-v2 enforces a $5.00/NFT hard maximum.</small>
+      <small class="forge-footnote">Platform fee value first supports verified-randomness execution through the collection reveal balance and shared Reserve. Only Reserve surplus above protected requirements can become releasable platform revenue. Relic Forge enforces a $5.00/NFT hard maximum.</small>
     </div>
   </div>
 
@@ -649,7 +646,7 @@
         <div class="mint-page-media-settings">
           <label class="compact-upload" for="mintPageImageInput"><strong>Collection image</strong><span id="mintPageImageName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageImageInput" type="file"/></label>
           <label class="compact-upload" for="mintPageBannerInput"><strong>Collection banner</strong><span id="mintPageBannerName">2 MB max · any image format · animated GIF supported</span><input accept="image/*,.svg" id="mintPageBannerInput" type="file"/></label>
-          <div class="prototype-note"><strong>R12-v2 collector page</strong><p>The collector page reads MintPhases directly, supports multiple Approved Wallet stages, and understands Forge reservations.</p></div>
+          <div class="prototype-note"><strong>Collector mint page</strong><p>The collector page reads mint stages directly, supports multiple Approved Wallet stages, and supports Forge Reveal with immediate NFT ownership.</p></div>
           <div class="forge-inline-status" id="mintPageStatus">Forge the collection to activate its permanent mint-page link. Approved Wallet proofs sync through RelicForge Cloud.</div>
         </div>
         <div class="mint-page-studio-preview">
@@ -691,13 +688,13 @@
       <div class="forge-gwei-control">
         <div class="forge-gwei-head"><span>Gas price</span><strong id="forgeCurrentGwei">Current: —</strong></div>
         <div class="forge-gwei-row">
-          <label class="reveal-choice selected" data-gwei-card="auto"><input checked name="gweiMode" type="radio" value="auto"/><span><strong>Current</strong><small>Use live Sepolia gwei</small></span></label>
+          <label class="reveal-choice selected" data-gwei-card="auto"><input checked name="gweiMode" type="radio" value="auto"/><span><strong>Current</strong><small>Use the live network fee rate</small></span></label>
           <label class="reveal-choice" data-gwei-card="custom"><input name="gweiMode" type="radio" value="custom"/><span><strong>Custom</strong><small>Estimate at your own gwei</small></span></label>
           <label class="field forge-gwei-input hidden" id="forgeCustomGweiWrap"><span>Custom gwei</span><input id="forgeCustomGwei" min="0" step="0.01" type="number" placeholder="e.g. 15"/></label>
         </div>
       </div>
       <div class="forge-rows" id="forgeCostBreakdown"></div>
-      <small class="forge-footnote">Live gwei is read from public Sepolia RPCs and does not use the RelicForge Alchemy key. The connected wallet remains authoritative for the final transaction gas estimate.</small>
+      <small class="forge-footnote">The live network fee rate is used for the estimate. Your connected wallet remains authoritative for the final transaction fee before approval.</small>
     </article>
 
     <article class="forge-workbench-card forge-deploy-card">
@@ -708,17 +705,17 @@
         <div id="launchSummaryDetails"></div>
       </div>
       <div class="forge-summary" id="forgeCompiledSummary">Compile for onchain before deployment.</div>
-      <button class="primary-btn forge-main-action" disabled id="forgeCollectionBtn" type="button">Forge Collection on Sepolia</button>
+      <button class="primary-btn forge-main-action" disabled id="forgeCollectionBtn" type="button">Forge Collection</button>
       <div class="forge-deploy-list" id="forgeProgressList"></div>
       <div class="forge-result hidden" id="forgeResult">
         <span>Collection deployed</span>
         <strong id="forgedCollectionAddress"></strong>
-        <a id="forgedEtherscanLink" rel="noreferrer" target="_blank">View on Sepolia Etherscan</a>
+        <a id="forgedEtherscanLink" rel="noreferrer" target="_blank">View on Block Explorer</a>
       </div>
     </article>
 
     <article class="forge-workbench-card">
-      <div class="forge-card-heading"><div><span>TEST R12-v2 RESULT</span><h3>Mint + request + replay + settle</h3></div></div>
+      <div class="forge-card-heading"><div><span>POST-LAUNCH TOOLS</span><h3>Mint &amp; inspect</h3></div></div>
       <div class="forge-mint-controls">
         <label class="field"><span>Quantity</span><input id="forgeMintQuantity" min="1" max="50" step="1" type="number" value="1"/></label>
         <button class="primary-btn" disabled id="forgeArmMintBtn" type="button">Enable Minting</button>
@@ -727,7 +724,7 @@
         <button class="ghost-btn" disabled id="forgeCreatorMintBtn" type="button">Creator Mint</button>
       </div>
       <div class="launched-section">
-        <h4>R2 Reveal</h4>
+        <h4>Reveal</h4>
         <p class="forge-footnote">Forge Reveal is automatic after every mint. Deferred Reveal uses exactly two creator transactions and then completes automatically.</p>
         <div class="forge-mint-controls">
           <button class="ghost-btn" disabled id="forgePrepareDelayedRevealBtn" type="button">REVEAL COLLECTION — STEP 1 OF 2</button>
@@ -737,18 +734,18 @@
       </div>
       <label class="field"><span>Token to inspect</span><input id="forgeInspectTokenId" min="1" type="number" value="1"/></label>
       <button class="ghost-btn" disabled id="forgeInspectBtn" type="button">Read Onchain tokenURI</button>
-      <pre class="forge-log" id="forgeTestStatus">Forge an R12-v2 collection to enable test controls.</pre>
+      <pre class="forge-log" id="forgeTestStatus">Forge a collection to enable post-launch tools.</pre>
       <div class="forge-token-preview hidden" id="forgeTokenPreview"></div>
     </article>
 
     <article class="forge-workbench-card forge-marketplace-card">
-      <div class="forge-card-heading"><div><span>TESTNET MARKETPLACE VIEWER</span><h3>Browse the deployed Sepolia collection</h3></div></div>
+      <div class="forge-card-heading"><div><span>COLLECTION VIEWER</span><h3>Browse the deployed collection</h3></div></div>
       <div class="inline-actions forge-viewer-actions">
-        <label class="field forge-viewer-address"><span>Collection address</span><input id="viewerCollectionAddress" placeholder="Forged collection or paste a Sepolia collection address" type="text"/></label>
+        <label class="field forge-viewer-address"><span>Collection address</span><input id="viewerCollectionAddress" placeholder="Forged collection or paste a collection address" type="text"/></label>
         <button class="ghost-btn" id="viewerUseForgedBtn" type="button">Use Forged Collection</button>
         <button class="primary-btn" id="viewerLoadBtn" type="button">Load Collection</button>
       </div>
-      <div class="forge-inline-status" id="viewerStatus">Deploy or paste a Sepolia collection to load the viewer.</div>
+      <div class="forge-inline-status" id="viewerStatus">Deploy or paste a collection to load the viewer.</div>
       <div class="forge-metrics forge-viewer-metrics" id="viewerMetrics">
         <div><span>Name</span><strong id="viewerMetricName">—</strong></div>
         <div><span>Symbol</span><strong id="viewerMetricSymbol">—</strong></div>
@@ -778,7 +775,7 @@
 </section>
 </main>
 <footer>
-<span>Relic Forge Studio · R12-v2 Sepolia preproduction creator workflow</span>
+<span>Relic Forge Studio · Build, launch, and manage onchain collections</span>
 <span>Saved projects sync privately to RelicForge Cloud; deployed collection artwork remains onchain.</span>
 </footer>
 </div>
