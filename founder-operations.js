@@ -137,10 +137,26 @@
     status('Reading Reserve and randomness state…');const base=String(window.RelicForgeCloud?.apiBase?.()||window.RELICFORGE_CONFIG?.apiBase||'').replace(/\/$/,'');const p=new window.ethers.JsonRpcProvider(`${base}/api/public/rpc/${chain}`,chain,{staticNetwork:true});
     const reserve=new window.ethers.Contract(cfg.reserve,['function founder() view returns(address)','function requiredReserveWei() view returns(uint256)','function availableRevenueWei() view returns(uint256)','function totalExposureWei() view returns(uint256)','function totalRestrictedSponsoredLiabilityWei() view returns(uint256)','function totalActiveBatches() view returns(uint256)','function activeCollectionCount() view returns(uint256)','function maxSubsidyPerRequestWei() view returns(uint256)','function maxSubsidyPerCollectionWei() view returns(uint256)'],p);
     const policy=new window.ethers.Contract(cfg.feePolicy,['function platformAdmin() view returns(address)','function treasury() view returns(address)','function sponsoredFeeCents() view returns(uint32)','function minterFeeCents() view returns(uint32)','function accruedFees() view returns(uint256)'],p);
-    const [founder,balance,required,available,exposure,restricted,batches,active,perReq,perCol,fee,platformAdmin,feeTreasury,sponsoredCents,minterCents,accruedFees]=await Promise.all([reserve.founder(),p.getBalance(cfg.reserve),reserve.requiredReserveWei(),reserve.availableRevenueWei(),reserve.totalExposureWei(),reserve.totalRestrictedSponsoredLiabilityWei(),reserve.totalActiveBatches(),reserve.activeCollectionCount(),reserve.maxSubsidyPerRequestWei(),reserve.maxSubsidyPerCollectionWei(),p.getFeeData(),policy.platformAdmin(),policy.treasury(),policy.sponsoredFeeCents(),policy.minterFeeCents(),policy.accruedFees()]);
+    // Keep the operational read set intentionally small and deterministic.
+    // getFeeData() fans out to provider-specific fee RPC methods that are not
+    // needed here; the randomness estimator only needs the current gas price.
+    const [founder,balance,required,available,exposure,restricted,batches,active,perReq,perCol,gasPriceHex,platformAdmin,feeTreasury,sponsoredCents,minterCents,accruedFees]=await Promise.all([
+      reserve.founder(),p.getBalance(cfg.reserve),reserve.requiredReserveWei(),reserve.availableRevenueWei(),
+      reserve.totalExposureWei(),reserve.totalRestrictedSponsoredLiabilityWei(),reserve.totalActiveBatches(),
+      reserve.activeCollectionCount(),reserve.maxSubsidyPerRequestWei(),reserve.maxSubsidyPerCollectionWei(),
+      p.send('eth_gasPrice',[]),policy.platformAdmin(),policy.treasury(),policy.sponsoredFeeCents(),
+      policy.minterFeeCents(),policy.accruedFees()
+    ]);
+    const gasPrice=BigInt(gasPriceHex||'0x0');
     const vals=[['Reserve balance',`${window.ethers.formatEther(balance)} ETH`],['Protected requirement',`${window.ethers.formatEther(required)} ETH`],['Available revenue',`${window.ethers.formatEther(available)} ETH`],['Active collections',Number(active)],['Active reveal batches',Number(batches)],['Exposure',`${window.ethers.formatEther(exposure)} ETH`],['Restricted sponsored liability',`${window.ethers.formatEther(restricted)} ETH`],['Founder',short(founder)]];
     setPanelHtml('foReserveMetrics',vals.map(([a,b])=>`<div class="fo-card fo-kpi"><span>${esc(a)}</span><strong>${esc(b)}</strong></div>`).join(''));
-    let quote='Unavailable';try{const adapter=new window.ethers.Contract(cfg.randomnessAdapter,['function estimateRequestPriceAtGasPrice(uint32,uint256) view returns(uint256)'],p),gas=fee.gasPrice||0n;const q=await adapter.estimateRequestPriceAtGasPrice(Number(cfg.autoRevealConsumerCallbackGas||1400000),gas);quote=`${window.ethers.formatEther(q)} ETH @ ${window.ethers.formatUnits(gas,'gwei')} gwei`;}catch{}
+    let quote='Unavailable';try{
+      const adapter=new window.ethers.Contract(cfg.randomnessAdapter,['function estimateRequestPriceAtGasPrice(uint32,uint256) view returns(uint256)'],p);
+      const q=await adapter.estimateRequestPriceAtGasPrice(Number(cfg.autoRevealConsumerCallbackGas||1400000),gasPrice);
+      quote=`${window.ethers.formatEther(q)} ETH @ ${window.ethers.formatUnits(gasPrice,'gwei')} gwei`;
+    }catch(error){
+      quote=`Unavailable — ${error?.shortMessage||error?.message||'quote read failed'}`;
+    }
     setPanelHtml('foRandomnessMetrics',`<div class="fo-card"><span>Platform Forge batch window</span><strong>${esc(cfg.defaultBatchWindowSeconds||30)} seconds</strong><small class="fo-muted">Creator-uneditable default; founder can generate collection-specific emergency Safe calls.</small></div><div class="fo-card"><span>Randomness ceiling</span><strong>${window.ethers.formatEther(BigInt(cfg.defaultMaxRandomnessCostPerBatchWei||'5000000000000000'))} ETH</strong><small class="fo-muted">Current max-tier request estimate: ${esc(quote)}</small></div><div class="fo-card"><span>Max subsidy / request</span><strong>${window.ethers.formatEther(perReq)} ETH</strong></div><div class="fo-card"><span>Max lifetime subsidy / collection</span><strong>${window.ethers.formatEther(perCol)} ETH</strong></div><div class="fo-card"><span>FeePolicy defaults</span><strong>Sponsored $${(Number(sponsoredCents)/100).toFixed(2)} · Collector $${(Number(minterCents)/100).toFixed(2)}</strong><small class="fo-muted">Admin ${esc(short(platformAdmin))}</small></div><div class="fo-card"><span>Legacy accrued FeePolicy fees</span><strong>${window.ethers.formatEther(accruedFees)} ETH</strong><small class="fo-muted">Treasury ${esc(short(feeTreasury))}</small></div>`);status('Reserve/randomness/fee metrics loaded.','success');
   }
 

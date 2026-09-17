@@ -21,10 +21,13 @@ function publicAssetUrl(request, id) {
 
 const SAFE_RPC_METHODS = new Set([
   'eth_chainId','net_version','eth_blockNumber','eth_getCode','eth_call','eth_getBalance','eth_getTransactionCount',
-  'eth_getBlockByNumber','eth_getBlockByHash','eth_getLogs','eth_gasPrice','eth_feeHistory','eth_estimateGas','eth_getTransactionReceipt','eth_getTransactionByHash'
+  'eth_getBlockByNumber','eth_getBlockByHash','eth_getLogs','eth_gasPrice','eth_maxPriorityFeePerGas','eth_feeHistory','eth_estimateGas','eth_getTransactionReceipt','eth_getTransactionByHash'
 ]);
 function validateRpcCall(call) {
-  if (!call || call.jsonrpc !== '2.0' || !SAFE_RPC_METHODS.has(call.method)) throw new Error('RPC method is not allowed.');
+  if (!call || call.jsonrpc !== '2.0') throw new Error('Invalid JSON-RPC 2.0 request.');
+  if (!SAFE_RPC_METHODS.has(call.method)) {
+    throw new Error(`RPC method "${String(call.method || 'unknown')}" is not allowed by the Relic Forge read proxy.`);
+  }
   if (call.method === 'eth_getLogs') {
     const filter = call.params?.[0] || {};
     if (filter.fromBlock && filter.toBlock && /^0x/.test(filter.fromBlock) && /^0x/.test(filter.toBlock)) {
