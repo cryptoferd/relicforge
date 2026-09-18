@@ -477,10 +477,19 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
   }
   function scheduleScan(){clearTimeout(state.scanTimer);state.scanTimer=setTimeout(scan,120);}
 
+  function setQuickStatus(message,tone='neutral'){
+    const node=$('r23MobileQuickStatus');
+    if(!node)return;
+    node.textContent=message;
+    node.dataset.tone=tone;
+  }
+
   async function openQuickStageCreator(accessType=1){
+    setQuickStatus('Opening the stage creator…','working');
     const address=currentR12Address();
     if(!address)throw new Error('Open a verified R12-v2 collection first.');
     if(address!==state.collection||!$('r23StageManager')){
+      setQuickStatus('Loading MintPhases and controller state…','working');
       await loadOnchain(address);
       renderPanel();
     }
@@ -492,6 +501,9 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
     if(!create)throw new Error('Stage creator is unavailable.');
     create.classList.add('r23-mobile-focus');
     create.scrollIntoView({behavior:'smooth',block:'start'});
+    setQuickStatus(Number(access.value)===1
+      ? 'Allowlist creator opened below. Add wallets, allowances, schedule, price, and supply.'
+      : 'Public stage creator opened below. Configure the stage and create it.','good');
     setTimeout(()=>{
       if(Number(access.value)===1)$('r23NewWallets')?.focus();
       else $('r23NewPrice')?.focus();
@@ -506,9 +518,19 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
     const button=event.target?.closest?.('[data-r23-quick-create]');
     if(!button)return;
     event.preventDefault();
-    if(button.disabled)return;
+    if(button.disabled){
+      setQuickStatus('The active controller wallet is required to create a stage.','bad');
+      return;
+    }
+    button.disabled=true;
+    setQuickStatus('Opening the stage creator…','working');
     openQuickStageCreator(Number(button.dataset.r23QuickCreate||1))
-      .catch(error=>setStatus(`Open stage creator: ${error.shortMessage||error.message}`,'bad'));
+      .catch(error=>{
+        const message=error.shortMessage||error.message||String(error);
+        setQuickStatus(`Could not open stage creator: ${message}`,'bad');
+        setStatus(`Open stage creator: ${message}`,'bad');
+      })
+      .finally(()=>{button.disabled=false;});
   });
 
   for(const event of ['relicforge:launch-network-changed','relicforge:forge-session-invalidated']){
