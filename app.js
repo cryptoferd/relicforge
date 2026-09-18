@@ -3426,11 +3426,27 @@
     else showStatus(`Project “${el.collectionName.value || 'Untitled Collection'}” restored.`, 'success');
   }
 
+  function currentLaunchNetworkSummary() {
+    const selected = Number(window.RelicForgeForgeNetwork?.selectedChainId?.() ?? $('#rf26ForgeNetworkSelect')?.value ?? 0);
+    if (selected && window.RelicForgeNetworks?.metadata) {
+      try {
+        const meta = window.RelicForgeNetworks.metadata(selected);
+        return { chainId: selected, name: meta.name || ('Chain ' + selected) };
+      } catch (_) {}
+    }
+    const picker = $('#rf26ForgeNetworkSelect');
+    const optionText = picker?.selectedOptions?.[0]?.textContent?.trim();
+    return {
+      chainId: selected || null,
+      name: selected ? (optionText || ('Chain ' + selected)) : 'Choose a network'
+    };
+  }
+
   function updateLaunchSummary() {
     const name = el.collectionName.value.trim() || 'Untitled Collection';
     if (el.launchName && !el.launchName.value.trim()) el.launchName.value = name;
     el.launchSummaryTitle.textContent = el.launchName?.value?.trim() || name;
-    const chain = $('#chainSelect')?.value || 'Ethereum Sepolia';
+    const chain = currentLaunchNetworkSummary().name;
     const price = $('#mintPrice')?.value || '0';
     const royalty = $('#royalty')?.value || '0';
     const maxPerWallet = $('#maxPerWallet')?.value || '0';
@@ -3450,14 +3466,15 @@
   }
 
   function exportLaunchPackage() {
+    const launchNetwork = currentLaunchNetworkSummary();
     const packageData = {
       schema: 'relic-forge/launch-package@0.2',
       launch: {
         name: el.launchName.value,
         symbol: $('#launchSymbol').value,
         description: $('#launchDescription')?.value || '',
-        chain: $('#chainSelect').value,
-        chainId: 11155111,
+        chain: launchNetwork.name,
+        chainId: launchNetwork.chainId,
         mintPrice: $('#mintPrice').value,
         maxPerWallet: $('#maxPerWallet')?.value || '0',
         royaltyPercent: $('#royalty').value,
@@ -3467,7 +3484,7 @@
       manifest: manifestObject(),
       onchainCompile: window.RelicForgeForge?.getCompiledSummary?.() || null,
       mintAccess: window.RelicForgeForge?.getWhitelistSummary?.() || null,
-      note: 'GitHub-ready Sepolia test package. Creator wallet deploys/owns the collection. Test randomness is not production VRF.',
+      note: 'Relic Forge launch package. Creator wallet deploys and owns the collection on the selected network.',
     };
     downloadText(`${slug(el.launchName.value || 'relic-collection')}-launch-package.json`, JSON.stringify(packageData, null, 2));
   }
@@ -4022,7 +4039,8 @@
     else downloadText(`${slug(el.collectionName.value)}-project.json`, JSON.stringify(projectConfig(), null, 2));
   });
   $('#exportLaunchPackageBtn').addEventListener('click', exportLaunchPackage);
-  ['chainSelect', 'mintPrice', 'royalty', 'launchName'].forEach(id => $(`#${id}`)?.addEventListener('input', updateLaunchSummary));
+  ['mintPrice', 'royalty', 'launchName'].forEach(id => $(`#${id}`)?.addEventListener('input', updateLaunchSummary));
+  window.addEventListener('relicforge:launch-network-changed', updateLaunchSummary);
   $$('input[name="revealMode"]').forEach(input => input.addEventListener('change', updateLaunchSummary));
   el.collectionName.addEventListener('input', () => { if (state.step === 5) updateLaunchSummary(); });
   el.collectionSize.addEventListener('change', () => { renderTraitSetup(); if (state.buildMode === 'manual') renderManualBuilder(); });

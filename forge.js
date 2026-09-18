@@ -1606,17 +1606,33 @@ ${await file.text()}`;
   }
 
   const publicGasProviders = new Map();
-  function publicGasProvider(rpc) {
+  function publicGasProvider(rpc, chainId) {
     if (!window.ethers) return null;
-    if (!publicGasProviders.has(rpc)) publicGasProviders.set(rpc, new window.ethers.JsonRpcProvider(rpc, 11155111, { staticNetwork: true, batchMaxCount: 1 }));
-    return publicGasProviders.get(rpc);
+    const key = String(chainId) + ':' + String(rpc);
+    if (!publicGasProviders.has(key)) {
+      publicGasProviders.set(key, new window.ethers.JsonRpcProvider(rpc, chainId, { staticNetwork: true, batchMaxCount: 1 }));
+    }
+    return publicGasProviders.get(key);
   }
 
-  async function liveSepoliaGasPrice() {
+  function publicGasRpcsForChain(chainId) {
+    const registered = window.RelicForgeNetworks?.metadata?.(chainId)?.rpcUrls;
+    if (Array.isArray(registered) && registered.length) return [...new Set(registered.filter(Boolean))];
+    if (chainId === 11155111) return [...PUBLIC_SEPOLIA_GAS_RPCS];
+    const legacy = CHAIN_READER_NETWORKS?.[chainId];
+    return [...new Set([legacy?.rpc, legacy?.historyRpc].filter(Boolean))];
+  }
+
+  async function liveNetworkGasPrice() {
+    const selected = activeChainId();
+    if (selected == null) return null;
+    const chainId = Number(selected);
+    const networkName = window.RelicForgeNetworks?.metadata?.(chainId)?.name || ('chain ' + chainId);
     let lastError = null;
-    for (const rpc of PUBLIC_SEPOLIA_GAS_RPCS) {
+
+    for (const rpc of publicGasRpcsForChain(chainId)) {
       try {
-        const provider = publicGasProvider(rpc);
+        const provider = publicGasProvider(rpc, chainId);
         const raw = await Promise.race([
           provider.send('eth_gasPrice', []),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Public gas RPC timeout')), 3500)),
@@ -1625,16 +1641,21 @@ ${await file.text()}`;
         if (gasPrice > 0n) return { gasPrice, source: 'Public RPC' };
       } catch (error) { lastError = error; }
     }
-    // A connected wallet is a safe fallback because it uses the user's wallet RPC,
-    // not the RelicForge Railway/Alchemy account.
+
+    // A connected wallet is a safe fallback only when that wallet provider is
+    // actually on the selected launch chain.
     if (forgeState.provider) {
       try {
-        const raw = await forgeState.provider.send('eth_gasPrice', []);
-        const gasPrice = BigInt(raw);
-        if (gasPrice > 0n) return { gasPrice, source: 'Wallet RPC' };
+        const actualChain = Number(BigInt(await forgeState.provider.send('eth_chainId', [])));
+        if (actualChain === chainId) {
+          const raw = await forgeState.provider.send('eth_gasPrice', []);
+          const gasPrice = BigInt(raw);
+          if (gasPrice > 0n) return { gasPrice, source: 'Wallet RPC' };
+        }
       } catch (error) { lastError = error; }
     }
-    if (lastError) console.warn('Live Sepolia gas price unavailable:', lastError.message || lastError);
+
+    if (lastError) console.warn('Live ' + networkName + ' gas price unavailable:', lastError.message || lastError);
     return null;
   }
 
@@ -1678,7 +1699,7 @@ ${await file.text()}`;
     let gasSource = '';
     try {
       if (window.ethers) {
-        const live = await liveSepoliaGasPrice();
+        const live = await liveNetworkGasPrice();
         forgeState.gasPrice = live?.gasPrice || null;
         gasSource = live?.source || '';
         if (forgeState.gasPrice) liveGwei = Number(window.ethers.formatUnits(forgeState.gasPrice, 'gwei'));
@@ -1768,7 +1789,10 @@ ${await file.text()}`;
       forgeState.wallet = await forgeState.signer.getAddress();
       window.dispatchEvent(new CustomEvent('relicforge:wallet-connected', { detail: { address: forgeState.wallet } }));
       const forgeWalletStatus = $('forgeWalletStatus');
-      if (forgeWalletStatus) forgeWalletStatus.textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · Sepolia`;
+      if (forgeWalletStatus) {
+        const launchNetworkName = window.RelicForgeNetworks?.metadata?.(launchChain)?.name || ('Chain ' + launchChain);
+        forgeWalletStatus.textContent = `${forgeState.wallet.slice(0, 6)}…${forgeState.wallet.slice(-4)} · ${launchNetworkName}`;
+      }
       if (window.RelicForgeCloud?.enabled?.()) {
         try {
           await window.RelicForgeCloud.ensureSignedIn(forgeState.wallet);
@@ -4311,13 +4335,6 @@ ${await file.text()}`;
   };
   const rf26OriginalCost=refreshCostEstimate;
   refreshCostEstimate=async function(){
-    if(activeChainId()===1){
-      if($('forgeEstimatedCost'))$('forgeEstimatedCost').textContent='Wallet quote';
-      if($('forgeEstimatedGas'))$('forgeEstimatedGas').textContent='Mainnet gas will be calculated by your wallet before signing.';
-      if($('forgeCurrentGwei'))$('forgeCurrentGwei').textContent='Current: wallet estimate';
-      if($('forgeCostBreakdown'))$('forgeCostBreakdown').innerHTML='<div>Ethereum Mainnet gas is intentionally left to the connected wallet estimate at transaction time.</div>';
-      return;
-    }
     return rf26OriginalCost();
   };
   function rf26RefreshLaunchAction(){
