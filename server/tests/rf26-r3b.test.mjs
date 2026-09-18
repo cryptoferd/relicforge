@@ -13,8 +13,8 @@ const policy={chain_id:1,kind:'production',launch_enabled:true,public_enabled:tr
  factory_address:F,release_id:'release-1',release_manifest_hash:'sha256:test'};
 const key=(id,contract)=>id+':'+contract.toLowerCase();
 const copy=x=>structuredClone(x);
-function fixture({enabled=true,sealed=true,controller=A}={}){
-  const state={network:{...policy,public_enabled:enabled},controller,publications:new Map(),
+function fixture({publicEnabled=true,launchEnabled=true,sealed=true,controller=A}={}){
+  const state={network:{...policy,public_enabled:publicEnabled,launch_enabled:launchEnabled},controller,publications:new Map(),
     deployments:new Map(),sql:[],nextFailure:null};
   const deployment=(contract,owner=A)=>({
     chain_id:1,contract_address:contract,owner_wallet:owner,collection_owner:owner,
@@ -28,7 +28,7 @@ function fixture({enabled=true,sealed=true,controller=A}={}){
   const db={
     async query(sql,params=[]){
       state.sql.push({sql,params});
-      if(sql.includes('SELECT chain_id FROM rf26_networks'))return {rows:enabled?[{chain_id:1}]:[]};
+      if(sql.includes('SELECT chain_id FROM rf26_networks'))return {rows:launchEnabled?[{chain_id:1}]:[]};
       throw new Error('Unexpected query: '+sql);
     },
     async connect(){
@@ -111,22 +111,26 @@ test('canonical slug policy rejects short, malformed, reserved, and address-like
   for(const name of RESERVED_SLUGS)assert.throws(()=>normalizeSlug(name),name);
   assert.equal(canonicalMintPath(1,B),'/mint.html?chain=1&contract='+B);
 });
-test('production gating rejects missing release fields and testnets',()=>{
-  for(const field of ['launch_enabled','public_enabled','factory_address','release_id','release_manifest_hash']){
+test('direct mint URL gating rejects missing release fields and testnets but is independent of discovery',()=>{
+  for(const field of ['launch_enabled','factory_address','release_id','release_manifest_hash']){
     assert.throws(()=>productionPolicy({...policy,[field]:null}),e=>e.statusCode===403);
   }
+  assert.equal(productionPolicy({...policy,public_enabled:false}).public_enabled,false);
   assert.throws(()=>productionPolicy({...policy,kind:'testnet'}));
 });
-test('availability is global, normalized, and does not reserve a name',async()=>{
+test('availability is global, normalized, and independent of public discovery',async()=>{
   const {service,state}=fixture();
   assert.deepEqual(await service.availability('Chrono'),{slug:'chrono',available:true,claimed:false,productionAvailable:true});
   assert.equal(state.publications.size,0);
   state.publications.set(key(1,B),{slug:'chrono'});
   assert.equal((await service.availability('CHRONO')).available,false);
-  assert.equal((await fixture({enabled:false}).service.availability('chrono')).productionAvailable,false);
+  assert.equal((await fixture({publicEnabled:false}).service.availability('chrono')).productionAvailable,true);
+  assert.equal((await fixture({launchEnabled:false}).service.availability('chrono')).productionAvailable,false);
 });
-test('disabled production and unsealed deployments cannot claim',async()=>{
-  await rejects(fixture({enabled:false}).service.claim(1,B,A,{slug:'chrono'}),403);
+test('disabled production and unsealed deployments cannot claim, but discovery-off production can',async()=>{
+  await rejects(fixture({launchEnabled:false}).service.claim(1,B,A,{slug:'chrono'}),403);
+  const direct=fixture({publicEnabled:false});
+  assert.equal((await direct.service.claim(1,B,A,{slug:'chrono'})).slug,'chrono');
   await rejects(fixture({sealed:false}).service.claim(1,B,A,{slug:'chrono'}),409);
   await rejects(fixture().service.claim(11155111,B,A,{slug:'chrono'}),404);
 });
@@ -191,12 +195,12 @@ test('publication is opt-in; featuring cannot be self-approved or preserved afte
   p=state.publications.get(key(1,B));
   assert.deepEqual([p.listed,p.feature_requested,p.featured],[false,false,false]);
 });
-test('public resolution permits unlisted sealed production aliases but hides invalid records',async()=>{
+test('direct slug resolution survives discovery disablement but hides invalid deployments',async()=>{
   const {service,state}=fixture();
   await service.claim(1,B,A,{slug:'chrono'});
   assert.equal((await service.resolve('CHRONO')).listed,false);
   state.network.public_enabled=false;
-  await rejects(service.resolve('chrono'),404);
+  assert.equal((await service.resolve('chrono')).slug,'chrono');
   state.network.public_enabled=true;
   state.deployments.get(key(1,B)).status='deployed';
   await rejects(service.resolve('chrono'),404);
@@ -205,7 +209,7 @@ test('public resolution permits unlisted sealed production aliases but hides inv
   await rejects(service.resolve('chrono'),404);
 });
 test('no private release settings, credentials, or untrusted JSON appear in public target',()=>{
-  const row={...policy,chain_id:1,contract_address:B,owner_wallet:A,publication_owner:A,
+  const row={...policy,public_enabled:false,chain_id:1,contract_address:B,owner_wallet:A,publication_owner:A,
     deployment_factory:F,architecture:'v2',status:'sealed',provenance:P,slug:'chrono',
     listed:false,featured:false,configuration:{apiKey:'secret'},privateKey:'secret'};
   const result=publicTarget(row);

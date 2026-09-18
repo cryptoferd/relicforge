@@ -57,7 +57,7 @@ export function createSlugService({db,one,networkPolicy,verifyV2,readController}
     const slug=normalizeSlug(raw);
     const claimed=Boolean(await one('SELECT 1 FROM rf26_publications WHERE slug=$1',[slug]));
     const {rows}=await db.query(`SELECT chain_id FROM rf26_networks
-      WHERE kind='production' AND launch_enabled=TRUE AND public_enabled=TRUE
+      WHERE kind='production' AND launch_enabled=TRUE
         AND factory_address IS NOT NULL AND release_id IS NOT NULL AND release_manifest_hash IS NOT NULL`);
     return {slug,available:!claimed,claimed,productionAvailable:rows.length>0};
   }

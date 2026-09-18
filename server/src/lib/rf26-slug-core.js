@@ -31,8 +31,7 @@ export function address(value) {
 }
 export function productionPolicy(policy) {
   if(!policy||policy.kind!=='production'||policy.launch_enabled!==true||
-    policy.public_enabled!==true||!policy.factory_address||!policy.release_id||
-    !policy.release_manifest_hash)
+    !policy.factory_address||!policy.release_id||!policy.release_manifest_hash)
     throw fail('Production mint URLs are not available on this network yet.',403,'PRODUCTION_DISABLED');
   return policy;
 }
@@ -45,7 +44,7 @@ export function validProvenance(value) {
 }
 export function publicTarget(row) {
   if(!row||row.kind!=='production'||row.launch_enabled!==true||
-    row.public_enabled!==true||!row.release_id||!row.release_manifest_hash||
+    !row.release_id||!row.release_manifest_hash||
     row.architecture!=='v2'||row.status!=='sealed'||!validProvenance(row.provenance)||
     !row.factory_address||address(row.deployment_factory)!==address(row.factory_address)||
     address(row.owner_wallet)!==address(row.publication_owner))
