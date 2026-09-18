@@ -271,7 +271,9 @@
         <button class="primary-btn" id="r23CreateStageBtn" type="button">Create Stage</button>
       </div>
       <div class="r23-status" id="r23ManagerStatus">Ready. Select an Approved Wallet stage to manage its wallets, or create a new stage.</div>`;
-    detail.appendChild(panel);
+    const quickAnchor=detail.querySelector('#r23StageQuickAnchor');
+    if(window.matchMedia?.('(max-width: 760px)')?.matches && quickAnchor)quickAnchor.insertAdjacentElement('afterend',panel);
+    else detail.appendChild(panel);
 
     panel.querySelectorAll('[data-r23-manage]').forEach(button=>button.addEventListener('click',()=>openWalletEditor(Number(button.dataset.r23Manage))));
     $('r23NewAccess')?.addEventListener('change',syncNewStageAccessUi);
@@ -474,6 +476,41 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
     try{await loadOnchain(address);renderPanel();}catch(error){console.warn('R2.3 dashboard stage manager:',error);}
   }
   function scheduleScan(){clearTimeout(state.scanTimer);state.scanTimer=setTimeout(scan,120);}
+
+  async function openQuickStageCreator(accessType=1){
+    const address=currentR12Address();
+    if(!address)throw new Error('Open a verified R12-v2 collection first.');
+    if(address!==state.collection||!$('r23StageManager')){
+      await loadOnchain(address);
+      renderPanel();
+    }
+    const access=$('r23NewAccess');
+    if(!access)throw new Error('Stage creator is unavailable. Refresh the collection and try again.');
+    access.value=String(Number(accessType)===1?1:0);
+    syncNewStageAccessUi();
+    const create=$('r23StageManager')?.querySelector('.r23-create');
+    if(!create)throw new Error('Stage creator is unavailable.');
+    create.classList.add('r23-mobile-focus');
+    create.scrollIntoView({behavior:'smooth',block:'start'});
+    setTimeout(()=>{
+      if(Number(access.value)===1)$('r23NewWallets')?.focus();
+      else $('r23NewPrice')?.focus();
+      create.classList.remove('r23-mobile-focus');
+    },650);
+    setStatus(Number(access.value)===1
+      ? 'New Allowlist Phase selected. Add the approved wallets, allowances, schedule, price, and supply, then Create Stage.'
+      : 'New Public Phase selected. Configure the stage, then Create Stage.','warn');
+  }
+
+  document.addEventListener('click',event=>{
+    const button=event.target?.closest?.('[data-r23-quick-create]');
+    if(!button)return;
+    event.preventDefault();
+    if(button.disabled)return;
+    openQuickStageCreator(Number(button.dataset.r23QuickCreate||1))
+      .catch(error=>setStatus(`Open stage creator: ${error.shortMessage||error.message}`,'bad'));
+  });
+
   for(const event of ['relicforge:launch-network-changed','relicforge:forge-session-invalidated']){
     window.addEventListener(event,()=>{
       state.collection=null;state.mintPhasesAddress=null;state.controller=null;state.phases=[];state.provider=null;
