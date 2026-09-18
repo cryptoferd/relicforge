@@ -3,24 +3,35 @@
 
   if (!document.body?.classList.contains('studio-page-body')) return;
   const $=id=>document.getElementById(id);
-  const CHAIN_ID=11155111;
 
-  function mintUrl(collection) {
+  function deploymentChainId(detail=null) {
+    const id=Number(
+      detail?.chainId ??
+      window.RelicForgeForgeNetwork?.selectedChainId?.() ??
+      window.RelicForgeForge?.activeChainId?.() ??
+      0
+    );
+    if(![1,11155111].includes(id))throw new Error('Choose a supported Relic Forge deployment network.');
+    return id;
+  }
+  function mintUrl(collection,chainId=deploymentChainId()) {
     const url=new URL('./mint.html',location.href);
     url.searchParams.set('contract',collection);
-    url.searchParams.set('chain',String(CHAIN_ID));
+    url.searchParams.set('chain',String(chainId));
     return url.toString();
   }
-  function dashboardUrl(collection) {
+  function dashboardUrl(collection,chainId=deploymentChainId()) {
     const url=new URL('./dashboard.html',location.href);
     url.searchParams.set('collection',collection);
+    url.searchParams.set('chain',String(chainId));
     return url.toString();
   }
-  function etherscanUrl(collection) {
-    return `https://sepolia.etherscan.io/address/${collection}`;
+  function etherscanUrl(collection,chainId=deploymentChainId()) {
+    return window.RelicForgeNetworks?.explorerUrl?.(collection,chainId,'address') ||
+      (chainId===1?`https://etherscan.io/address/${collection}`:`https://sepolia.etherscan.io/address/${collection}`);
   }
 
-  function ensurePermanentLinks(collection) {
+  function ensurePermanentLinks(collection,chainId=deploymentChainId()) {
     if (!window.ethers?.isAddress(collection)) return;
     const result=$('forgeResult');
     if (!result) return;
@@ -31,8 +42,8 @@
       row.className='r2-permanent-mint-links';
       result.appendChild(row);
     }
-    row.innerHTML=`<a class="primary-btn link-btn" href="${mintUrl(collection)}" target="_blank" rel="noreferrer">Open Mint Page</a>
-      <a class="ghost-btn link-btn" href="${etherscanUrl(collection)}" target="_blank" rel="noreferrer">View Contract</a>
+    row.innerHTML=`<a class="primary-btn link-btn" href="${mintUrl(collection,chainId)}" target="_blank" rel="noreferrer">Open Mint Page</a>
+      <a class="ghost-btn link-btn" href="${etherscanUrl(collection,chainId)}" target="_blank" rel="noreferrer">View Contract</a>
       <button class="ghost-btn" id="r2SyncMintPageBtn" type="button">Repair / Sync Mint Proofs</button>`;
     $('r2SyncMintPageBtn')?.addEventListener('click',()=>syncCurrentProject().catch(error=>setSyncStatus(`Mint page sync failed: ${error.message}`,true)));
   }
@@ -44,8 +55,8 @@
     if(popup){popup.textContent=message;popup.classList.toggle('bad',!!bad);}
   }
 
-  async function currentWallet(collection){
-    const session=await window.RF26CreatorGuard.account(collection,{role:'creator',chainId:CHAIN_ID});
+  async function currentWallet(collection,chainId){
+    const session=await window.RF26CreatorGuard.account(collection,{role:'creator',chainId});
     return session;
   }
 
@@ -68,11 +79,12 @@
   async function publish(detail) {
     if(!window.RelicForgeCloud?.enabled?.())throw new Error('RelicForge Cloud is not configured. Public stages still work from the onchain mint page, but Approved Wallet proofs require Cloud sync.');
     const launchScope=await window.RelicForgeForgeNetwork.requireReady();
-    if(launchScope.chainId!==11155111||detail?.chainId!=null&&Number(detail.chainId)!==11155111)
-      throw new Error('R3D-B R1 collector-page publishing is restricted to verified Sepolia deployments.');
+    const chainId=deploymentChainId(detail);
+    if(Number(launchScope.chainId)!==chainId)
+      throw new Error('The mint-page publication network does not match the selected launch network.');
     const collection=detail?.collectionAddress;
     if(!window.ethers?.isAddress(collection))throw new Error('Collection address is unavailable.');
-    const session=await currentWallet(collection),wallet=session.wallet;
+    const session=await currentWallet(collection,chainId),wallet=session.wallet;
     await window.RelicForgeForgeNetwork.verifyCollection(collection,{creator:wallet,chainId:launchScope.chainId});
     await session.assert();
     const projectId=window.RelicForgeProjects?.getCurrentProjectId?.()||null;
@@ -83,7 +95,7 @@
     await window.RelicForgeCloud.ensureSignedIn(wallet);
     let existing={};
     try {
-      const response=await window.RelicForgeCloud.json(`/api/public/mint/${CHAIN_ID}/${encodeURIComponent(collection)}/config`);
+      const response=await window.RelicForgeCloud.json(`/api/public/mint/${chainId}/${encodeURIComponent(collection)}/config`);
       existing=response?.config||{};
     } catch (_) {}
     await session.assert();
@@ -93,7 +105,7 @@
     const config={
       schema:'relic-forge/mint-page@3',
       protocol:'r12-v2',
-      chainId:CHAIN_ID,
+      chainId,
       contract:collection,
       title:String(state.launchName||existing.title||'Relic Forge Collection').slice(0,180),
       description:String(state.launchDescription||existing.description||'').slice(0,3000),
@@ -109,13 +121,13 @@
     if(detail.mintPhasesAddress&&detail.mintPhasesAddress.toLowerCase()!==session.identity.phases)
       throw new Error('The mint-phase address does not match the verified collection.');
     await session.assert();
-    await window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/mint-page`,{
+    await window.RelicForgeCloud.json(`/api/collections/${chainId}/${encodeURIComponent(collection)}/mint-page`,{
       method:'PUT',body:JSON.stringify({projectId,config})
     },true);
     for(const row of allowlists){
       if(!Number(row.phaseId)||!row.root||!Array.isArray(row.entries))continue;
       await session.assert();
-      await window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(row.phaseId)}`,{
+      await window.RelicForgeCloud.json(`/api/collections/${chainId}/${encodeURIComponent(collection)}/v2/whitelist/${Number(row.phaseId)}`,{
         method:'PUT',
         body:JSON.stringify({
           projectId,
@@ -138,11 +150,12 @@
     await publish(detail);
     setSyncStatus('Mint page + Approved Wallet proofs synced. Eligibility is ready for the collector page.');
     window.dispatchEvent(new CustomEvent('relicforge:v2-proof-sync-complete',{detail:{collectionAddress:detail.collectionAddress}}));
-    ensurePermanentLinks(detail.collectionAddress);
+    ensurePermanentLinks(detail.collectionAddress,deploymentChainId(detail));
   }
 
   function showLaunchPopup(detail) {
     const collection=detail.collectionAddress;
+    const chainId=deploymentChainId(detail);
     let overlay=$('r2LaunchCompleteOverlay');
     if(overlay)overlay.remove();
     overlay=document.createElement('div');
@@ -154,9 +167,9 @@
       <p>Every required launch transaction and configured MintPhases stage has confirmed.</p>
       <code>${collection}</code>
       <div class="r2-launch-actions">
-        <a class="primary-btn link-btn" href="${mintUrl(collection)}" target="_blank" rel="noreferrer">Open Mint Page</a>
-        <a class="ghost-btn link-btn" href="${etherscanUrl(collection)}" target="_blank" rel="noreferrer">View on Etherscan</a>
-        <a class="ghost-btn link-btn" href="${dashboardUrl(collection)}" target="_blank" rel="noreferrer">Open Creator Dashboard</a>
+        <a class="primary-btn link-btn" href="${mintUrl(collection,chainId)}" target="_blank" rel="noreferrer">Open Mint Page</a>
+        <a class="ghost-btn link-btn" href="${etherscanUrl(collection,chainId)}" target="_blank" rel="noreferrer">View on Etherscan</a>
+        <a class="ghost-btn link-btn" href="${dashboardUrl(collection,chainId)}" target="_blank" rel="noreferrer">Open Creator Dashboard</a>
       </div>
       <div class="r2-launch-sync" id="r2LaunchSyncStatus">Syncing mint-page metadata and Approved Wallet proofs…</div>
       <button class="ghost-btn r2-launch-close" id="r2LaunchCloseBtn" type="button">Close</button>
@@ -169,7 +182,7 @@
   async function onLaunchComplete(event) {
     const detail=event.detail||{};
     if(!window.ethers?.isAddress(detail.collectionAddress))return;
-    ensurePermanentLinks(detail.collectionAddress);
+    ensurePermanentLinks(detail.collectionAddress,deploymentChainId(detail));
     if($('openMintPageBtn')){$('openMintPageBtn').disabled=false;$('openMintPageBtn').textContent='Open Mint Page';}
     if($('publishMintPageBtn')){$('publishMintPageBtn').disabled=!window.RelicForgeCloud?.enabled?.();$('publishMintPageBtn').textContent='Sync Mint Page';}
     showLaunchPopup(detail);
@@ -199,7 +212,7 @@
     window.addEventListener('relicforge:v2-launch-complete',onLaunchComplete);
     const state=window.RelicForgeForge?.getForgeProjectState?.();
     if(state?.collectionAddress&&window.ethers?.isAddress(state.collectionAddress)){
-      ensurePermanentLinks(state.collectionAddress);
+      ensurePermanentLinks(state.collectionAddress,deploymentChainId(state));
       if($('openMintPageBtn')){$('openMintPageBtn').disabled=false;$('openMintPageBtn').textContent='Open Mint Page';}
       if($('publishMintPageBtn')){$('publishMintPageBtn').disabled=!window.RelicForgeCloud?.enabled?.();$('publishMintPageBtn').textContent='Repair / Sync Proofs';}
       setSyncStatus('Existing launch detected. If Approved Wallet eligibility is missing or stale, use Repair / Sync Proofs to republish its proof tables.');

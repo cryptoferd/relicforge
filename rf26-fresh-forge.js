@@ -19,8 +19,10 @@
   const networkName=id=>net()?.title?.(id)||(`chain ${Number(id)}`);
   let running=false;
   function status(message,bad=false){
-    const node=$('forgeTestStatus');
-    if(node){node.textContent=message;node.classList.toggle('bad',bad);}
+    for(const id of ['forgeLaunchStatus','forgeTestStatus']){
+      const node=$(id);
+      if(node){node.textContent=message;node.classList.toggle('bad',bad);}
+    }
   }
   function freezeContext(ctx){
     const scope=net().scope();

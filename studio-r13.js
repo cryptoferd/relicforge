@@ -621,11 +621,22 @@
       : window.ethers.keccak256(window.ethers.concat([b, a]));
   }
 
-  function buildBoundMerkle(entries, collectionAddress, phaseId) {
+  function activeLaunchChainId(snapshot = null) {
+    const id = Number(
+      window.RelicForgeForgeNetwork?.selectedChainId?.() ??
+      snapshot?.launchChainId ??
+      snapshot?.chainId ??
+      0
+    );
+    if (![1,11155111].includes(id)) throw new Error('Choose a supported Relic Forge deployment network.');
+    return id;
+  }
+
+  function buildBoundMerkle(entries, collectionAddress, phaseId, chainId = activeLaunchChainId()) {
     const leaves = entries.map(entry => {
       const encoded = window.ethers.AbiCoder.defaultAbiCoder().encode(
         ['uint256','address','uint32','address','uint32'],
-        [11155111n, collectionAddress, Number(phaseId), entry.address, entry.allowance]
+        [BigInt(chainId), collectionAddress, Number(phaseId), entry.address, entry.allowance]
       );
       return window.ethers.keccak256(encoded);
     });
@@ -680,11 +691,12 @@
     if (!state.originalGetForgeState) return null;
     const snap = state.originalGetForgeState();
     if (!window.ethers?.isAddress(snap.collectionAddress || '') || !window.ethers?.isAddress(snap.mintPhasesAddress || '')) return null;
+    const chainId = activeLaunchChainId(snap);
     captureActivePhase();
     const allowlists = [];
     for (const phase of state.phases.filter(row => row.enabled !== false && row.phaseId && row.whitelist?.entries?.length)) {
       const checked = validatePhaseForForge(phase);
-      const tree = buildBoundMerkle(checked.entries, snap.collectionAddress, phase.phaseId);
+      const tree = buildBoundMerkle(checked.entries, snap.collectionAddress, phase.phaseId, chainId);
       phase.root = tree.root;
       allowlists.push({
         phaseId: Number(phase.phaseId),
@@ -702,7 +714,7 @@
       });
     }
     return {
-      chainId: 11155111,
+      chainId,
       collectionAddress: snap.collectionAddress,
       mintPhasesAddress: snap.mintPhasesAddress,
       publicPhaseId: snap.publicPhaseId ? Number(snap.publicPhaseId) : null,
@@ -723,7 +735,11 @@
     const raw = await eip1193Provider();
     const provider = new window.ethers.BrowserProvider(raw);
     const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 11155111) throw new Error('Switch the creator wallet to Ethereum Sepolia.');
+    const expectedChainId = activeLaunchChainId();
+    if (Number(network.chainId) !== expectedChainId) {
+      const expectedName = window.RelicForgeNetworks?.metadata?.(expectedChainId)?.name || ('Chain ' + expectedChainId);
+      throw new Error('Switch the creator wallet to ' + expectedName + '.');
+    }
     return provider.getSigner();
   }
 

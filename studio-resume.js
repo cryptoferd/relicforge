@@ -245,7 +245,7 @@
   /* R3D-B2 R3: complete, fail-closed creator discovery before new Factory creation. */
   async function findFreshCandidate(ctx,compiled,input){
     const scope=await window.RelicForgeForgeNetwork.requireReady();
-    if(scope.chainId!==11155111||!sameAddr(scope.factory,ctx.config.factory)||
+    if(!EXECUTION_CHAINS.has(Number(scope.chainId))||!sameAddr(scope.factory,ctx.config.factory)||
        !sameAddr(window.RelicForgeForgeNetwork.account(),ctx.wallet))
       throw new Error('Fresh Forge creator or release changed.');
     const explicit=[ctx.collectionAddress,ctx.journal?.collectionAddress,
@@ -350,10 +350,10 @@ if(Boolean(await data.contentSealed())){if(String(await data.provenanceHash()).t
 
   async function run(mutate){
     if(ui.busy)return;ui.busy=true;const rf26Leave=window.RelicForgeForgeNetwork.enter();ui.steps=[];renderSteps();const b=$('r24ResumeDeploymentBtn');if(b){b.disabled=true;b.textContent=mutate?'Resuming…':'Resume Deployment';}
-    try{let ctx=await context();const c=ctx.compiled,input=launchInputs(ctx);updateJournal(ctx.journal||api().findLocalDeploymentJournal?.(c.provenance));setStatus(mutate?'Reconciling confirmed Sepolia state and resuming only missing steps…':'Checking Sepolia against the compiled build…','warn');const snap=await resolve(ctx,c,input);
+    try{let ctx=await context();const c=ctx.compiled,input=launchInputs(ctx);updateJournal(ctx.journal||api().findLocalDeploymentJournal?.(c.provenance));const networkName=window.RelicForgeNetworks?.metadata?.(ctx.launchChainId)?.name||('Chain '+ctx.launchChainId);setStatus(mutate?`Reconciling confirmed ${networkName} state and resuming only missing steps…`:`Checking ${networkName} against the compiled build…`,'warn');const snap=await resolve(ctx,c,input);
       if(mutate){
         if(!window.RF26Recovery?.ensureJournal||!window.RF26Recovery?.executeIntent)throw new Error('R3D-B2 durable recovery runtime is unavailable. Reload Studio.');
-        const verified=await window.RF26Recovery.verifyCollection(snap.address,{creator:ctx.wallet,chainId:11155111});
+        const verified=await window.RF26Recovery.verifyCollection(snap.address,{creator:ctx.wallet,chainId:ctx.launchChainId});
         ui.recoveryJournal=await window.RF26Recovery.ensureJournal({
           provenance:c.provenance,verifiedCollection:verified,legacyJournal:ctx.journal
         });

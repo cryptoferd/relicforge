@@ -611,7 +611,7 @@
   async function openMintPage() {
     try {
       if (forgeState.collectionAddress && await isCanonicalV2Collection(forgeState.collectionAddress)) {
-        window.open(`./mint.html?contract=${encodeURIComponent(forgeState.collectionAddress)}&chain=11155111`, '_blank', 'noopener');
+        window.open(`./mint.html?contract=${encodeURIComponent(forgeState.collectionAddress)}&chain=${activeChainId() || 11155111}`, '_blank', 'noopener');
         if ($('mintPageStatus')) $('mintPageStatus').textContent = 'R12-v2 collector mint page opened.';
         return;
       }
@@ -753,19 +753,19 @@
     return { root: layers[layers.length - 1][0], entries, proofByAddress };
   }
 
-  function whitelistLeafV1(entry, collectionAddress, phaseId) {
+  function whitelistLeafV1(entry, collectionAddress, phaseId, chainId = activeChainId() || 11155111) {
     const encoded = window.ethers.AbiCoder.defaultAbiCoder().encode(
       ['uint256','address','uint32','address','uint32'],
-      [11155111n, collectionAddress, Number(phaseId), entry.address, entry.allowance]
+      [BigInt(chainId), collectionAddress, Number(phaseId), entry.address, entry.allowance]
     );
     return window.ethers.keccak256(encoded);
   }
 
-  function buildMerkleWhitelistV1(entries, collectionAddress, phaseId) {
+  function buildMerkleWhitelistV1(entries, collectionAddress, phaseId, chainId = activeChainId() || 11155111) {
     if (!window.ethers.isAddress(collectionAddress)) throw new Error('V1 whitelist collection address is invalid.');
     if (!Number.isInteger(Number(phaseId)) || Number(phaseId) < 1) throw new Error('V1 whitelist phase id is invalid.');
     if (!entries?.length) throw new Error('Whitelist contains no eligible wallets.');
-    const leaves = entries.map(entry => whitelistLeafV1(entry, collectionAddress, phaseId));
+    const leaves = entries.map(entry => whitelistLeafV1(entry, collectionAddress, phaseId, chainId));
     const layers = [leaves];
     while (layers[layers.length - 1].length > 1) {
       const current = layers[layers.length - 1];
@@ -796,7 +796,7 @@
       proofByAddress,
       domainCollection: window.ethers.getAddress(collectionAddress),
       phaseId: Number(phaseId),
-      chainId: 11155111
+      chainId: Number(chainId)
     };
   }
   function renderWhitelistSummary() {
@@ -4550,7 +4550,7 @@ ${await file.text()}`;
         status:'confirmed',confirmedAt:steps.factoryCreate?.confirmedAt||new Date().toISOString()};
     }
     adoptDeploymentJournal({
-      provenance:compiled.provenance,chainId:11155111,factory:scope.factory,
+      provenance:compiled.provenance,chainId:Number(scope.chainId),factory:scope.factory,
       ...(freshRequest?.deploymentId?{deploymentId:freshRequest.deploymentId}:prior?.deploymentId?{deploymentId:prior.deploymentId}:{}),
       ...target,status:prior?.status||'partial',steps
     });
