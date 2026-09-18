@@ -3390,8 +3390,146 @@ ${await file.text()}`;
     return Object.freeze({value,gasPrice,gasLimit});
   }
 
+  function v2DashboardSlugDeployment(snap) {
+    const chainId=activeChainId() || 1;
+    return {chainId,contract:snap.address};
+  }
+
+  function v2DashboardSlugUrl(slug) {
+    return new URL('/mint/'+encodeURIComponent(String(slug||'')),location.origin).href;
+  }
+
+  function v2DashboardSlugElements() {
+    return {
+      input:$('dashboardV2MintSlug'),
+      status:$('dashboardV2MintSlugStatus'),
+      link:$('dashboardV2MintSlugLink'),
+      check:$('dashboardV2MintSlugCheck'),
+      save:$('dashboardV2MintSlugSave'),
+      copy:$('dashboardV2MintSlugCopy'),
+      open:$('dashboardV2MintSlugOpen')
+    };
+  }
+
+  function v2DashboardSetSlugUi({slug=null,message='',tone='neutral',available=null}={}) {
+    const ui=v2DashboardSlugElements();
+    const normalized=slug?String(slug).trim().toLowerCase():'';
+    if(ui.input&&normalized)ui.input.value=normalized;
+    if(ui.input)ui.input.dataset.currentSlug=normalized;
+    if(ui.status){
+      ui.status.textContent=message || (normalized?'Current custom URL loaded.':'No custom URL is saved yet.');
+      ui.status.dataset.tone=tone;
+    }
+    const href=normalized?v2DashboardSlugUrl(normalized):'';
+    if(ui.link)ui.link.value=href;
+    if(ui.copy)ui.copy.disabled=!href;
+    if(ui.open)ui.open.disabled=!href;
+    if(ui.save&&available!==null)ui.save.disabled=!available;
+  }
+
+  async function v2DashboardLoadSlug(snap) {
+    const deployment=v2DashboardSlugDeployment(snap);
+    if(deployment.chainId!==1)throw new Error('Custom mint URLs are available for Ethereum Mainnet production collections.');
+    const api=window.RelicForgeCreatorURLs;
+    if(!api?.loadForDeployment)throw new Error('Custom mint URL controls are unavailable. Reload the Creator Dashboard.');
+    const result=await api.loadForDeployment(deployment);
+    if(result?.productionAvailable!==true)throw new Error('Production custom mint URLs are not currently available.');
+    const slug=result?.publication?.slug||null;
+    v2DashboardSetSlugUi({
+      slug,
+      message:slug?'Current custom URL loaded. You can change it below.':'No custom URL is saved yet. Enter a slug and check availability.',
+      tone:slug?'good':'neutral',
+      available:false
+    });
+    return result;
+  }
+
+  async function v2DashboardCheckSlug(snap) {
+    const deployment=v2DashboardSlugDeployment(snap);
+    if(deployment.chainId!==1)throw new Error('Custom mint URLs are available for Ethereum Mainnet production collections.');
+    const api=window.RelicForgeCreatorURLs;
+    if(!api?.checkSlugForDeployment)throw new Error('Custom mint URL controls are unavailable. Reload the Creator Dashboard.');
+    const ui=v2DashboardSlugElements();
+    const raw=String(ui.input?.value||'').trim().toLowerCase();
+    if(ui.input)ui.input.value=raw;
+    const current=String(ui.input?.dataset.currentSlug||'').trim().toLowerCase();
+    if(raw&&raw===current){
+      v2DashboardSetSlugUi({slug:current,message:'This is the collection’s current custom URL.',tone:'good',available:false});
+      return {slug:current,available:false,current:true};
+    }
+    if(ui.status){ui.status.textContent='Checking availability…';ui.status.dataset.tone='neutral';}
+    const result=await api.checkSlugForDeployment(deployment,raw);
+    if(result?.productionAvailable!==true)throw new Error('Production custom mint URLs are not currently available.');
+    if(result.available===true){
+      if(ui.status){ui.status.textContent='Available — this URL can be saved to the collection.';ui.status.dataset.tone='good';}
+      if(ui.save)ui.save.disabled=false;
+    }else{
+      if(ui.status){ui.status.textContent='That custom mint URL is already claimed.';ui.status.dataset.tone='bad';}
+      if(ui.save)ui.save.disabled=true;
+    }
+    return result;
+  }
+
+  async function v2DashboardSaveSlug(snap) {
+    const deployment=v2DashboardSlugDeployment(snap);
+    if(deployment.chainId!==1)throw new Error('Custom mint URLs are available for Ethereum Mainnet production collections.');
+    const canControl=String(snap.controller).toLowerCase()===String(forgeState.wallet).toLowerCase();
+    if(!canControl)throw new Error('Connected wallet is not the active collection controller.');
+    const api=window.RelicForgeCreatorURLs;
+    if(!api?.saveSlugForDeployment)throw new Error('Custom mint URL controls are unavailable. Reload the Creator Dashboard.');
+    const ui=v2DashboardSlugElements();
+    const raw=String(ui.input?.value||'').trim().toLowerCase();
+    const current=String(ui.input?.dataset.currentSlug||'').trim().toLowerCase();
+    if(raw===current&&current)throw new Error('This custom mint URL is already assigned to the collection.');
+    const availability=await api.checkSlugForDeployment(deployment,raw);
+    if(availability?.available!==true)throw new Error('That custom mint URL is not available.');
+    if(current){
+      const ok=window.confirm('Change this collection’s custom mint URL from /mint/'+current+' to /mint/'+raw+'?\n\nThe old slug is released immediately and old shared links using it will stop pointing to this collection.');
+      if(!ok)return null;
+    }
+    if(ui.status){ui.status.textContent='Saving custom mint URL…';ui.status.dataset.tone='neutral';}
+    const result=await api.saveSlugForDeployment(deployment,raw);
+    v2DashboardSetSlugUi({
+      slug:result?.slug||raw,
+      message:result?.releasedSlug
+        ?'Custom URL saved. /mint/'+result.releasedSlug+' was released for reuse.'
+        :'Custom URL saved.',
+      tone:'good',
+      available:false
+    });
+    return result;
+  }
+
+  async function v2DashboardCopySlug() {
+    const ui=v2DashboardSlugElements();
+    const value=ui.link?.value;
+    if(!value)throw new Error('Load or save a custom mint URL first.');
+    try{
+      await navigator.clipboard.writeText(value);
+    }catch{
+      ui.link?.focus();
+      ui.link?.select?.();
+      throw new Error('Select and copy the highlighted custom mint URL.');
+    }
+    if(ui.status){ui.status.textContent='Custom mint URL copied.';ui.status.dataset.tone='good';}
+  }
+
   async function handleV2LaunchedAction(action, snap) {
     try {
+      const slugActions=new Set(['mintslugload','mintslugcheck','mintslugsave','mintslugcopy','mintslugopen']);
+      if (slugActions.has(action)) {
+        if(action==='mintslugload')await v2DashboardLoadSlug(snap);
+        else if(action==='mintslugcheck')await v2DashboardCheckSlug(snap);
+        else if(action==='mintslugsave')await v2DashboardSaveSlug(snap);
+        else if(action==='mintslugcopy')await v2DashboardCopySlug();
+        else if(action==='mintslugopen'){
+          const href=v2DashboardSlugElements().link?.value;
+          if(!href)throw new Error('Load or save a custom mint URL first.');
+          window.open(href,'_blank','noopener');
+        }
+        return;
+      }
+
       if (action !== 'mintpage') await requireForgeWrite(snap.address);
 
       if (action === 'mintpage') {
@@ -3552,11 +3690,21 @@ ${await file.text()}`;
       '<div class="launched-section"><h4>Minting + creator controls</h4><div class="launched-actions"><button class="' + (snap.masterMintEnabled ? 'ghost-btn danger-btn' : 'primary-btn') + '" data-v2-dashboard-action="mastermint" ' + (canControl ? '' : 'disabled') + '>' + (snap.masterMintEnabled ? 'Pause Minting' : 'Enable Minting') + '</button><label class="field"><span>Creator Mint qty</span><input id="dashboardV2CreatorMintQty" min="1" max="' + Math.max(1, Math.min(50, snap.maxSupply - snap.totalMinted)) + '" value="1" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="creatormint" ' + (canControl && !snap.soldOut ? '' : 'disabled') + '>Creator Mint (quoted)</button></div><div class="launched-controls-grid"><label class="field"><span>Payout receiver</span><input id="dashboardV2Payout" value="' + esc(snap.payoutReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="payout" ' + (canControl ? '' : 'disabled') + '>Update Payout</button><label class="field"><span>Royalty receiver</span><input id="dashboardV2RoyaltyWallet" value="' + esc(snap.royaltyReceiver) + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Royalty %</span><input id="dashboardV2RoyaltyPct" type="number" min="0" max="10" step="0.01" value="' + (snap.royaltyBps / 100).toFixed(2) + '" ' + (canControl ? '' : 'disabled') + '/></label><button class="ghost-btn" data-v2-dashboard-action="royalty" ' + (canControl ? '' : 'disabled') + '>Update Royalty</button></div></div>' +
       '<div class="launched-section"><h4>Reveal</h4><div class="launched-stats"><div><span>State</span><strong>' + revealTitle + '</strong></div><div><span>Frozen delayed supply</span><strong>' + snap.delayedRevealSupply + '</strong></div><div><span>Automatic requests</span><strong>' + snap.activeAutoRevealRequests + '</strong></div></div><div class="forge-inline-status">' + esc(revealMessage) + '</div><div class="launched-actions">' + revealActions + '</div><small class="forge-footnote">Normal Studio controls do not expose batch locking, manual randomness requests, request IDs, replay, or settlement. R2 handles the normal reveal lifecycle automatically.</small></div>' +
       '<div class="launched-section"><h4>MintPhases stages</h4>' + v2PhaseRows(snap, canControl) + '<div class="prototype-note"><strong>Stage scheduling remains independent of reveal</strong><p>Existing stages can be updated, enabled, or disabled here. A sold-out collection stays closed even if a stage schedule is otherwise open.</p></div></div>' +
-      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">Edit the public R12-v2 mint page after deployment. These presentation settings do not change immutable NFT artwork or metadata.</div><div class="launched-controls-grid"><label class="field"><span>Mint page title</span><input id="dashboardV2MintPageTitle" value="' + esc(v2MintPageConfig.title || snap.name || '') + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Mint page description</span><textarea id="dashboardV2MintPageDescription" rows="4" ' + (canControl ? '' : 'disabled') + '>' + esc(v2MintPageConfig.description || snap.description || '') + '</textarea></label></div><div class="mint-page-builder-grid dashboard-mint-page-builder"><div class="mint-page-media-settings"><label class="compact-upload" for="dashboardV2MintPageImageInput"><strong>Collection image</strong><span id="dashboardV2MintPageImageName">' + (forgeState.dashboardMintPageImageFile ? 'Saved project image ready to publish' : (v2MintPageImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageImageInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label><label class="compact-upload" for="dashboardV2MintPageBannerInput"><strong>Collection banner</strong><span id="dashboardV2MintPageBannerName">' + (forgeState.dashboardMintPageBannerFile ? 'Saved project banner ready to publish' : (v2MintPageBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageBannerInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label></div><div class="mint-page-preview"><div class="mint-page-banner-preview" id="dashboardV2MintPagePreviewBanner">' + (v2MintPageBanner ? '<img src="' + esc(v2MintPageBanner) + '" alt=""/>' : '<span>BANNER</span>') + '</div><div class="mint-page-preview-body"><div class="mint-page-avatar-preview" id="dashboardV2MintPagePreviewImage">' + (v2MintPageImage ? '<img src="' + esc(v2MintPageImage) + '" alt=""/>' : '<span>RF</span>') + '</div><div><strong>' + esc(v2MintPageConfig.title || snap.name || 'Relic Forge Collection') + '</strong><p>Live mint progress · recent mints · wallet mint history</p></div></div></div></div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="savemintpage" type="button" ' + (canControl ? '' : 'disabled') + '>Save Mint Page</button><button class="ghost-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="' + esc(dashboardExplorerUrl) + '" rel="noreferrer" target="_blank">View on Etherscan</a></div><small class="forge-footnote">Replacing a collection image or banner retires the previous stored asset when no other collection references it.</small></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
+      '<div class="launched-section"><h4>Collector mint page</h4><div class="forge-inline-status">Edit the public mint page after deployment. Presentation settings and the custom URL do not change immutable NFT artwork or metadata.</div>' +
+      (dashboardChainId===1
+        ? '<div class="launched-controls-grid"><label class="field"><span>Custom mint URL</span><input id="dashboardV2MintSlug" maxlength="48" minlength="3" placeholder="friends-of-the-forge" spellcheck="false" autocomplete="off" ' + (canControl ? '' : 'disabled') + '/><small>relicforge.io/mint/&lt;your-slug&gt; · 3–48 lowercase letters, numbers, or single hyphens.</small></label><label class="field"><span>Current custom link</span><input id="dashboardV2MintSlugLink" readonly placeholder="No custom URL saved yet"/></label></div><div class="launched-actions"><button class="ghost-btn" id="dashboardV2MintSlugLoad" data-v2-dashboard-action="mintslugload" type="button" ' + (canControl ? '' : 'disabled') + '>Load Current URL</button><button class="ghost-btn" id="dashboardV2MintSlugCheck" data-v2-dashboard-action="mintslugcheck" type="button" ' + (canControl ? '' : 'disabled') + '>Check Availability</button><button class="primary-btn" id="dashboardV2MintSlugSave" data-v2-dashboard-action="mintslugsave" type="button" disabled>Save Custom URL</button><button class="ghost-btn" id="dashboardV2MintSlugCopy" data-v2-dashboard-action="mintslugcopy" type="button" disabled>Copy Link</button><button class="ghost-btn" id="dashboardV2MintSlugOpen" data-v2-dashboard-action="mintslugopen" type="button" disabled>Open Custom URL</button></div><div class="forge-inline-status" id="dashboardV2MintSlugStatus">Load the current URL, or enter a new slug and check availability. Changing a saved slug immediately releases the old one for reuse.</div>'
+        : '<div class="forge-inline-status">Custom mint URLs are available only for verified Ethereum Mainnet production collections. Sepolia continues to use its direct contract mint link.</div>') +
+      '<div class="launched-controls-grid"><label class="field"><span>Mint page title</span><input id="dashboardV2MintPageTitle" value="' + esc(v2MintPageConfig.title || snap.name || '') + '" ' + (canControl ? '' : 'disabled') + '/></label><label class="field"><span>Mint page description</span><textarea id="dashboardV2MintPageDescription" rows="4" ' + (canControl ? '' : 'disabled') + '>' + esc(v2MintPageConfig.description || snap.description || '') + '</textarea></label></div><div class="mint-page-builder-grid dashboard-mint-page-builder"><div class="mint-page-media-settings"><label class="compact-upload" for="dashboardV2MintPageImageInput"><strong>Collection image</strong><span id="dashboardV2MintPageImageName">' + (forgeState.dashboardMintPageImageFile ? 'Saved project image ready to publish' : (v2MintPageImage ? 'Current image saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageImageInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label><label class="compact-upload" for="dashboardV2MintPageBannerInput"><strong>Collection banner</strong><span id="dashboardV2MintPageBannerName">' + (forgeState.dashboardMintPageBannerFile ? 'Saved project banner ready to publish' : (v2MintPageBanner ? 'Current banner saved · choose a file to replace it' : '2 MB max · image file')) + '</span><input accept="image/*,.svg" id="dashboardV2MintPageBannerInput" type="file" ' + (canControl ? '' : 'disabled') + '/></label></div><div class="mint-page-preview"><div class="mint-page-banner-preview" id="dashboardV2MintPagePreviewBanner">' + (v2MintPageBanner ? '<img src="' + esc(v2MintPageBanner) + '" alt=""/>' : '<span>BANNER</span>') + '</div><div class="mint-page-preview-body"><div class="mint-page-avatar-preview" id="dashboardV2MintPagePreviewImage">' + (v2MintPageImage ? '<img src="' + esc(v2MintPageImage) + '" alt=""/>' : '<span>RF</span>') + '</div><div><strong>' + esc(v2MintPageConfig.title || snap.name || 'Relic Forge Collection') + '</strong><p>Live mint progress · recent mints · wallet mint history</p></div></div></div></div><div class="launched-actions"><button class="primary-btn" data-v2-dashboard-action="savemintpage" type="button" ' + (canControl ? '' : 'disabled') + '>Save Mint Page</button><button class="ghost-btn" data-v2-dashboard-action="mintpage" type="button">Open Public Mint Page</button><a class="ghost-btn link-btn" href="' + esc(dashboardExplorerUrl) + '" rel="noreferrer" target="_blank">View on Etherscan</a></div><small class="forge-footnote">Replacing a collection image or banner retires the previous stored asset when no other collection references it.</small></div><div class="launched-tx-status" id="launchedTxStatus">Ready.</div>';
 
     detail.querySelectorAll('[data-v2-dashboard-action]').forEach(button =>
       button.addEventListener('click', () => handleV2LaunchedAction(button.dataset.v2DashboardAction, snap))
     );
+    $('dashboardV2MintSlug')?.addEventListener('input', event => {
+      event.target.value=String(event.target.value||'').trimStart().toLowerCase();
+      const status=$('dashboardV2MintSlugStatus');
+      if(status){status.textContent='Check availability before saving this custom URL.';status.dataset.tone='neutral';}
+      const save=$('dashboardV2MintSlugSave');if(save)save.disabled=true;
+    });
     $('dashboardV2MintPageImageInput')?.addEventListener('change', async event => {
       try {
         forgeState.dashboardMintPageImageFile=validateMintPageMedia(event.target.files?.[0] || null,'Collection image');

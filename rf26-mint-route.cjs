@@ -42,7 +42,7 @@ function canonicalPath(chainId,contract) {
 }
 function validateTarget(value,slug) {
   if(!value||typeof value!=='object'||Array.isArray(value))reject(502,'INVALID_TARGET');
-  if(value.permanent!==true||Number(value.chainId)!==1||
+  if(value.permanent!==false||value.editable!==true||Number(value.chainId)!==1||
      value.slug!==slug)reject(502,'INVALID_TARGET');
   const contract=normalizeAddress(value.contract);
   if(value.mintPage!==canonicalPath(1,contract))reject(502,'INVALID_TARGET');

@@ -10,7 +10,7 @@ const context=contextModule.exports;
 const root=new URL('../../',import.meta.url);
 const read=name=>fs.readFileSync(new URL(name,root),'utf8');
 const A='0x'+'a'.repeat(40);
-const target={chainId:1,contract:A,slug:'chrono-relic',permanent:true,
+const target={chainId:1,contract:A,slug:'chrono-relic',permanent:false,editable:true,
  mintPage:`/mint.html?chain=1&contract=${A}`};
 test('R3C-C is routed through the exact public Vercel function',()=>{
  const config=JSON.parse(read('vercel.json'));
@@ -34,6 +34,8 @@ test('browser context accepts only the verified Ethereum target and preserves di
  assert.equal(context.read({getElementById:()=>null}),null);
  const result=context.read({getElementById:()=>({textContent:JSON.stringify(target)})});
  assert.deepEqual(result,{chainId:1,contract:A,slug:'chrono-relic'});
+ assert.deepEqual(route.validateTarget(target,'chrono-relic'),{chainId:1,contract:A,slug:'chrono-relic'});
+ assert.throws(()=>route.validateTarget({...target,permanent:true,editable:false},'chrono-relic'));
  assert.equal(route.canonicalPath(result.chainId,result.contract),`/mint.html?chain=1&contract=${A}`);
  assert.throws(()=>context.read({getElementById:()=>({textContent:JSON.stringify({...target,chainId:11155111})})}));
 });

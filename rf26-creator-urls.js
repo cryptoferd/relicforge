@@ -5,7 +5,7 @@ import {
   createCreatorUrlClient
 } from './rf26-creator-urls-core.js';
 
-const VERSION='R3C-B-R2';
+const VERSION='R3C-B-R3-INLINE';
 const ids=Object.freeze({
   trigger:'rf26CreatorUrlTrigger',drawer:'rf26CreatorUrlDrawer',backdrop:'rf26CreatorUrlBackdrop',
   close:'rf26CreatorUrlClose',network:'rf26CreatorUrlNetwork',contract:'rf26CreatorUrlContract',
@@ -168,7 +168,7 @@ function installMarkup() {
         <div id="${ids.claimed}" class="rf26-url-claimed" hidden>
           <label class="rf26-url-label">Current custom link</label>
           <div class="rf26-url-copyrow">
-            <input id="${ids.claimedUrl}" class="rf26-url-input" type="text" readonly aria-label="Permanent custom mint link">
+            <input id="${ids.claimedUrl}" class="rf26-url-input" type="text" readonly aria-label="Current custom mint link">
             <button id="${ids.copyClaimed}" class="rf26-url-button rf26-url-secondary" type="button">Copy</button>
             <a id="${ids.openClaimed}" class="rf26-url-button rf26-url-secondary" target="_blank" rel="noopener noreferrer" href="#" aria-label="Open custom mint URL">Open</a>
           </div>
@@ -342,7 +342,7 @@ async function loadProductionControls() {
   if(state.projectId){setText(ids.project,'Project '+state.projectId);setHidden(ids.project,false);}
   renderPublication(result?.publication??{});
   status(result?.serverDeployment?.status==='sealed'
-    ?'Verified production deployment loaded. Permanent URL controls are ready.'
+    ?'Verified production deployment loaded. Custom URL controls are ready.'
     :'Deployment loaded, but it must be sealed before publication writes are allowed.',
     result?.serverDeployment?.status==='sealed'?'good':'warn');
 }
@@ -498,6 +498,33 @@ function wireEvents() {
   window.addEventListener('popstate',()=>refreshContext());
 }
 
+async function loadForDeployment(rawDeployment) {
+  const deployment=normalizeDeployment(rawDeployment);
+  const result=await client().load(deployment);
+  if(state.deployment&&state.deployment.chainId===deployment.chainId&&state.deployment.contract===deployment.contract) {
+    state.productionAvailable=result?.productionAvailable===true;
+    state.loaded=state.productionAvailable;
+    state.projectId=result?.serverDeployment?.projectId??state.projectId;
+    state.publication=publicationView(result?.publication??{});
+  }
+  return result;
+}
+async function checkSlugForDeployment(rawDeployment,rawSlug) {
+  const deployment=normalizeDeployment(rawDeployment);
+  return client().availability(deployment,rawSlug);
+}
+async function saveSlugForDeployment(rawDeployment,rawSlug,{projectId=null}={}) {
+  const deployment=normalizeDeployment(rawDeployment);
+  const result=await client().claim(deployment,rawSlug,{projectId});
+  if(state.deployment&&state.deployment.chainId===deployment.chainId&&state.deployment.contract===deployment.contract) {
+    state.publication=publicationView({
+      ...(state.publication||{}),
+      slug:result?.slug??normalizeSlug(rawSlug)
+    });
+  }
+  return result;
+}
+
 function configure(options={}) {
   if(!options||typeof options!=='object')throw new CreatorUrlError('Invalid creator URL configuration.');
   for(const key of ['publicRequest','authenticatedRequest','requestWallet','apiBase']) {
@@ -530,6 +557,9 @@ window.RelicForgeCreatorURLs=Object.freeze({
   refresh:()=>refreshContext(),
   open:openDrawer,
   close:closeDrawer,
+  loadForDeployment,
+  checkSlugForDeployment,
+  saveSlugForDeployment,
   getState:snapshot
 });
 
