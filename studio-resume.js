@@ -136,7 +136,17 @@
     return startArmedDeployment();
   }
 
-  function fail(error){ console.error('Resume deployment:',error); setStatus(`Resume: ${error.shortMessage||error.message}`,'bad'); ui.busy=false; const b=$('r24ResumeDeploymentBtn'); if(b){b.disabled=false;b.textContent='Resume Deployment';} }
+  function fail(error){
+    console.error('Resume deployment:',error);
+    const raw=error?.shortMessage||error?.message||String(error);
+    const message=error?.code==='RF26_PREPARED_INTENT'
+      ? raw+' No duplicate transaction will be sent. Reload Studio and use Resume Deployment again; Relic Forge will verify the wallet nonce on independent RPCs before retrying.'
+      : raw;
+    setStatus(`Resume: ${message}`,'bad');
+    ui.busy=false;
+    const b=$('r24ResumeDeploymentBtn');
+    if(b){b.disabled=false;b.textContent='Resume Deployment';}
+  }
 
 
   function hasMintPagePresentation(projectState){
@@ -277,7 +287,20 @@
   function plan(contract,method,args,verify){return {contract,method,args,verify};}
   async function tx(label,key,transactionPlan,ctx){
     if(!ui.recoveryJournal)throw new Error('Scoped recovery journal is unavailable. Re-check the deployment before resuming.');
-    step(key,label,'active','Preparing durable transaction intent');
+    const prior=ui.recoveryJournal.steps?.[key];
+    if(prior?.status==='prepared'&&prior?.intent&&!prior?.txHash){
+      step(key,label,'active','Verifying failed wallet submission before retry');
+      const recovery=window.RF26Recovery;
+      if(!recovery?.confirmPreparedNotBroadcast)
+        throw new Error('Safe no-hash recovery runtime is unavailable. Reload Studio before retrying.');
+      const checked=await recovery.confirmPreparedNotBroadcast(ui.recoveryJournal,key);
+      ui.recoveryJournal=checked.journal;
+      const nonce=Number(checked.nonce);
+      setStatus('The previous wallet RPC submission produced no hash. Multiple independent RPCs confirm nonce '+nonce+' is still unused; Relic Forge will retry the exact same transaction intent.','warn');
+      step(key,label,'active','No broadcast detected · retrying exact intent');
+    }else{
+      step(key,label,'active','Preparing durable transaction intent');
+    }
     await api().requireForgeWrite(true);
     const result=await window.RF26Recovery.executeIntent({
       journal:ui.recoveryJournal,stepKey:key,label,

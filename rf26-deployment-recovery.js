@@ -122,6 +122,60 @@
     const {provider}=await readScope();
     return core.inspectTransaction({provider,journal:normalized,stepKey,expectedWallet:normalized.wallet,expectedTo});
   }
+
+  async function confirmPreparedNotBroadcast(journal,stepKey){
+    let normalized=assertJournal(journal);
+    const durable=journalStore(normalized).read(normalized.provenance);
+    if(durable)normalized=core.merge(durable,normalized);
+    const step=normalized.steps?.[stepKey];
+    if(!step?.intent||step?.txHash||step?.status!=='prepared')
+      throw fail('The selected checkpoint is not a prepared no-hash transaction intent.','RF26_PREPARED_INTENT');
+
+    const expected=core.intent(step.intent);
+    const active=network().scope(),wallet=network().account();
+    if(!active||active.chainId!==expected.chainId||core.address(wallet)!==expected.wallet)
+      throw fail('The active recovery wallet or network does not match the prepared intent.','RF26_INTENT_MISMATCH');
+
+    const urls=window.RelicForgeNetworks?.metadata?.(expected.chainId)?.rpcUrls||[];
+    if(!Array.isArray(urls)||urls.length<2)
+      throw fail('At least two independent read RPCs are required to prove the prepared intent was not broadcast.','RF26_RECOVERY_MISMATCH');
+
+    const evidence=[];
+    for(const rpc of urls.slice(0,3)){
+      const provider=new window.ethers.JsonRpcProvider(rpc,expected.chainId,{staticNetwork:true,batchMaxCount:1});
+      let latest,pending;
+      try{
+        [latest,pending]=await Promise.all([
+          provider.getTransactionCount(expected.wallet,'latest'),
+          provider.getTransactionCount(expected.wallet,'pending')
+        ]);
+      }catch(error){
+        throw fail('Could not independently verify the wallet nonce before retrying the prepared intent: '+(error?.message||error),'RF26_RECOVERY_MISMATCH');
+      }
+      evidence.push({rpc,latest:Number(latest),pending:Number(pending)});
+    }
+
+    for(const row of evidence){
+      if(row.latest!==expected.nonce||row.pending!==expected.nonce){
+        throw fail(
+          'Prepared intent retry is blocked because an independent RPC reports a changed wallet nonce. '+
+          'Do not retry until the wallet history and nonce are reconciled.','RF26_PENDING_TRANSACTION'
+        );
+      }
+    }
+
+    const s=journalStore(normalized);
+    const now=new Date().toISOString();
+    normalized=s.save(core.checkpoint(normalized,stepKey,{
+      status:'failed',
+      label:step.label||stepKey,
+      intent:expected,
+      rejectionConfirmedAt:now,
+      nonBroadcastConfirmedAt:now,
+      nonBroadcastEvidence:evidence
+    }));
+    return {journal:normalized,evidence,nonce:expected.nonce};
+  }
   function assertVerifiedBindings(journal,verified){
     const normalized=assertJournal(journal);
     if(core.chain(verified.chainId)!==normalized.chainId||
@@ -335,7 +389,7 @@
   }
   window.RF26Recovery=Object.freeze({
     core,context,store,read,save,begin,adoptLegacy,assertJournal,
-    readScope,verifyCollection,inspect,ensureJournal,executeIntent,executeFactory,publicationTarget,
+    readScope,verifyCollection,inspect,confirmPreparedNotBroadcast,ensureJournal,executeIntent,executeFactory,publicationTarget,
     resolveDelegatedIntent,providerForIntent,METAMASK_DELEGATION_MANAGER
   });
 })();
