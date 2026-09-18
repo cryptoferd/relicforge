@@ -52,11 +52,35 @@ async function parseJsonResponse(response) {
   throw error;
 }
 
+function publicRequestUrl(path) {
+  const match=String(path||'').match(/^\/api\/public\/mint-slugs\/([^/]+)\/available$/);
+  if(match){
+    const slug=decodeURIComponent(match[1]);
+    const url=new URL('/api/mint-slug-availability',location.origin);
+    url.searchParams.set('slug',slug);
+    return url.href;
+  }
+  return apiUrl(path);
+}
+
 async function publicRequest(path) {
   if(typeof state.adapters.publicRequest==='function')return state.adapters.publicRequest(path);
-  const response=await fetch(apiUrl(path),{
-    method:'GET',headers:{accept:'application/json'},cache:'no-store',credentials:'omit'
-  });
+  const target=publicRequestUrl(path);
+  let response;
+  try{
+    response=await fetch(target,{
+      method:'GET',headers:{accept:'application/json'},cache:'no-store',credentials:'omit',
+      signal:typeof AbortSignal?.timeout==='function'?AbortSignal.timeout(10000):undefined
+    });
+  }catch(error){
+    const timeout=error?.name==='TimeoutError'||error?.name==='AbortError';
+    throw new CreatorUrlError(
+      timeout
+        ? 'Mint URL availability timed out. Relic Forge Cloud did not answer within 10 seconds.'
+        : 'Could not reach the mint URL availability service.',
+      {status:503,code:timeout?'NETWORK_TIMEOUT':'NETWORK_ERROR'}
+    );
+  }
   return parseJsonResponse(response);
 }
 

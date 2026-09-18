@@ -3452,22 +3452,41 @@ ${await file.text()}`;
     const ui=v2DashboardSlugElements();
     const raw=String(ui.input?.value||'').trim().toLowerCase();
     if(ui.input)ui.input.value=raw;
+    if(!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(raw)||raw.includes('--')){
+      if(ui.status){
+        ui.status.textContent='Use 3–48 lowercase letters, numbers, or single hyphens; no leading, trailing, or double hyphens.';
+        ui.status.dataset.tone='bad';
+      }
+      if(ui.save)ui.save.disabled=true;
+      return {slug:raw,available:false,invalid:true};
+    }
     const current=String(ui.input?.dataset.currentSlug||'').trim().toLowerCase();
     if(raw&&raw===current){
       v2DashboardSetSlugUi({slug:current,message:'This is the collection’s current custom URL.',tone:'good',available:false});
       return {slug:current,available:false,current:true};
     }
     if(ui.status){ui.status.textContent='Checking availability…';ui.status.dataset.tone='neutral';}
-    const result=await api.checkSlugForDeployment(deployment,raw);
-    if(result?.productionAvailable!==true)throw new Error('Production custom mint URLs are not currently available.');
-    if(result.available===true){
-      if(ui.status){ui.status.textContent='Available — this URL can be saved to the collection.';ui.status.dataset.tone='good';}
-      if(ui.save)ui.save.disabled=false;
-    }else{
-      if(ui.status){ui.status.textContent='That custom mint URL is already claimed.';ui.status.dataset.tone='bad';}
+    if(ui.check)ui.check.disabled=true;
+    if(ui.save)ui.save.disabled=true;
+    try{
+      const result=await api.checkSlugForDeployment(deployment,raw);
+      if(result?.productionAvailable!==true)throw new Error('Production custom mint URLs are not currently available.');
+      if(result.available===true){
+        if(ui.status){ui.status.textContent='Available — this URL can be saved to the collection.';ui.status.dataset.tone='good';}
+        if(ui.save)ui.save.disabled=false;
+      }else{
+        if(ui.status){ui.status.textContent='That custom mint URL is already claimed.';ui.status.dataset.tone='bad';}
+        if(ui.save)ui.save.disabled=true;
+      }
+      return result;
+    }catch(error){
+      const message=error?.shortMessage||error?.message||'Mint URL availability check failed.';
+      if(ui.status){ui.status.textContent=message;ui.status.dataset.tone='bad';}
       if(ui.save)ui.save.disabled=true;
+      throw error;
+    }finally{
+      if(ui.check)ui.check.disabled=false;
     }
-    return result;
   }
 
   async function v2DashboardSaveSlug(snap) {
@@ -3618,7 +3637,14 @@ ${await file.text()}`;
 
       await openLaunchedCollection(snap.address);
     } catch (error) {
-      launchedStatus('R12-v2 R2 dashboard error: ' + (error.shortMessage || error.message));
+      const message=error?.shortMessage||error?.message||'Creator Dashboard action failed.';
+      if(String(action||'').startsWith('mintslug')){
+        const ui=v2DashboardSlugElements();
+        if(ui.status){ui.status.textContent=message;ui.status.dataset.tone='bad';}
+        if(ui.save)ui.save.disabled=true;
+        if(ui.check)ui.check.disabled=false;
+      }
+      launchedStatus('R12-v2 R2 dashboard error: ' + message);
     }
   }
 
