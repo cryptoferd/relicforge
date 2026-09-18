@@ -89,9 +89,14 @@
     }
   }
 
+  function selectedInjectedWallet() {
+    if(window.RelicForgeWallets)return window.RelicForgeWallets.getProvider?.() || null;
+    return window.ethereum || null;
+  }
+
   async function ensureChain() {
     const chainId = Number(app.config.chainId);
-    const provider = window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+    const provider = selectedInjectedWallet();
     if (!provider?.request) throw new Error('No EVM wallet provider is available.');
     const currentHex = await provider.request({ method:'eth_chainId' });
     if (Number(BigInt(currentHex)) === chainId) return provider;
@@ -209,7 +214,7 @@
     $('whitelistMintBtn')?.addEventListener('click', () => mint('whitelist').catch(error => setStatus(error.shortMessage || error.message,true)));
     try {
       await refreshStatic();
-      const injected = window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+      const injected = selectedInjectedWallet();
       const accounts = await injected?.request?.({method:'eth_accounts'});
       if (accounts?.[0]) await connect();
     } catch (error) { setStatus(error.message,true); }

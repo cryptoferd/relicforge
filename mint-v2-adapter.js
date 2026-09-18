@@ -161,7 +161,8 @@
     return 'Not currently open';
   }
   function activeInjectedWallet() {
-    return window.RelicForgeWallets?.getProvider?.() || window.ethereum || null;
+    if(window.RelicForgeWallets)return window.RelicForgeWallets.getProvider?.() || null;
+    return window.ethereum || null;
   }
   async function getReadProvider(chainId) {
     if (app.provider) return app.provider;

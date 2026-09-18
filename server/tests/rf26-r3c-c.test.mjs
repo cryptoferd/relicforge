@@ -31,8 +31,11 @@ test('canonical mint initialization is preserved and verified aliases take prece
  assert.match(live,/routeTarget\?\.contract \|\| q\.get\('contract'\)/);
  assert.match(live,/routeTarget\?\.chainId \|\| q\.get\('chain'\)/);
  const html=read('mint.html');
- assert.ok(html.indexOf('rf26-mint-context.js')<html.indexOf('mint.js?v=11.1.6-r2v2'));
- assert.ok(html.indexOf('rf26-mint-context.js')<html.indexOf('mint-v2-live-ui.js?v=mainnet-slug-live-ui-r1'));
+ assert.ok(html.indexOf('rf26-mint-context.js')<html.indexOf('mint.js?v=multi-wallet-r1'));
+ assert.ok(html.indexOf('rf26-mint-context.js')<html.indexOf('mint-v2-live-ui.js?v=multi-wallet-r1'));
+ assert.ok(html.indexOf('wallet.js?v=11.1.6')<html.indexOf('mint-wallet-session.js?v=multi-wallet-r1'));
+ assert.match(html,/id="mintSwitchWalletBtn"/);
+ assert.match(html,/id="mintDisconnectWalletBtn"/);
  assert.equal((html.match(/rf26-mint-context\.js/g)||[]).length,1);
 });
 test('browser context accepts only the verified Ethereum target and preserves direct links',()=>{

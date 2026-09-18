@@ -117,7 +117,7 @@
     return window.ethereum||null;
   }
   async function requestMintWalletAccount(){
-    if(window.RelicForgeWallets?.requestAccount)return window.RelicForgeWallets.requestAccount();
+    if(window.RelicForgeWallets?.requestAccount)return window.RelicForgeWallets.requestAccount({forceChooser:true});
     const provider=activeInjectedWallet();
     if(!provider?.request)throw new Error('No EVM wallet provider detected.');
     const accounts=await provider.request({method:'eth_requestAccounts'});

@@ -59,6 +59,11 @@
     return String(window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/,'');
   }
 
+  function selectedInjectedWallet() {
+    if(window.RelicForgeWallets)return window.RelicForgeWallets.getProvider?.() || null;
+    return window.ethereum || null;
+  }
+
   async function providerFor(chainId) {
     const id=Number(chainId);
     const candidates=[];
@@ -78,7 +83,7 @@
       } catch(error) { last=error; }
     }
 
-    const injected=window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+    const injected=selectedInjectedWallet();
     if(injected) {
       const p=new window.ethers.BrowserProvider(injected);
       const net=await p.getNetwork();
@@ -211,7 +216,7 @@
 
   async function walletAddress() {
     try {
-      const injected=window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+      const injected=selectedInjectedWallet();
       const accounts=await injected?.request?.({method:'eth_accounts'});
       return accounts?.[0] && window.ethers.isAddress(accounts[0]) ? window.ethers.getAddress(accounts[0]) : null;
     } catch(_) { return null; }
@@ -449,7 +454,7 @@
 
     window.addEventListener('relicforge:v2-mint-confirmed',()=>setTimeout(()=>tick(true),700));
 
-    const injected=window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+    const injected=selectedInjectedWallet();
     try {
       injected?.on?.('accountsChanged',()=>setTimeout(()=>tick(true),50));
       injected?.on?.('chainChanged',()=>setTimeout(()=>tick(true),50));
