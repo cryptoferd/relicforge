@@ -43,9 +43,14 @@
 
   function queryConfig() {
     const q=new URLSearchParams(location.search);
-    const rawContract=q.get('contract') || window.RELICFORGE_MINT_CONFIG?.contract || '';
+    let routeTarget=null;
+    try{routeTarget=window.RelicForgeMintContext?.read?.()||null;}catch(error){
+      console.warn('RelicForge V2 live mint context:',error);
+      return null;
+    }
+    const rawContract=routeTarget?.contract || q.get('contract') || window.RELICFORGE_MINT_CONFIG?.contract || '';
     if(!window.ethers?.isAddress(rawContract)) return null;
-    const rawChain=Number(q.get('chain') || window.RELICFORGE_MINT_CONFIG?.chainId || 11155111);
+    const rawChain=Number(routeTarget?.chainId || q.get('chain') || window.RELICFORGE_MINT_CONFIG?.chainId || 11155111);
     if(![1,11155111].includes(rawChain)) return null;
     return {contract:window.ethers.getAddress(rawContract),chainId:rawChain};
   }
