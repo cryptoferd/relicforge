@@ -3,9 +3,18 @@
 
   if (!document.body?.classList.contains('dashboard-page-body')) return;
 
-  const CHAIN_ID = 11155111;
   const ZERO = '0x0000000000000000000000000000000000000000';
-  const EXPECTED_ADAPTER = '0xFd048cc2636c6def06a10BF35EC53Eb6ACB7Dc40'.toLowerCase();
+  function activeDashboardChainId(){
+    const id=Number(window.RelicForgeForgeNetwork?.selectedChainId?.()??0);
+    if(![1,11155111].includes(id))throw new Error('Choose Ethereum Mainnet or Sepolia.');
+    return id;
+  }
+  function expectedAdapter(){
+    const id=activeDashboardChainId();
+    const address=window.RELICFORGE_V2_ADDRESSES?.[id]?.randomnessAdapter;
+    if(!window.ethers?.isAddress(address||''))throw new Error('Verified randomness adapter is unavailable for the selected network.');
+    return window.ethers.getAddress(address).toLowerCase();
+  }
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -56,17 +65,17 @@
   async function readProvider() {
     if (!window.ethers) throw new Error('ethers.js is unavailable.');
     if (window.RelicForgeNetworks?.readProvider) {
-      const provider = window.RelicForgeNetworks.readProvider(CHAIN_ID);
+      const provider = window.RelicForgeNetworks.readProvider(activeDashboardChainId());
       if (window.RelicForgeNetworks.assertProvider) {
-        await window.RelicForgeNetworks.assertProvider(provider, CHAIN_ID);
+        await window.RelicForgeNetworks.assertProvider(provider, activeDashboardChainId());
       }
       return provider;
     }
     const base = apiBase();
     if (base) {
       const provider = new window.ethers.JsonRpcProvider(
-        `${base}/api/public/rpc/${CHAIN_ID}`,
-        CHAIN_ID,
+        `${base}/api/public/rpc/${activeDashboardChainId()}`,
+        activeDashboardChainId(),
         { staticNetwork:true, batchMaxCount:20 }
       );
       await provider.getBlockNumber();
@@ -74,7 +83,7 @@
     }
     const injected = window.RelicForgeWallets?.getProvider?.() || window.ethereum;
     if (injected) return new window.ethers.BrowserProvider(injected);
-    throw new Error('No Sepolia RPC provider is available.');
+    throw new Error('No RPC provider is available for the selected dashboard network.');
   }
 
   function selectedAddress() {
@@ -94,7 +103,7 @@
         c.pendingSupply(),
         c.mintPhases(),
       ]);
-      return String(adapter).toLowerCase() === EXPECTED_ADAPTER &&
+      return String(adapter).toLowerCase() === expectedAdapter() &&
         Number(pending) === 0 &&
         window.ethers.isAddress(phases) &&
         phases !== ZERO;
@@ -263,14 +272,12 @@
 
   async function creatorSigner(s) {
     if (window.RF26CreatorGuard?.signer) {
-      return window.RF26CreatorGuard.signer(s.address, { controller:s.controller, chainId:CHAIN_ID });
+      return window.RF26CreatorGuard.signer(s.address, { controller:s.controller, chainId:activeDashboardChainId() });
     }
     const injected = window.RelicForgeWallets?.getProvider?.() || window.ethereum;
     if (!injected?.request) throw new Error('Connect the collection controller wallet first.');
-    const chainHex = await injected.request({ method:'eth_chainId' });
-    if (Number(BigInt(chainHex)) !== CHAIN_ID) {
-      await injected.request({ method:'wallet_switchEthereumChain', params:[{ chainId:'0xaa36a7' }] });
-    }
+    const id=activeDashboardChainId();
+    await window.RelicForgeNetworks.ensureWalletChain(injected,id);
     const bp = new window.ethers.BrowserProvider(injected);
     const signer = await bp.getSigner();
     const who = window.ethers.getAddress(await signer.getAddress());
@@ -282,7 +289,7 @@
 
   async function delayedRevealRequestOverrides(provider) {
     if (!provider?.send) {
-      throw new Error('A live Sepolia RPC provider is required before requesting Chainlink randomness.');
+      throw new Error('A live RPC provider is required before requesting Chainlink randomness.');
     }
     const raw = await provider.send('eth_gasPrice', []);
     const gasPrice = BigInt(raw);

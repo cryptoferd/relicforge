@@ -3,7 +3,11 @@
   if (!document.body?.classList.contains('dashboard-page-body')) return;
 
   const $ = id => document.getElementById(id);
-  const CHAIN_ID = 11155111;
+  function activeDashboardChainId(){
+    const id=Number(window.RelicForgeForgeNetwork?.selectedChainId?.()??0);
+    if(![1,11155111].includes(id))throw new Error('Choose Ethereum Mainnet or Sepolia.');
+    return id;
+  }
   const ZERO = '0x' + '0'.repeat(64);
   const COLLECTION_ABI = ['function mintPhases() view returns(address)'];
   const MINT_PHASES_ABI = [
@@ -75,16 +79,16 @@
 
   async function readProvider() {
     const scope=await window.RelicForgeForgeNetwork.requireReady();
-    if(scope.chainId!==CHAIN_ID)throw new Error('This Stage Manager is available for verified Sepolia deployments.');
-    const provider=window.RelicForgeNetworks.readProvider(CHAIN_ID);
-    await window.RelicForgeNetworks.assertProvider(provider,CHAIN_ID);
+    if(scope.chainId!==activeDashboardChainId())throw new Error('The Stage Manager network does not match the selected dashboard network.');
+    const provider=window.RelicForgeNetworks.readProvider(activeDashboardChainId());
+    await window.RelicForgeNetworks.assertProvider(provider,activeDashboardChainId());
     state.provider=provider;
     return provider;
   }
 
   async function creatorSigner() {
     if(!state.collection)throw new Error('Select a verified collection first.');
-    return window.RF26CreatorGuard.signer(state.collection,{controller:state.controller,chainId:CHAIN_ID});
+    return window.RF26CreatorGuard.signer(state.collection,{controller:state.controller,chainId:activeDashboardChainId()});
   }
 
   function currentR12Address() {
@@ -97,7 +101,7 @@
 
   async function loadOnchain(address) {
     const ticket=state.readSerial=(state.readSerial||0)+1;
-    const bound=await window.RF26CreatorGuard.read(address,{chainId:CHAIN_ID});
+    const bound=await window.RF26CreatorGuard.read(address,{chainId:activeDashboardChainId()});
     const provider=await readProvider();
     const collection=new window.ethers.Contract(address,COLLECTION_ABI,provider);
     const mpAddress=window.ethers.getAddress(await collection.mintPhases());
@@ -154,7 +158,7 @@
     const coder=window.ethers.AbiCoder.defaultAbiCoder();
     const leaves=clean.map(entry=>window.ethers.keccak256(coder.encode(
       ['uint256','address','uint32','address','uint32'],
-      [BigInt(CHAIN_ID),collection,Number(phaseId),entry.address,Number(entry.allowance)]
+      [BigInt(activeDashboardChainId()),collection,Number(phaseId),entry.address,Number(entry.allowance)]
     )));
     const layers=[leaves];
     while(layers[layers.length-1].length>1){
@@ -177,7 +181,7 @@
   async function cloudAuth(){
     if(!window.RelicForgeCloud?.enabled?.())throw new Error('RelicForge Cloud is unavailable.');
     if(!state.collection)throw new Error('Select a verified collection first.');
-    const session=await window.RF26CreatorGuard.account(state.collection,{role:'controller',chainId:CHAIN_ID});
+    const session=await window.RF26CreatorGuard.account(state.collection,{role:'controller',chainId:activeDashboardChainId()});
     if(state.controller&&session.identity.controller!==state.controller.toLowerCase())
       throw new Error('The displayed MintPhases controller is stale. Refresh the collection.');
     await session.assert();
@@ -188,7 +192,7 @@
   async function getCloudList(phaseId){
     const session=await cloudAuth(),collection=session.identity.collection;
     await session.assert();
-    return window.RelicForgeCloud.json(`/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,{},true);
+    return window.RelicForgeCloud.json(`/api/collections/${activeDashboardChainId()}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,{},true);
   }
 
   async function publishCloudList(phaseId,tree){
@@ -201,9 +205,9 @@
       throw new Error('The onchain Approved Wallet root differs from this proof list. Refresh before publishing.');
     await session.assert();
     return window.RelicForgeCloud.json(
-      `/api/collections/${CHAIN_ID}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,
+      `/api/collections/${activeDashboardChainId()}/${encodeURIComponent(collection)}/v2/whitelist/${Number(phaseId)}`,
       {method:'PUT',body:JSON.stringify({
-        projectId:null,merkleRoot:tree.root,sourceType:2,sourceChainId:CHAIN_ID,sourceContract:null,snapshotBlock:0,
+        projectId:null,merkleRoot:tree.root,sourceType:2,sourceChainId:activeDashboardChainId(),sourceContract:null,snapshotBlock:0,
         entries:tree.entries.map(row=>({address:row.address,allowance:row.allowance,proof:row.proof}))
       })},true
     );

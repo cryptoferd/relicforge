@@ -113,10 +113,10 @@
   function initialPreference(){
     const query=new URLSearchParams(location.search).get('chain');
     if(query!=null){try{return core.chain(query);}catch{return null;}}
-    // The standalone legacy Dashboard is explicitly a Sepolia recovery view.
-    // This is not inferred from the wallet's currently selected network.
-    if(document.body?.classList.contains('dashboard-page-body'))return 11155111;
     try{const raw=sessionStorage.getItem(CHOICE)||localStorage.getItem(CHOICE);if(raw)return core.chain(raw);}catch{}
+    // The Creator Dashboard manages production Mainnet and historical Sepolia.
+    // Mainnet is the production default only when there is no explicit/saved choice.
+    if(document.body?.classList.contains('dashboard-page-body'))return 1;
     return null;
   }
   const initial=initialPreference();if(initial!=null){selected=initial;controller.select(initial);}

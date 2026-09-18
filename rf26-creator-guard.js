@@ -40,15 +40,14 @@
     return Object.freeze({...context,wallet:core.address(wallet),role,
       assert:()=>check(context,{wallet,role})});
   }
-  async function signer(collection,{controller=null,chainId=11155111}={}){
+  async function signer(collection,{controller=null,chainId=null}={}){
     let context=await read(collection,{chainId});
-    if(context.scope.chainId!==11155111)throw fail('Mainnet creator transactions remain locked.','RF26_NETWORK_LOCKED');
     if(controller&&core.address(controller)!==context.identity.controller)throw fail('The displayed controller is stale.');
     let n=net(),authorized;
     try{authorized=n.writeSigner();}catch{}
     if(!authorized||!n.account()||!eq(n.account(),context.identity.controller)){
       await n.connect({requireLaunch:true});
-      context=await read(collection,{chainId});
+      context=await read(collection,{chainId:context.scope.chainId});
       n=net();
     }
     const wallet=core.actor(context.identity,n.account(),'controller');
@@ -98,7 +97,7 @@
   }
   async function withPublication(collection,callback){
     if(typeof callback!=='function')throw fail('A publication callback is required.');
-    const session=await account(collection,{role:'creator',chainId:11155111});
+    const session=await account(collection,{role:'creator',chainId:net().selectedChainId()});
     const assert=()=>session.assert();
     await assert();
     return callback(Object.freeze({identity:session.identity,wallet:session.wallet,assert}));
