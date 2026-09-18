@@ -97,7 +97,12 @@
     try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text || `HTTP ${res.status}` }; }
     if (!res.ok) {
       if (res.status === 401) clearSession();
-      throw new Error(data?.error || `Cloud request failed (${res.status}).`);
+      const error = new Error(data?.error || data?.message || `Cloud request failed (${res.status}).`);
+      error.status = res.status;
+      error.statusCode = res.status;
+      error.code = data?.code || data?.errorCode || `HTTP_${res.status}`;
+      error.payload = data;
+      throw error;
     }
     return data;
   }

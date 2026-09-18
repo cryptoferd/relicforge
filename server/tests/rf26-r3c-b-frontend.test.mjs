@@ -6,7 +6,7 @@ const coreSource=fs.readFileSync(new URL('../../rf26-creator-urls-core.js',impor
 const core=await import('data:text/javascript;base64,'+Buffer.from(coreSource).toString('base64'));
 const {
   RESERVED_SLUGS,normalizeSlug,normalizeDeployment,canonicalMintPath,
-  deploymentPublicationPath,slugAvailabilityPath,publicationInput,
+  deploymentRegistrationPath,deploymentPublicationPath,slugAvailabilityPath,publicationInput,
   selectDeploymentContext,deploymentMode,friendlyError,createCreatorUrlClient
 }=core;
 
@@ -87,36 +87,65 @@ test('availability is public, normalized and production-only',async()=>{
   assert.deepEqual(calls,[slugAvailabilityPath('my-relic')]);
   await assert.rejects(client.availability(sepolia,'my-relic'));
 });
-test('editable slug save uses the dedicated authenticated endpoint and project identity',async()=>{
+test('editable slug save reconciles the onchain deployment before claiming the alias',async()=>{
   const calls=[];
   const client=createCreatorUrlClient({
     publicRequest:async()=>({}),
-    authenticatedRequest:async(path,options)=>{calls.push({path,options});return {slug:'my-relic'};}
+    authenticatedRequest:async(path,options)=>{
+      calls.push({path,options});
+      if(path===deploymentRegistrationPath())return {deployment:{status:'sealed'}};
+      return {slug:'my-relic'};
+    }
   });
   const result=await client.claim(mainnet,' My-Relic ');
   assert.equal(result.slug,'my-relic');
-  assert.equal(calls[0].path,deploymentPublicationPath(1,A,'/slug'));
-  assert.equal(calls[0].options.method,'PUT');
-  assert.deepEqual(JSON.parse(calls[0].options.body),{slug:'my-relic',projectId:mainnet.projectId});
+  assert.equal(calls.length,2);
+  assert.equal(calls[0].path,deploymentRegistrationPath());
+  assert.equal(calls[0].options.method,'POST');
+  assert.deepEqual(JSON.parse(calls[0].options.body),{chainId:1,contract:A});
+  assert.equal(calls[1].path,deploymentPublicationPath(1,A,'/slug'));
+  assert.equal(calls[1].options.method,'PUT');
+  assert.deepEqual(JSON.parse(calls[1].options.body),{slug:'my-relic',projectId:mainnet.projectId});
 });
-test('publication opt-in cannot request featuring while unlisted',async()=>{
+
+test('unsealed deployment stops before slug claim with an actionable error',async()=>{
+  const calls=[];
+  const client=createCreatorUrlClient({
+    publicRequest:async()=>({}),
+    authenticatedRequest:async(path,options)=>{
+      calls.push({path,options});
+      return {deployment:{status:'deployed'}};
+    }
+  });
+  await assert.rejects(
+    client.claim(mainnet,'my-relic'),
+    error=>error?.code==='DEPLOYMENT_NOT_SEALED'&&/Resume Deployment/i.test(error.message)
+  );
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].path,deploymentRegistrationPath());
+});
+test('publication opt-in reconciles the deployment and cannot request featuring while unlisted',async()=>{
   assert.deepEqual(publicationInput(false,true),{listed:false,featureRequested:false});
   const calls=[];
   const client=createCreatorUrlClient({
     publicRequest:async()=>({}),
-    authenticatedRequest:async(path,options)=>{calls.push({path,options});return {
-      publication:{slug:null,listed:false,featureRequested:false,featured:false}
-    };}
+    authenticatedRequest:async(path,options)=>{
+      calls.push({path,options});
+      if(path===deploymentRegistrationPath())return {deployment:{status:'sealed'}};
+      return {publication:{slug:null,listed:false,featureRequested:false,featured:false}};
+    }
   });
   await client.savePublication(mainnet,{listed:false,featureRequested:true});
-  assert.equal(calls[0].path,deploymentPublicationPath(1,A,'/publication'));
-  assert.deepEqual(JSON.parse(calls[0].options.body),{listed:false,featureRequested:false});
+  assert.equal(calls[0].path,deploymentRegistrationPath());
+  assert.equal(calls[1].path,deploymentPublicationPath(1,A,'/publication'));
+  assert.deepEqual(JSON.parse(calls[1].options.body),{listed:false,featureRequested:false});
 });
 test('server authorization and permanence errors map to creator-safe messages',()=>{
   assert.match(friendlyError({status:401}),/Sign in/);
   assert.match(friendlyError({status:403,code:'PRODUCTION_DISABLED'}),/not active yet/i);
   assert.match(friendlyError({status:409,code:'SLUG_TAKEN'}),/already claimed/i);
   assert.match(friendlyError({status:404}),/not registered/i);
+  assert.match(friendlyError({status:409,code:'DEPLOYMENT_NOT_SEALED'}),/Resume Deployment/i);
 });
 test('UI source does not guess credentials or expose secret storage conventions',()=>{
   const source=fs.readFileSync(new URL('../../rf26-creator-urls.js',import.meta.url),'utf8');

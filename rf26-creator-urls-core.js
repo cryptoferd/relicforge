@@ -59,6 +59,9 @@ export function canonicalMintPath(chainId,contract) {
 export function customMintPath(slug) {
   return `/mint/${encodeURIComponent(normalizeSlug(slug))}`;
 }
+export function deploymentRegistrationPath() {
+  return '/api/rc26/deployments';
+}
 export function deploymentPublicationPath(chainId,contract,suffix='') {
   const id=normalizeChainId(chainId),address=normalizeAddress(contract);
   if(suffix&&!['/slug','/publication'].includes(suffix))throw new CreatorUrlError('Invalid publication endpoint.');
@@ -165,6 +168,8 @@ export function friendlyError(error) {
     return 'That mint URL is already claimed by another collection.';
   if(code==='SLUG_PERMANENT')
     return 'This collection already has a permanent mint URL and it cannot be renamed.';
+  if(code==='DEPLOYMENT_NOT_SEALED')
+    return 'This collection is not fully sealed yet. Return to Studio and finish Resume Deployment before assigning a custom mint URL.';
   if(code==='PRODUCTION_DISABLED')
     return 'Production mint URLs are not active yet. Mainnet remains locked until the verified production release.';
   if(status===401)return 'Sign in to Relic Forge Cloud with the collection controller wallet.';
@@ -215,10 +220,28 @@ export function createCreatorUrlClient({publicRequest,authenticatedRequest}={}) 
     };
   }
 
+  async function reconcilePublicationDeployment(deployment) {
+    const result=await authenticatedRequest(
+      deploymentRegistrationPath(),
+      {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+        chainId:deployment.chainId,
+        contract:deployment.contract
+      })}
+    );
+    const status=String(result?.deployment?.status||'').toLowerCase();
+    if(status!=='sealed')
+      throw new CreatorUrlError(
+        'This collection is not fully sealed yet. Return to Studio and finish Resume Deployment before assigning publication settings.',
+        {status:409,code:'DEPLOYMENT_NOT_SEALED'}
+      );
+    return result.deployment;
+  }
+
   async function claim(rawDeployment,rawSlug,{projectId=null}={}) {
     const deployment=normalizeDeployment(rawDeployment);
     if(deploymentMode(deployment)!=='production')
       throw new CreatorUrlError('Custom mint URLs are production-only.',{status:403,code:'PRODUCTION_ONLY'});
+    await reconcilePublicationDeployment(deployment);
     const slug=normalizeSlug(rawSlug);
     const body={slug};
     const id=projectId??deployment.projectId;
@@ -233,6 +256,7 @@ export function createCreatorUrlClient({publicRequest,authenticatedRequest}={}) 
     const deployment=normalizeDeployment(rawDeployment);
     if(deploymentMode(deployment)!=='production')
       throw new CreatorUrlError('Public discovery is production-only.',{status:403,code:'PRODUCTION_ONLY'});
+    await reconcilePublicationDeployment(deployment);
     const body=publicationInput(listed,featureRequested);
     const result=await authenticatedRequest(
       deploymentPublicationPath(deployment.chainId,deployment.contract,'/publication'),

@@ -3,9 +3,9 @@ import {
   normalizeSlug,normalizeDeployment,canonicalMintPath,customMintPath,
   publicationView,selectDeploymentContext,deploymentMode,friendlyError,
   createCreatorUrlClient
-} from './rf26-creator-urls-core.js';
+} from './rf26-creator-urls-core.js?v=slug-conflict-reconcile-r1_7_1';
 
-const VERSION='R3C-B-R3-INLINE';
+const VERSION='R3C-B-R4-RECONCILE';
 const ids=Object.freeze({
   trigger:'rf26CreatorUrlTrigger',drawer:'rf26CreatorUrlDrawer',backdrop:'rf26CreatorUrlBackdrop',
   close:'rf26CreatorUrlClose',network:'rf26CreatorUrlNetwork',contract:'rf26CreatorUrlContract',
@@ -108,7 +108,14 @@ async function authenticatedRequest(path,options={}) {
   const cloud=cloudApi();
   const wallet=await requestWallet();
   await cloud.ensureSignedIn(wallet);
-  return cloud.json(path,options,true);
+  try{
+    return await cloud.json(path,options,true);
+  }catch(error){
+    throw new CreatorUrlError(friendlyError(error),{
+      status:Number(error?.status||error?.statusCode||500),
+      code:String(error?.code||error?.errorCode||'REQUEST_FAILED')
+    });
+  }
 }
 
 function client() {

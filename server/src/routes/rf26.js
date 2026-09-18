@@ -13,6 +13,7 @@ const FACTORY_ABI=['function isRelicForgeCollection(address) view returns(bool)'
 const COLLECTION_ABI=[
   'function factory() view returns(address)',
   'function creator() view returns(address)',
+  'function controller() view returns(address)',
   'function dataContract() view returns(address)',
   'function mintPhases() view returns(address)'
 ];
@@ -57,8 +58,8 @@ async function verifyV2(id,contract,policy){
   const [actualChain,code]=await Promise.all([provider.send('eth_chainId',[]),provider.getCode(contract)]);
   if(Number(BigInt(actualChain))!==id||!code||code==='0x')throw fail('Collection network or deployed code mismatch.',409);
   const collection=new Contract(contract,COLLECTION_ABI,provider);
-  const [factory,creator,data,phases]=await Promise.all([
-    collection.factory(),collection.creator(),collection.dataContract(),collection.mintPhases()
+  const [factory,creator,controller,data,phases]=await Promise.all([
+    collection.factory(),collection.creator(),collection.controller(),collection.dataContract(),collection.mintPhases()
   ]);
   if(address(factory)!==factoryAddress)throw fail('Collection Factory does not match the selected network.',403);
   const factoryContract=new Contract(factoryAddress,FACTORY_ABI,provider);
@@ -74,7 +75,13 @@ async function verifyV2(id,contract,policy){
   ]);
   if(address(dataCreator)!==address(creator)||address(boundCollection)!==address(contract))
     throw fail('Collection, artwork data, and mint-stage bindings do not match.',409);
-  return {creator:address(creator),factory:factoryAddress,sealed:Boolean(sealed),provenance:String(provenance).toLowerCase()};
+  return {
+    creator:address(creator),
+    controller:address(controller),
+    factory:factoryAddress,
+    sealed:Boolean(sealed),
+    provenance:String(provenance).toLowerCase()
+  };
 }
 export default async function rf26Routes(app){
   app.get('/api/public/forge-networks',async(request,reply)=>{
@@ -143,10 +150,15 @@ export default async function rf26Routes(app){
     const policy=assertDeploymentEnabled(await effectiveNetworkPolicy(await networkPolicy(id),request.user.wallet,Boolean(request.user.isFounder)));
     const requester=address(request.user.wallet);
     const projectId=request.body?.projectId?uuid(request.body.projectId):null;
-    if(projectId)await access(projectId,requester,true);
-    const creator=address(await verifyCollectionOwner(id,contract,requester));
     const verified=await verifyV2(id,contract,policy);
-    if(creator!==verified.creator)throw fail('Collection creator verification mismatch.',403);
+    const creator=verified.creator;
+    if(requester!==creator&&requester!==verified.controller)
+      throw fail('Connected wallet is not the collection creator or active controller.',403);
+    if(projectId){
+      if(requester!==creator)
+        throw fail('Only the collection creator may associate a deployment with a Studio project.',403);
+      await access(projectId,requester,true);
+    }
     const provenance=request.body?.provenance||null;
     if(provenance!==null&&!/^0x[0-9a-f]{64}$/i.test(String(provenance)))throw fail('Invalid content fingerprint.');
     if(provenance!==null&&String(provenance).toLowerCase()!==verified.provenance)
