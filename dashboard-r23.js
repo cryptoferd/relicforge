@@ -101,7 +101,9 @@
 
   async function loadOnchain(address) {
     const ticket=state.readSerial=(state.readSerial||0)+1;
-    const bound=await window.RF26CreatorGuard.read(address,{chainId:activeDashboardChainId()});
+    const readChainId=Number(activeDashboardChainId());
+    const readAddress=window.ethers.getAddress(address);
+    const bound=await window.RF26CreatorGuard.read(readAddress,{chainId:readChainId});
     const provider=await readProvider();
     const collection=new window.ethers.Contract(address,COLLECTION_ABI,provider);
     const mpAddress=window.ethers.getAddress(await collection.mintPhases());
@@ -122,10 +124,16 @@
       })));
     }
     await bound.assert();
-    if(ticket!==state.readSerial)throw new Error('A newer collection selection replaced this dashboard read.');
+    const selectedAddress=currentR12Address();
+    const selectedStillMatches=!!selectedAddress&&window.ethers.getAddress(selectedAddress).toLowerCase()===readAddress.toLowerCase();
+    const networkStillMatches=Number(activeDashboardChainId())===readChainId;
+    if(!selectedStillMatches||!networkStillMatches)
+      throw new Error('A newer collection selection replaced this dashboard read.');
+    if(ticket!==state.readSerial)
+      console.debug('Relic Forge dashboard accepted an overlapping read for the same collection and network.');
     if(window.ethers.getAddress(controller).toLowerCase()!==bound.identity.controller||mpAddress.toLowerCase()!==bound.identity.phases)
       throw new Error('Collection controller or MintPhases binding changed during refresh.');
-    state.collection=window.ethers.getAddress(address);
+    state.collection=readAddress;
     state.mintPhasesAddress=mpAddress;
     state.controller=window.ethers.getAddress(controller);
     state.phases=rows;
