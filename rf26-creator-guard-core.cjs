@@ -48,10 +48,11 @@
     return address(wallet);
   }
   function transaction(identityValue,tx,hashSelector){
-    if(identityValue.chainId!==11155111)
-      throw fail('Mainnet creator transactions remain locked pending lifecycle certification.','RF26_NETWORK_LOCKED');
+    const transactionChain=chain(identityValue?.chainId);
+    if(transactionChain===1&&(!String(identityValue?.releaseId||'')||!/^[0-9a-f]{64}$/.test(String(identityValue?.manifestHash||'').toLowerCase())))
+      throw fail('Production creator transactions require a certified release identity.','RF26_NETWORK_LOCKED');
     if(!tx||typeof hashSelector!=='function')throw fail('A populated creator transaction is required.');
-    if(tx.chainId!=null&&chain(tx.chainId)!==identityValue.chainId)throw fail('Creator transaction chain mismatch.');
+    if(tx.chainId!=null&&chain(tx.chainId)!==transactionChain)throw fail('Creator transaction chain mismatch.');
     const to=address(tx.to);
     if(to!==identityValue.phases)throw fail('Stage Manager may write only to this collection’s verified MintPhases contract.');
     const data=String(tx.data||'0x').toLowerCase();
