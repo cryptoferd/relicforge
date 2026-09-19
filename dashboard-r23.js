@@ -475,6 +475,11 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
     if(address===state.collection&&$('r23StageManager'))return;
     try{await loadOnchain(address);renderPanel();}catch(error){console.warn('R2.3 dashboard stage manager:',error);}
   }
+  function stageManagerMutationNeedsScan(mutation){
+    const target=mutation?.target?.nodeType===1?mutation.target:mutation?.target?.parentElement;
+    if(!target)return true;
+    return !target.closest?.('#r23StageManager,#r23MobileQuickStatus');
+  }
   function scheduleScan(){clearTimeout(state.scanTimer);state.scanTimer=setTimeout(scan,120);}
 
   function setQuickStatus(message,tone='neutral'){
@@ -488,6 +493,10 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
     setQuickStatus('Opening the stage creator…','working');
     const address=currentR12Address();
     if(!address)throw new Error('Open a verified R12-v2 collection first.');
+    // Cancel any scan queued before the user explicitly opened the creator.
+    // Mutations caused by this manager's own status UI are filtered below so
+    // they cannot start a competing read and invalidate this one.
+    clearTimeout(state.scanTimer);
     if(address!==state.collection||!$('r23StageManager')){
       setQuickStatus('Loading MintPhases and controller state…','working');
       await loadOnchain(address);
@@ -541,7 +550,14 @@ This preserves the stage price, schedule, supply, Approved Wallet Merkle root, a
       $('r23StageManager')?.remove();
     });
   }
-  const detail=$('launchedCollectionDetail');if(detail)new MutationObserver(scheduleScan).observe(detail,{childList:true,subtree:true});
+  const detail=$('launchedCollectionDetail');
+  if(detail)new MutationObserver(mutations=>{
+    // The quick-action diagnostic and Stage Manager update their own DOM.
+    // Those self-mutations must not schedule a second loadOnchain() while the
+    // explicit quick-action read is still in flight. Real collection-detail
+    // mutations still schedule a scan and preserve the stale-selection guard.
+    if(mutations.some(stageManagerMutationNeedsScan))scheduleScan();
+  }).observe(detail,{childList:true,subtree:true});
   window.addEventListener('relicforge:wallet-connected',scheduleScan);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleScan);else scheduleScan();
 })();
