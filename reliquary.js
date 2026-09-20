@@ -176,7 +176,12 @@
     $('reliquaryConnectBtn')?.classList.toggle('hidden', own && Boolean(state.wallet));
 
     if (own && profile?.username) {
-      history.replaceState(null, '', `${location.pathname}?u=${encodeURIComponent(profile.username)}`);
+      // Keep the signed-in Reliquary on its authenticated route. Public profile
+      // links still use ?u= via Copy Profile Link, but retaining ?u here causes
+      // reloads to enter the public-profile initialization path first.
+      const ownUrl = new URL(location.href);
+      ownUrl.searchParams.delete('u');
+      history.replaceState(null, '', ownUrl.pathname + ownUrl.search + ownUrl.hash);
       state.publicUsername = profile.username;
     }
   }
@@ -484,7 +489,14 @@
         const session = window.RelicForgeCloud?.loadSession?.();
         if (session?.wallet && session.wallet.toLowerCase() === String(state.profile?.wallet || '').toLowerCase()) {
           state.wallet = session.wallet;
-          renderProfile(state.profile, { own: true });
+          if (window.RelicForgeCloud?.sessionIsUsable?.(session, session.wallet)) {
+            // This is the signed-in user's own public URL. Re-enter the
+            // authenticated load path so automatic onchain refresh runs.
+            await loadMe();
+          } else {
+            renderProfile(state.profile, { own: true });
+            setStatus('Your Reliquary is open from cached public data. Reconnect your wallet to refresh verified onchain activity.');
+          }
         }
       } catch (error) {
         setStatus(error.message, 'bad');
