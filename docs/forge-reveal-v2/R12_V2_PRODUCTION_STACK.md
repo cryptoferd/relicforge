@@ -1,5 +1,7 @@
 # R12-v2 — Ethereum Production Stack / Sepolia Candidate
 
+> **Historical / superseded architecture notice:** This document records an earlier timed/permissionless batching design and is retained as development history. It does **not** describe the current R12-v2 R2 Mainnet Forge path. Current Forge Reveal mints ownership immediately and requests verified randomness from the same mint transaction. Grouping is transaction-level, with at most 20 NFTs per reveal group; separate mint transactions are not accumulated across a 30-second window. See `R12_V2_R2_CURRENT_REVEAL_BEHAVIOR.md` for the current behavior.
+
 Status: **production-shaped contract candidate; local/fork validation required**
 Mainnet activation: **NO**
 

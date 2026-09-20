@@ -22,7 +22,7 @@
   <h1>Creator Guide</h1>
   <p>Relic Forge uses an immediate-ownership Forge Reveal architecture. The collector receives the NFT in the mint transaction, verified randomness is requested automatically, and the callback budget scales with the size of each reveal group. Ethereum Mainnet is available for production launches, while Sepolia remains available for rehearsals and development.</p>
 
-  <div class="note good"><strong>Forge Reveal:</strong> Ownership is immediate. The mint transaction automatically requests verified randomness, and the collection reveals after the exact Chainlink word is delivered. The 30-second batch policy and 0.005 ETH maximum randomness cost per request/group are platform-managed—not creator settings.</div>
+  <div class="note good"><strong>Forge Reveal:</strong> Ownership is immediate. The mint transaction automatically requests verified randomness, and the collection reveals after the exact Chainlink word is delivered. NFTs minted together use reveal groups of at most 20; separate mint transactions are not combined by a timed batch. The 0.005 ETH maximum randomness cost per request/group is platform-managed—not a creator setting.</div>
 
   <div class="steps">
     <section class="step"><h3>Connect and save</h3><p>Connect the EVM wallet that owns the creator controls. Cloud project saves are wallet-scoped. Downloaded project backups remain a separate recovery path.</p></section>
@@ -32,7 +32,7 @@
     <section class="step"><h3>Build and preview</h3><p>Resolve rule, exact-count, and rarity-distribution conflicts. Preview the collection and compile the exact recipe set. Relic Forge validates recipes before ProjectData can be sealed.</p></section>
     <section class="step"><h3>Set collection identity</h3><p>Confirm name, symbol, description, maximum supply, payout receiver, royalty receiver, and royalty percentage. Creator proceeds stay separate from reveal funding.</p></section>
     <section class="step"><h3>Choose reveal mode</h3><p><strong>Deferred Reveal = 0.</strong> NFTs mint immediately with the pre-reveal artwork. The creator later completes a two-transaction reveal: Step 1 freezes the minted set and prepares its randomness budget; Step 2 requests verified randomness. The callback finishes the reveal automatically—there is no third creator reveal transaction.</p><p><strong>Forge Reveal = 1.</strong> NFTs mint directly to the collector. The same mint transaction automatically requests randomness for groups of at most 20. After verified randomness arrives, the recipes are assigned and the NFTs reveal automatically.</p></section>
-    <section class="step"><h3>Review platform reveal policy</h3><p>The Forge batch window is <strong>30 seconds</strong> and the maximum randomness cost per request/group is <strong>0.005 ETH</strong>. Both are platform-managed. Studio shows them in the Technical breakdown instead of exposing creator-editable fields.</p></section>
+    <section class="step"><h3>Review Forge reveal policy</h3><p>Forge grouping is <strong>transaction-level</strong>: NFTs minted together are split into reveal groups of at most 20, and each group receives its own verified randomness request. Separate mint transactions do not wait for or join a shared timed batch. The maximum randomness cost per request/group is <strong>0.005 ETH</strong> and is platform-managed.</p></section>
     <section class="step"><h3>Choose fee model</h3><p><strong>Creator Covers Platform Fee</strong> prepays the quoted platform fee at launch and initializes reveal funding. <strong>Collector Covers Platform Fee</strong> adds the active fee during mints when the ETH/USD quote is healthy. Reveal funding uses the collection hopper first and the shared Reserve only for an allowed bounded shortfall.</p></section>
     <section class="step"><h3>Configure mint stages</h3><p>MintPhases stores public and Approved Wallet stages, including price, schedules, stage supply, wallet caps, proofs, priority, enabled state, and the master Minting switch.</p></section>
     <section class="step"><h3>Forge the collection</h3><p>The Relic Forge Factory creates the collection and its linked data and mint-stage contracts, then Studio writes artwork and recipe data, validates recipes, seals content, creates stages, and verifies the final bindings.</p></section>
@@ -40,7 +40,7 @@
   </div>
 
   <h2>Forge Reveal callback tiers</h2>
-  <p>Relic Forge sizes the consumer callback gas to the reveal group rather than paying for a single fixed callback envelope. Groups larger than 20 split automatically.</p>
+  <p>Relic Forge sizes the consumer callback gas to each reveal group created by the current mint transaction rather than paying for a single fixed callback envelope. A mint above 20 NFTs splits automatically; separate mint transactions create separate reveal groups.</p>
   <div class="tiers">
     <div class="tier"><strong>1 NFT</strong><span>400,000 gas</span></div>
     <div class="tier"><strong>2–4 NFTs</strong><span>550,000 gas</span></div>
@@ -53,7 +53,7 @@
   <table><thead><tr><th>Stage</th><th>What happens</th></tr></thead><tbody>
     <tr><td>Collector signs mint</td><td>The Collection validates MintPhases, price, limits, and remaining supply.</td></tr>
     <tr><td>Immediate ownership</td><td>The NFT <code>Transfer</code> events are emitted in the mint transaction. The collector owns the NFTs before the randomness request is created.</td></tr>
-    <tr><td>Automatic request</td><td>The Collection groups the newly minted NFTs into reveal groups of at most 20, selects the adaptive callback-gas tier, checks the platform 0.005 ETH ceiling, and requests randomness automatically.</td></tr>
+    <tr><td>Automatic request</td><td>The Collection groups the NFTs from that mint transaction into reveal groups of at most 20, selects the adaptive callback-gas tier, checks the platform 0.005 ETH ceiling, and requests randomness automatically. A separate mint transaction starts its own group or groups.</td></tr>
     <tr><td>Verified word</td><td>The Chainlink adapter records the exact verified random word first and attempts delivery to the Collection. The word is retained even if downstream delivery needs a retry.</td></tr>
     <tr><td>Automatic reveal</td><td>Successful delivery assigns unique recipes to the group and completes reveal. The collector does not sign a second transaction.</td></tr>
     <tr><td>Exceptional replay</td><td>If automatic downstream delivery fails, the stored exact word can be replayed permissionlessly with <code>replayFulfillment(localRequestId)</code>. Replay uses the same word—no reroll or replacement randomness.</td></tr>
@@ -75,7 +75,7 @@
     <li>Each Collection, ProjectData, and MintPhases clone is permanently bound to its implementation through EIP-1167 runtime bytecode.</li>
     <li>There is no creator reroll path for verified randomness.</li>
     <li>Deferred Reveal's prepared/frozen supply and the eventual exact random word should be treated as security-sensitive state.</li>
-    <li>Platform batch-window and randomness-ceiling policy are not normal creator controls.</li>
+    <li>The randomness ceiling is not a normal creator control. A legacy 30-second <code>batchWindowSeconds</code> value remains in deployed ABI/state for compatibility, but it does not combine separate R2 Forge mint transactions.</li>
   </ul>
 
   <div class="note"><strong>Security status:</strong> the current Forge Reveal stack has automated and live validation coverage, including callback-gas matrix checks and exact-word replay validation. This is not a professional security audit and does not prove the absence of vulnerabilities.</div>

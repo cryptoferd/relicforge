@@ -24,12 +24,12 @@
   <p class="lede">Relic Forge separates collection ownership, immutable artwork and recipe data, and mint-stage policy. Forge Reveal uses immediate NFT ownership with automatic verified randomness, sizing the callback budget to each reveal group.</p>
   <div class="note"><strong>Current environment:</strong> Ethereum Mainnet is live for production deployments. Ethereum Sepolia remains available for rehearsals and development. Each network uses its own verified Relic Forge deployment stack.</div>
 
-  <h2>The 30-second version</h2>
+  <h2>Current architecture at a glance</h2>
   <div class="grid">
     <div class="card"><h3>Ownership is immediate</h3><p>Successful collector and creator mints emit ERC-721 Transfer events in the mint transaction. There is no reservation-to-NFT settlement step in the Forge Reveal path.</p></div>
     <div class="card"><h3>Randomness is automatic</h3><p>Forge mints request randomness automatically after ownership is created. Collectors do not return for a second transaction to reveal.</p></div>
     <div class="card"><h3>Callback gas is adaptive</h3><p>Each reveal group uses one of five callback-gas tiers from 400k through 1.4M. Mints above 20 NFTs split into independent groups of at most 20.</p></div>
-    <div class="card"><h3>Policy is platform-managed</h3><p>The Forge batch window is fixed at 30 seconds and the maximum randomness cost per request/group is 0.005 ETH for the current release. Creator LaunchConfig fields remain ABI-compatible but are overridden by the Factory defaults.</p></div>
+    <div class="card"><h3>Grouping is per mint transaction</h3><p>NFTs minted together share automatic reveal groups of at most 20. Separate mint transactions are not held open or combined by a timer. The maximum randomness cost per request/group is 0.005 ETH for the current release.</p></div>
   </div>
 
   <h2>Contract graph</h2>
@@ -59,7 +59,7 @@ Shared infrastructure
   <div class="flow">
     <div class="flow-row"><b>1</b><div><strong>MintPhases validates the sale.</strong><span class="quiet">Stage state, schedule, access proof, wallet cap, price, stage supply, and collection supply are checked.</span></div></div>
     <div class="flow-row"><b>2</b><div><strong>The NFTs are minted to the recipient.</strong><span class="quiet">Ownership and Transfer events happen before the randomness request. <code>totalCommitted == totalMinted</code> and <code>pendingSupply() == 0</code> remain the R2 ownership invariants.</span></div></div>
-    <div class="flow-row"><b>3</b><div><strong>The mint is split into reveal groups.</strong><span class="quiet">A group contains at most 20 NFTs. A 50-NFT mint therefore requests 20 + 20 + 10.</span></div></div>
+    <div class="flow-row"><b>3</b><div><strong>That mint transaction is split into reveal groups.</strong><span class="quiet">A group contains at most 20 NFTs. A 10-NFT mint uses one 10-NFT group; a 50-NFT mint uses 20 + 20 + 10. A later, separate mint starts its own group or groups.</span></div></div>
     <div class="flow-row"><b>4</b><div><strong>Each group gets an adaptive callback budget.</strong><span class="quiet">The Collection selects the tier from group quantity and checks the current quote against the 0.005 ETH platform ceiling.</span></div></div>
     <div class="flow-row"><b>5</b><div><strong>The adapter requests Chainlink VRF v2.5 direct funding.</strong><span class="quiet">Adapter overhead is added upstream while the Collection's requested consumer gas stays tied to the quantity tier.</span></div></div>
     <div class="flow-row"><b>6</b><div><strong>The exact word is recorded, then delivered.</strong><span class="quiet">The adapter stores the verified word before downstream delivery. Successful delivery assigns unique recipes and completes the group's reveal automatically.</span></div></div>
@@ -77,12 +77,13 @@ Shared infrastructure
 
   <h2>Platform randomness policy</h2>
   <table><tbody>
-    <tr><th>Forge batch window</th><td><strong>30 seconds</strong> · platform managed</td></tr>
+    <tr><th>Forge grouping</th><td><strong>Per mint transaction</strong> · reveal groups contain at most 20 NFTs</td></tr>
+    <tr><th>Legacy <code>batchWindowSeconds</code></th><td><strong>30 seconds</strong> remains stored for ABI/state compatibility; the current R2 Forge path does not use it to combine separate mint transactions</td></tr>
     <tr><th>Maximum randomness cost / request or group</th><td><strong>0.005 ETH</strong> · platform managed</td></tr>
     <tr><th>Maximum automatic reveal group</th><td><strong>20 NFTs</strong></td></tr>
     <tr><th>VRF confirmations</th><td><strong>3</strong></td></tr>
   </tbody></table>
-  <p>Creators do not edit the batch window or randomness ceiling in normal Studio controls. The Factory preserves the fields in <code>LaunchConfig</code> for ABI compatibility, but overwrites them with the platform defaults for new R2 collections.</p>
+  <p>Creators do not edit the randomness ceiling in normal Studio controls. The legacy <code>batchWindowSeconds</code> field remains in <code>LaunchConfig</code> and deployed collection state for compatibility, but the current R2 automatic Forge path requests randomness from the mint transaction itself and does not accumulate separate mint transactions across that time value.</p>
 
   <h2>Exact-word replay is recovery, not a reroll</h2>
   <p>The Chainlink adapter records the verified random word before attempting Collection delivery. If downstream delivery fails, <code>deliveredForLocalRequest</code> remains false but the word remains available. Anyone can call <code>replayFulfillment(localRequestId)</code> to retry delivery of that <em>same stored word</em>. Replay does not request replacement randomness and cannot create a reroll.</p>

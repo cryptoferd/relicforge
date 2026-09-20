@@ -589,7 +589,7 @@
       <div class="vrf-credit-box">
         <details class="forge-advanced-details">
           <summary>Technical breakdown</summary>
-          <div class="forge-inline-status"><strong>FORGE RANDOMNESS POLICY</strong><br/>Forge batch window policy: 30 seconds (platform managed). Maximum randomness cost per reveal request/group: 0.005 ETH (platform managed). Adaptive consumer callback gas: 1 NFT = 400k; 2–4 = 550k; 5–10 = 900k; 11–15 = 1.15M; 16–20 = 1.4M. Mints above 20 NFTs split into independent groups of at most 20. NFT ownership is still minted immediately and automatic reveal randomness is requested in the mint transaction.</div>
+          <div class="forge-inline-status"><strong>FORGE RANDOMNESS POLICY</strong><br/>Forge grouping is transaction-level: NFTs minted together use reveal groups of at most 20, while separate mint transactions are not combined by a timer. Maximum randomness cost per reveal request/group: 0.005 ETH (platform managed). Adaptive consumer callback gas: 1 NFT = 400k; 2–4 = 550k; 5–10 = 900k; 11–15 = 1.15M; 16–20 = 1.4M. A mint above 20 NFTs splits into independent groups of at most 20. NFT ownership is minted immediately and automatic reveal randomness is requested in the mint transaction.</div>
         </details>
         <div class="forge-inline-status" id="vrfQuoteStatus">Loading platform randomness safety check...</div>
       </div>
