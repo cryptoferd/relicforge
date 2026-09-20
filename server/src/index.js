@@ -69,7 +69,7 @@ await app.register(cors, {
     if (originAllowed(origin)) return cb(null, true);
     cb(new Error('Origin not allowed.'), false);
   },
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['content-type','authorization']
 });
 await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' });
