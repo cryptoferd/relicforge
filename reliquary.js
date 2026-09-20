@@ -252,14 +252,21 @@
     const payload = await authJson('/api/reliquary/me');
     renderProfile(payload.profile, { own: true });
     await loadShowcase({ own: true });
-    const refreshedAt = payload.profile?.statsRefreshedAt ? new Date(payload.profile.statsRefreshedAt).getTime() : 0;
-    const scopedStatsReady = payload.profile?.stats?.schema === 'reliquary-stats@2' &&
-      payload.profile?.stats?.testnet?.schema === 'reliquary-stats@2';
-    if (!scopedStatsReady || !refreshedAt || Date.now() - refreshedAt > 15 * 60_000) {
-      setStatus('Reliquary opened. Refreshing verified onchain activity…');
-      refreshStats().catch(error => setStatus(`Profile loaded, but onchain refresh could not finish: ${error.message}`, 'bad'));
-    } else {
-      setStatus(`Reliquary ready · stats refreshed ${new Date(refreshedAt).toLocaleString()}.`, 'good');
+
+    // Always run the verified activity refresh when My Reliquary opens.
+    // The backend owns a short throttle window, so rapid reloads reuse the
+    // recent cache instead of repeatedly rescanning every registered collection.
+    setStatus('Reliquary opened. Refreshing verified onchain activity…');
+    try {
+      await refreshStats();
+    } catch (error) {
+      const refreshedAt = payload.profile?.statsRefreshedAt
+        ? new Date(payload.profile.statsRefreshedAt).getTime()
+        : 0;
+      const cached = refreshedAt
+        ? ` Cached stats from ${new Date(refreshedAt).toLocaleString()} remain visible.`
+        : '';
+      setStatus(`Profile loaded, but automatic onchain refresh could not finish: ${error.message}.${cached}`, 'bad');
     }
   }
 
