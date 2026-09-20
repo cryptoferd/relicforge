@@ -123,7 +123,49 @@
       if (detail && detail.textContent !== 'Verified deployment infrastructure') detail.textContent = 'Verified deployment infrastructure';
     }
   }
+  function installButtonFeedback() {
+    if (window.RelicForgeButtonFeedback?.version === 'r1.8') return;
+
+    const actionable = target => target?.closest?.('button,.primary-btn,.secondary-btn,.ghost-btn,[role="button"]') || null;
+    const unavailable = element => !element || element.matches?.(':disabled,[aria-disabled="true"]');
+
+    const pulse = element => {
+      if (unavailable(element)) return;
+      element.classList.add('rf-button-pressed');
+      clearTimeout(element.__rfPressedTimer);
+      element.__rfPressedTimer = setTimeout(() => element.classList.remove('rf-button-pressed'), 180);
+    };
+
+    document.addEventListener('pointerdown', event => pulse(actionable(event.target)), true);
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      pulse(actionable(event.target));
+    }, true);
+
+    function setBusy(element, busy, label = '') {
+      if (!element) return;
+      if (busy) {
+        if (!element.dataset.rfBusyOriginalText) element.dataset.rfBusyOriginalText = element.textContent || '';
+        element.classList.add('rf-action-busy');
+        element.setAttribute('aria-busy', 'true');
+        if ('disabled' in element) element.disabled = true;
+        if (label) element.textContent = label;
+      } else {
+        element.classList.remove('rf-action-busy');
+        element.removeAttribute('aria-busy');
+        if ('disabled' in element) element.disabled = false;
+        if (element.dataset.rfBusyOriginalText) {
+          element.textContent = element.dataset.rfBusyOriginalText;
+          delete element.dataset.rfBusyOriginalText;
+        }
+      }
+    }
+
+    window.RelicForgeButtonFeedback = Object.freeze({ version:'r1.8', setBusy });
+  }
+
   function install() {
+    installButtonFeedback();
     installNetworkControl();
     // Studio Step 5 owns the single canonical deployment-network selector.
     // The older injected Collection Network card is intentionally disabled.

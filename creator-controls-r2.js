@@ -204,18 +204,34 @@
     return `Deferred reveal is ready. Revealing now will freeze exactly ${s.totalMinted.toLocaleString()} currently minted NFT${s.totalMinted === 1 ? '' : 's'}.`;
   }
 
+  function marketplaceRefreshTarget(s) {
+    // When Forge automatic reveal has no outstanding requests, every currently
+    // minted token is revealed. During a hybrid collection with an outstanding
+    // Forge request, the already-completed delayed set is still safe to refresh.
+    if (s.futureRevealMode === 1 && s.activeAutoRevealRequests === 0 && s.totalMinted > 0) return s.totalMinted;
+    if (s.delayedRevealed && s.delayedRevealSupply > 0) return s.delayedRevealSupply;
+    return 0;
+  }
+
   function actionHtml(s) {
-    if (s.delayedRevealed || s.futureRevealMode === 1 || s.totalMinted === 0) return '';
-    if (s.delayedRevealRequestId > 0n) {
-      return '<button class="primary-btn" type="button" disabled>WAITING FOR AUTOMATIC REVEAL</button>';
+    const actions = [];
+    if (!s.delayedRevealed && s.futureRevealMode !== 1 && s.totalMinted > 0) {
+      if (s.delayedRevealRequestId > 0n) {
+        actions.push('<button class="primary-btn" type="button" disabled>WAITING FOR AUTOMATIC REVEAL</button>');
+      } else if (s.delayedRevealPrepared) {
+        actions.push('<button class="primary-btn" id="rfR2RevealStep2" type="button">CONTINUE REVEAL — STEP 2 OF 2</button>');
+      } else if (!s.delayedRevealRequested) {
+        actions.push('<button class="primary-btn" id="rfR2RevealStep1" type="button">REVEAL COLLECTION — STEP 1 OF 2</button>');
+      } else {
+        actions.push('<button class="primary-btn" type="button" disabled>REVEAL PREPARATION IN PROGRESS</button>');
+      }
     }
-    if (s.delayedRevealPrepared) {
-      return '<button class="primary-btn" id="rfR2RevealStep2" type="button">CONTINUE REVEAL — STEP 2 OF 2</button>';
+
+    const refreshThrough = marketplaceRefreshTarget(s);
+    if (refreshThrough > 0) {
+      actions.push(`<button class="ghost-btn" id="rfR2MarketplaceRefresh" type="button" data-through="${refreshThrough}">REFRESH OPENSEA METADATA</button>`);
     }
-    if (!s.delayedRevealRequested) {
-      return '<button class="primary-btn" id="rfR2RevealStep1" type="button">REVEAL COLLECTION — STEP 1 OF 2</button>';
-    }
-    return '<button class="primary-btn" type="button" disabled>REVEAL PREPARATION IN PROGRESS</button>';
+    return actions.join('');
   }
 
   function render(detail, s) {
@@ -259,8 +275,9 @@
     `;
     detail.appendChild(panel);
 
-    panel.querySelector('#rfR2RevealStep1')?.addEventListener('click', () => executeRevealStep(1, s));
-    panel.querySelector('#rfR2RevealStep2')?.addEventListener('click', () => executeRevealStep(2, s));
+    panel.querySelector('#rfR2RevealStep1')?.addEventListener('click', event => executeRevealStep(1, s, event.currentTarget));
+    panel.querySelector('#rfR2RevealStep2')?.addEventListener('click', event => executeRevealStep(2, s, event.currentTarget));
+    panel.querySelector('#rfR2MarketplaceRefresh')?.addEventListener('click', event => executeMarketplaceRefresh(s, event.currentTarget));
   }
 
   function setStatus(message, bad = false) {
@@ -301,9 +318,33 @@
     // branch that can otherwise make Step 2 revert during estimation.
     return Object.freeze({ gasPrice, gasLimit: 1500000n });
   }
-  async function executeRevealStep(step, snapshot) {
+  function setActionBusy(button, busy, label = '') {
+    if (!button) return;
+    if (window.RelicForgeButtonFeedback?.setBusy) {
+      window.RelicForgeButtonFeedback.setBusy(button, busy, label);
+      return;
+    }
+    if (busy) {
+      if (!button.dataset.rfBusyOriginalText) button.dataset.rfBusyOriginalText = button.textContent || '';
+      button.classList.add('rf-action-busy');
+      button.setAttribute('aria-busy', 'true');
+      button.disabled = true;
+      if (label) button.textContent = label;
+    } else {
+      button.classList.remove('rf-action-busy');
+      button.removeAttribute('aria-busy');
+      button.disabled = false;
+      if (button.dataset.rfBusyOriginalText) {
+        button.textContent = button.dataset.rfBusyOriginalText;
+        delete button.dataset.rfBusyOriginalText;
+      }
+    }
+  }
+
+  async function executeRevealStep(step, snapshot, button) {
     if (state.busy) return;
     state.busy = true;
+    setActionBusy(button, true, step === 1 ? 'PREPARING REVEAL…' : 'REQUESTING RANDOMNESS…');
     try {
       setStatus(step === 1
         ? 'Step 1 of 2: preparing and funding the delayed reveal…'
@@ -348,6 +389,64 @@
       console.error('RelicForge R2 reveal action:', error);
       setStatus(error?.shortMessage || error?.reason || error?.message || 'Reveal action failed.', true);
     } finally {
+      setActionBusy(button, false);
+      state.busy = false;
+    }
+  }
+
+  async function executeMarketplaceRefresh(snapshot, button) {
+    if (state.busy) return;
+    state.busy = true;
+    setActionBusy(button, true, 'QUEUING OPENSEA REFRESH…');
+    try {
+      if (!window.RelicForgeCloud?.json || !window.RelicForgeCloud?.ensureSignedIn) {
+        throw new Error('Relic Forge Cloud sign-in is unavailable.');
+      }
+
+      const provider = await readProvider();
+      const live = await readState(snapshot.address, provider);
+      const throughTokenId = marketplaceRefreshTarget(live);
+      if (throughTokenId < 1) throw new Error('No fully revealed token range is ready for marketplace refresh.');
+
+      const injected = window.RelicForgeWallets?.getProvider?.() || window.ethereum;
+      if (!injected?.request) throw new Error('Connect the collection creator or controller wallet first.');
+      const browserProvider = new window.ethers.BrowserProvider(injected);
+      const signer = await browserProvider.getSigner();
+      const wallet = window.ethers.getAddress(await signer.getAddress());
+      await window.RelicForgeCloud.ensureSignedIn(wallet);
+
+      let nextTokenId = 1;
+      let queued = 0;
+      let failures = 0;
+      while (nextTokenId && nextTokenId <= throughTokenId) {
+        setStatus(`OpenSea refresh: queuing metadata for token ${nextTokenId.toLocaleString()} through ${throughTokenId.toLocaleString()}…`);
+        const result = await window.RelicForgeCloud.json(
+          `/api/collections/${activeDashboardChainId()}/${live.address}/marketplace/opensea/refresh`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ fromTokenId: nextTokenId, throughTokenId }),
+          },
+          true
+        );
+        queued += Number(result?.queued || 0);
+        failures += Array.isArray(result?.failed) ? result.failed.length : 0;
+        const candidate = Number(result?.nextTokenId || 0);
+        if (!candidate) break;
+        if (!Number.isSafeInteger(candidate) || candidate <= nextTokenId) throw new Error('Marketplace refresh cursor did not advance.');
+        nextTokenId = candidate;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+
+      if (failures > 0) {
+        setStatus(`OpenSea refresh queued for ${queued.toLocaleString()} NFT${queued === 1 ? '' : 's'}; ${failures.toLocaleString()} item${failures === 1 ? '' : 's'} could not be queued. You can run Refresh OpenSea Metadata again.`, true);
+      } else {
+        setStatus(`OpenSea metadata refresh queued for ${queued.toLocaleString()} NFT${queued === 1 ? '' : 's'}. OpenSea processes refreshes asynchronously, so marketplace images may take a few minutes to update.`);
+      }
+    } catch (error) {
+      console.error('RelicForge marketplace metadata refresh:', error);
+      setStatus(error?.shortMessage || error?.reason || error?.message || 'Marketplace metadata refresh failed.', true);
+    } finally {
+      setActionBusy(button, false);
       state.busy = false;
     }
   }

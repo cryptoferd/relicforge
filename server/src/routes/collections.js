@@ -11,6 +11,38 @@ const MINT_PAGE_MAX_BYTES = 2 * 1024 * 1024;
 const V2_COLLECTION_PHASES_ABI = ['function mintPhases() view returns(address)'];
 const V2_MINT_PHASES_READ_ABI = ['function phaseCount() view returns(uint32)','function phases(uint32) view returns(uint96 price,uint64 startTime,uint64 endTime,uint32 phaseSupply,uint32 minted,uint32 maxPerWallet,bytes32 merkleRoot,uint8 accessType,uint16 priority,bool enabled)'];
 
+const OPENSEA_CHAIN_BY_ID = new Map([[1, 'ethereum'], [11155111, 'sepolia']]);
+const OPENSEA_REFRESH_CHUNK = 25;
+
+async function refreshOpenSeaToken(chain, contract, tokenId, apiKey) {
+  const url = `https://api.opensea.io/api/v2/chain/${chain}/contract/${contract}/nfts/${tokenId}/refresh`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'x-api-key': apiKey },
+      signal: controller.signal,
+    });
+    // OpenSea can return 409 while an identical refresh is already queued.
+    // Treat that as accepted for this creator-side queueing action.
+    if (response.status === 200 || response.status === 202 || response.status === 409) {
+      return { tokenId, accepted: true, status: response.status };
+    }
+    const detail = (await response.text().catch(() => '')).slice(0, 300);
+    const error = new Error(
+      response.status === 429
+        ? 'OpenSea metadata refresh is rate-limited. Wait briefly and try again.'
+        : `OpenSea metadata refresh failed for token ${tokenId} (HTTP ${response.status}).`
+    );
+    error.openSeaStatus = response.status;
+    error.detail = detail;
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function normAddress(value) { return String(value || '').toLowerCase(); }
 async function v2MintPhases(chainId, collectionAddress) {
   const collection = new Contract(getAddress(collectionAddress), V2_COLLECTION_PHASES_ABI, providerFor(chainId));
@@ -214,5 +246,85 @@ export default async function collectionRoutes(app) {
     } catch(error){await client.query('ROLLBACK');return reply.code(400).send({error:error.message});}
     finally{client.release();}
   });
+
+
+  app.post('/api/collections/:chainId/:contract/marketplace/opensea/refresh', { preHandler: authenticate }, async (request, reply) => {
+    const apiKey = String(process.env.OPENSEA_API_KEY || '').trim();
+    if (!apiKey) return reply.code(503).send({ error: 'OpenSea metadata refresh is not configured on the Relic Forge backend.' });
+
+    const chainId = Number(request.params.chainId);
+    const openSeaChain = OPENSEA_CHAIN_BY_ID.get(chainId);
+    if (!openSeaChain) return reply.code(400).send({ error: 'OpenSea metadata refresh is supported only for Ethereum Mainnet and Sepolia.' });
+
+    let contract;
+    try { contract = getAddress(request.params.contract); }
+    catch { return reply.code(400).send({ error: 'Invalid collection address.' }); }
+
+    const collection = collectionFor(chainId, contract);
+    let creator, controller, totalMinted;
+    try {
+      [creator, controller, totalMinted] = await Promise.all([
+        collection.creator(),
+        collection.controller(),
+        collection.totalMinted(),
+      ]);
+    } catch (error) {
+      return reply.code(400).send({ error: `Collection reveal state could not be verified: ${error.shortMessage || error.message}` });
+    }
+
+    const requester = normAddress(request.user.wallet);
+    const creatorWallet = normAddress(creator);
+    const controllerWallet = normAddress(controller);
+    if (requester !== creatorWallet && requester !== controllerWallet) {
+      return reply.code(403).send({ error: 'Connected wallet is not the collection creator or active controller.' });
+    }
+
+    const minted = Number(totalMinted);
+    if (!Number.isSafeInteger(minted) || minted < 1) {
+      return reply.code(400).send({ error: 'This collection has no minted NFTs to refresh.' });
+    }
+
+    const requestedFrom = Number(request.body?.fromTokenId || 1);
+    const requestedThrough = Number(request.body?.throughTokenId || minted);
+    if (!Number.isSafeInteger(requestedFrom) || requestedFrom < 1 || !Number.isSafeInteger(requestedThrough) || requestedThrough < requestedFrom) {
+      return reply.code(400).send({ error: 'Invalid marketplace refresh token range.' });
+    }
+
+    const fromTokenId = Math.min(requestedFrom, minted);
+    const throughTokenId = Math.min(requestedThrough, minted);
+    const endTokenId = Math.min(throughTokenId, fromTokenId + OPENSEA_REFRESH_CHUNK - 1);
+    const accepted = [];
+    const failed = [];
+
+    for (let tokenId = fromTokenId; tokenId <= endTokenId; tokenId += 1) {
+      try {
+        const result = await refreshOpenSeaToken(openSeaChain, contract, tokenId, apiKey);
+        accepted.push({ tokenId, status: result.status });
+      } catch (error) {
+        if (Number(error.openSeaStatus) === 429 || Number(error.openSeaStatus) === 401 || Number(error.openSeaStatus) === 403) {
+          return reply.code(error.openSeaStatus === 429 ? 503 : 502).send({
+            error: error.message,
+            queued: accepted.length,
+            resumeTokenId: tokenId,
+          });
+        }
+        failed.push({ tokenId, status: Number(error.openSeaStatus || 0) || null });
+      }
+    }
+
+    return {
+      ok: failed.length === 0,
+      marketplace: 'opensea',
+      chain: openSeaChain,
+      fromTokenId,
+      endTokenId,
+      throughTokenId,
+      queued: accepted.length,
+      failed,
+      nextTokenId: endTokenId < throughTokenId ? endTokenId + 1 : null,
+      done: endTokenId >= throughTokenId,
+    };
+  });
+
 
 }
