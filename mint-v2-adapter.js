@@ -560,7 +560,25 @@
     await render();
   }
 
-  async function liveMintGasPrice() {
+  const MIN_MINT_PRIORITY_FEE_WEI=10_000_000n;   // 0.01 gwei
+  const MAX_MINT_PRIORITY_FEE_WEI=500_000_000n;  // 0.50 gwei
+  const FALLBACK_MINT_PRIORITY_FEE_WEI=50_000_000n; // 0.05 gwei
+
+  function clampMintPriorityFee(value){
+    const fee=BigInt(value||0);
+    if(fee<MIN_MINT_PRIORITY_FEE_WEI)return MIN_MINT_PRIORITY_FEE_WEI;
+    if(fee>MAX_MINT_PRIORITY_FEE_WEI)return MAX_MINT_PRIORITY_FEE_WEI;
+    return fee;
+  }
+
+  function medianBigInt(values){
+    const rows=(values||[]).map(value=>BigInt(value)).sort((a,b)=>a<b?-1:a>b?1:0);
+    if(!rows.length)return 0n;
+    const mid=Math.floor(rows.length/2);
+    return rows.length%2 ? rows[mid] : (rows[mid-1]+rows[mid])/2n;
+  }
+
+  async function liveMintEip1559Fees() {
     const providers=[];
     try {
       const reader=await getReadProvider(Number(app.config?.chainId||11155111));
@@ -571,19 +589,55 @@
     let lastError=null;
     for(const provider of providers){
       try {
-        const raw=await provider.send('eth_gasPrice',[]);
-        const gasPrice=BigInt(raw);
-        if(gasPrice>0n)return gasPrice;
-      } catch(error){ lastError=error; }
+        const history=await provider.send('eth_feeHistory',['0xa','latest',[50]]);
+        const baseFees=(history?.baseFeePerGas||[]).map(value=>BigInt(value));
+        if(!baseFees.length)throw new Error('fee history did not return a base fee');
+        const rewards=(history?.reward||[]).flat().map(value=>BigInt(value)).filter(value=>value>0n);
+        const baseFeePerGas=baseFees[baseFees.length-1];
+        const sampledPriority=rewards.length?medianBigInt(rewards):FALLBACK_MINT_PRIORITY_FEE_WEI;
+        const maxPriorityFeePerGas=clampMintPriorityFee(sampledPriority);
+        const maxFeePerGas=(baseFeePerGas*2n)+maxPriorityFeePerGas;
+        return Object.freeze({
+          baseFeePerGas,
+          maxPriorityFeePerGas,
+          maxFeePerGas,
+          // Chainlink's request quote is tx.gasprice-sensitive. Quoting at maxFeePerGas
+          // is intentionally conservative: the mined effective gas price cannot exceed it.
+          pricingGasPriceWei:maxFeePerGas,
+          source:'eth_feeHistory'
+        });
+      } catch(error){
+        lastError=error;
+      }
+
+      try {
+        const [block,rawPriority]=await Promise.all([
+          provider.send('eth_getBlockByNumber',['latest',false]),
+          provider.send('eth_maxPriorityFeePerGas',[]).catch(()=>null),
+        ]);
+        const baseFeePerGas=BigInt(block?.baseFeePerGas||0);
+        if(baseFeePerGas<=0n)throw new Error('latest block did not expose an EIP-1559 base fee');
+        const maxPriorityFeePerGas=clampMintPriorityFee(rawPriority?BigInt(rawPriority):FALLBACK_MINT_PRIORITY_FEE_WEI);
+        const maxFeePerGas=(baseFeePerGas*2n)+maxPriorityFeePerGas;
+        return Object.freeze({
+          baseFeePerGas,
+          maxPriorityFeePerGas,
+          maxFeePerGas,
+          pricingGasPriceWei:maxFeePerGas,
+          source:'latest-block'
+        });
+      } catch(error){
+        lastError=error;
+      }
     }
     throw new Error(
-      'A live non-zero network gas price is required before an automatic-reveal mint.'+
+      'Live EIP-1559 fee data is required before an automatic-reveal mint.'+
       (lastError?.message ? ' '+lastError.message : '')
     );
   }
 
   async function forgeMintOverrides(writeCollection,phaseId,qty,allowance,proof,minimumValue) {
-    const gasPrice=await liveMintGasPrice();
+    const fees=await liveMintEip1559Fees();
     const reader=await getReadProvider(Number(app.config.chainId));
     const readCollection=new window.ethers.Contract(app.config.contract,COLLECTION_ABI,reader);
     const maxGroupQuantity=Math.min(20,Math.max(1,Number(qty)));
@@ -604,8 +658,8 @@
     } catch (_) {}
 
     const quote=adaptiveGas
-      ? BigInt(await adapter['estimateRequestPriceAtGasPrice(uint32,uint256)'](callbackGas,gasPrice))
-      : BigInt(await adapter['estimateRequestPriceAtGasPrice(uint256)'](gasPrice));
+      ? BigInt(await adapter['estimateRequestPriceAtGasPrice(uint32,uint256)'](callbackGas,fees.pricingGasPriceWei))
+      : BigInt(await adapter['estimateRequestPriceAtGasPrice(uint256)'](fees.pricingGasPriceWei));
 
     if(quote>ceiling){
       const scope=adaptiveGas ? `largest ${maxGroupQuantity}-NFT reveal group` : 'automatic-reveal request';
@@ -614,27 +668,40 @@
       );
     }
 
+    const feeOverrides={
+      value:minimumValue,
+      maxFeePerGas:fees.maxFeePerGas,
+      maxPriorityFeePerGas:fees.maxPriorityFeePerGas,
+    };
     const estimate=BigInt(await writeCollection.mint.estimateGas(
-      phaseId,qty,allowance,proof,{value:minimumValue,gasPrice}
+      phaseId,qty,allowance,proof,feeOverrides
     ));
-    // A generous limit prevents wallet re-estimation from switching to a
-    // different tx.gasprice-dependent Chainlink pricing branch. The user pays
-    // only gas actually consumed, not the entire gas limit.
+    // Keep explicit headroom so the wallet does not need to re-estimate the
+    // tx.gasprice-sensitive randomness branch. Only gas actually consumed is charged.
     const gasLimit=((estimate*130n)/100n)+100000n;
-    console.info('RelicForge R2 fee-aware Forge mint', {
+    console.info('RelicForge R2 EIP-1559 fee-aware Forge mint', {
       chainId:Number(app.config.chainId),
       phaseId:Number(phaseId),
       quantity:Number(qty),
       adaptiveRandomness:adaptiveGas,
       adaptiveRevealGroupQuantity:maxGroupQuantity,
       consumerCallbackGas:callbackGas,
-      gasPriceWei:gasPrice.toString(),
+      feeSource:fees.source,
+      baseFeePerGasWei:fees.baseFeePerGas.toString(),
+      maxPriorityFeePerGasWei:fees.maxPriorityFeePerGas.toString(),
+      maxFeePerGasWei:fees.maxFeePerGas.toString(),
+      randomnessPricingGasPriceWei:fees.pricingGasPriceWei.toString(),
       gasEstimate:estimate.toString(),
       gasLimit:gasLimit.toString(),
       randomnessQuoteWei:quote.toString(),
       randomnessCeilingWei:ceiling.toString(),
     });
-    return Object.freeze({value:minimumValue,gasPrice,gasLimit});
+    return Object.freeze({
+      value:minimumValue,
+      maxFeePerGas:fees.maxFeePerGas,
+      maxPriorityFeePerGas:fees.maxPriorityFeePerGas,
+      gasLimit
+    });
   }
   async function mintPhase(phaseId) {
     if(!app.wallet)await connect();
