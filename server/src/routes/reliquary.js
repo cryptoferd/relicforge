@@ -7,6 +7,7 @@ import {
   listReliquaryNfts,
   recordConfirmedMint,
   refreshReliquary,
+  scopedCachedStats,
   tokenMetadata,
   walletOwnsCanonicalToken,
 } from '../lib/reliquary-index.js';
@@ -78,7 +79,7 @@ async function profilePayload(row, { includeWallet = true } = {}) {
     username: row.username,
     bio: row.bio || '',
     pfp: await livePfp(row),
-    stats: row.stats_cache || {},
+    stats: await scopedCachedStats(row.wallet, row.stats_cache || {}),
     statsRefreshedAt: row.stats_refreshed_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -180,7 +181,10 @@ export default async function reliquaryRoutes(app) {
     const wallet = norm(request.user.wallet);
     const current = await ensureReliquaryProfile(wallet);
     const refreshed = current.stats_refreshed_at ? new Date(current.stats_refreshed_at).getTime() : 0;
-    if (refreshed && Date.now() - refreshed < 2 * 60_000) {
+    const currentCache = current.stats_cache || {};
+    const scopedCacheReady = currentCache?.schema === 'reliquary-stats@2' &&
+      currentCache?.testnet?.schema === 'reliquary-stats@2';
+    if (scopedCacheReady && refreshed && Date.now() - refreshed < 2 * 60_000) {
       const cached = await cachedStats(wallet);
       return { ...cached, throttled: true };
     }
@@ -189,14 +193,15 @@ export default async function reliquaryRoutes(app) {
       stats: result.stats,
       coverage: result.coverage,
       statsRefreshedAt: new Date().toISOString(),
-      partialFailures: result.coverage.partialFailures,
+      partialFailures: Number(result.coverage.partialFailures || 0) + Number(result.testnetCoverage?.partialFailures || 0),
     };
   });
 
   app.get('/api/reliquary/me/nfts', { preHandler: authenticate }, async request => {
     const mode = request.query?.mode === 'minted' ? 'minted' : 'owned';
     const limit = Math.min(100, Math.max(1, Number(request.query?.limit || 48)));
-    return { mode, nfts: await listReliquaryNfts(request.user.wallet, { mode, limit }) };
+    const networkKind = request.query?.network === 'testnet' ? 'testnet' : 'production';
+    return { mode, networkKind, nfts: await listReliquaryNfts(request.user.wallet, { mode, limit, networkKind }) };
   });
 
   app.get('/api/reliquary/u/:username', async (request, reply) => {
@@ -212,7 +217,8 @@ export default async function reliquaryRoutes(app) {
     if (!row?.username) return reply.code(404).send({ error: 'Reliquary profile not found.' });
     const mode = request.query?.mode === 'owned' ? 'owned' : 'minted';
     const limit = Math.min(100, Math.max(1, Number(request.query?.limit || 48)));
-    return { mode, nfts: await listReliquaryNfts(row.wallet, { mode, limit }) };
+    const networkKind = request.query?.network === 'testnet' ? 'testnet' : 'production';
+    return { mode, networkKind, nfts: await listReliquaryNfts(row.wallet, { mode, limit, networkKind }) };
   });
 
   app.get('/api/reliquary/nft/:chainId/:contract/:tokenId', async (request, reply) => {

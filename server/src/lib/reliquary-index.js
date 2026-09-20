@@ -287,14 +287,15 @@ async function scanCollection(wallet, row, initialBlock) {
   return { canonical: true, chainId, contract, scanned: true, transfers: transfers.length, mints: mintEntries.length };
 }
 
-async function creatorStats(wallet) {
+async function creatorStats(wallet, networkKind = 'production') {
   const { rows } = await db.query(
-    `SELECT chain_id,contract_address
-     FROM collections
-     WHERE owner_wallet=$1
-     ORDER BY created_at ASC
+    `SELECT c.chain_id,c.contract_address
+     FROM collections c
+     JOIN rf26_networks n ON n.chain_id=c.chain_id
+     WHERE c.owner_wallet=$1 AND n.kind=$2
+     ORDER BY c.created_at ASC
      LIMIT 250`,
-    [wallet]
+    [wallet, networkKind]
   );
 
   const totals = await mapLimit(rows, 6, async row => {
@@ -319,30 +320,32 @@ async function creatorStats(wallet) {
   };
 }
 
-async function statsFromLedger(wallet, coverage = null) {
+async function statsFromLedger(wallet, coverage = null, networkKind = 'production') {
   const mint = await one(
     `SELECT
-       COALESCE(sum(quantity),0)::text AS total_mints,
+       COALESCE(sum(a.quantity),0)::text AS total_mints,
        count(*)::int AS mint_transactions,
-       count(DISTINCT (chain_id,contract_address))::int AS collections_minted,
-       count(DISTINCT chain_id)::int AS mint_chains,
-       COALESCE(sum(native_value_wei),0)::text AS native_value_spent_wei,
-       COALESCE(sum(platform_fee_wei),0)::text AS platform_fees_generated_wei,
-       COALESCE(sum(quantity) FILTER (WHERE fee_mode=1),0)::text AS sponsored_mints,
-       COALESCE(sum(quantity) FILTER (WHERE fee_mode=2),0)::text AS minter_supported_mints,
-       min(block_time) AS first_mint_at
-     FROM reliquary_mint_activity
-     WHERE wallet=$1`,
-    [wallet]
+       count(DISTINCT (a.chain_id,a.contract_address))::int AS collections_minted,
+       count(DISTINCT a.chain_id)::int AS mint_chains,
+       COALESCE(sum(a.native_value_wei),0)::text AS native_value_spent_wei,
+       COALESCE(sum(a.platform_fee_wei),0)::text AS platform_fees_generated_wei,
+       COALESCE(sum(a.quantity) FILTER (WHERE a.fee_mode=1),0)::text AS sponsored_mints,
+       COALESCE(sum(a.quantity) FILTER (WHERE a.fee_mode=2),0)::text AS minter_supported_mints,
+       min(a.block_time) AS first_mint_at
+     FROM reliquary_mint_activity a
+     JOIN rf26_networks n ON n.chain_id=a.chain_id
+     WHERE a.wallet=$1 AND n.kind=$2`,
+    [wallet, networkKind]
   );
 
   const holding = await one(
     `WITH latest AS (
-       SELECT DISTINCT ON (chain_id,contract_address,token_id)
-         chain_id,contract_address,token_id,to_wallet,block_time
-       FROM reliquary_transfer_activity
-       WHERE wallet=$1
-       ORDER BY chain_id,contract_address,token_id,block_number DESC,log_index DESC
+       SELECT DISTINCT ON (a.chain_id,a.contract_address,a.token_id)
+         a.chain_id,a.contract_address,a.token_id,a.to_wallet,a.block_time
+       FROM reliquary_transfer_activity a
+       JOIN rf26_networks n ON n.chain_id=a.chain_id
+       WHERE a.wallet=$1 AND n.kind=$2
+       ORDER BY a.chain_id,a.contract_address,a.token_id,a.block_number DESC,a.log_index DESC
      )
      SELECT
        count(*) FILTER (WHERE to_wallet=$1)::int AS nfts_held,
@@ -350,24 +353,32 @@ async function statsFromLedger(wallet, coverage = null) {
        COALESCE(max(EXTRACT(EPOCH FROM (now()-block_time))/86400) FILTER (WHERE to_wallet=$1 AND block_time IS NOT NULL),0) AS longest_hold_days,
        COALESCE(avg(EXTRACT(EPOCH FROM (now()-block_time))/86400) FILTER (WHERE to_wallet=$1 AND block_time IS NOT NULL),0) AS average_hold_days
      FROM latest`,
-    [wallet]
+    [wallet, networkKind]
   );
 
-  const creator = await creatorStats(wallet);
+  const creator = await creatorStats(wallet, networkKind);
   const mintChains = Number(mint?.mint_chains || 0);
   const holdingChains = Number(holding?.holding_chains || 0);
   const chainRows = await db.query(
-    `SELECT DISTINCT chain_id FROM (
-       SELECT chain_id FROM reliquary_mint_activity WHERE wallet=$1
+    `SELECT DISTINCT q.chain_id FROM (
+       SELECT a.chain_id
+       FROM reliquary_mint_activity a
+       JOIN rf26_networks n ON n.chain_id=a.chain_id
+       WHERE a.wallet=$1 AND n.kind=$2
        UNION
-       SELECT chain_id FROM reliquary_transfer_activity WHERE wallet=$1
+       SELECT a.chain_id
+       FROM reliquary_transfer_activity a
+       JOIN rf26_networks n ON n.chain_id=a.chain_id
+       WHERE a.wallet=$1 AND n.kind=$2
      ) q`,
-    [wallet]
+    [wallet, networkKind]
   );
   const chainSet = new Set(chainRows.rows.map(row => Number(row.chain_id)));
   creator.chains.forEach(chain => chainSet.add(Number(chain)));
 
   return {
+    schema: 'reliquary-stats@2',
+    networkKind,
     totalMints: Number(mint?.total_mints || 0),
     mintTransactions: Number(mint?.mint_transactions || 0),
     collectionsMinted: Number(mint?.collections_minted || 0),
@@ -395,6 +406,20 @@ export async function ensureReliquaryProfile(walletInput) {
      RETURNING *`,
     [wallet]
   );
+}
+
+function scopedCoverage(rows, results, networkPolicies, kind) {
+  const scopedRows = rows.filter(row => networkPolicies.get(Number(row.chain_id))?.kind === kind);
+  const scopedResults = results.filter(item => networkPolicies.get(Number(item.chainId))?.kind === kind);
+  return {
+    model: 'canonical-v1-registered-collections',
+    networkKind: kind,
+    registeredCollections: scopedRows.length,
+    canonicalCollections: scopedResults.filter(item => item.canonical).length,
+    successfullyScanned: scopedResults.filter(item => item.scanned).length,
+    chains: [...new Set(scopedResults.filter(item => item.canonical).map(item => item.chainId))],
+    partialFailures: scopedResults.filter(item => item.error || item.rpcUnavailable).length,
+  };
 }
 
 export async function refreshReliquary(walletInput) {
@@ -442,22 +467,39 @@ export async function refreshReliquary(walletInput) {
     }
   }
 
-  const coverage = {
-    model: 'canonical-v1-registered-collections',
-    registeredCollections: rows.length,
-    canonicalCollections: results.filter(item => item.canonical).length,
-    successfullyScanned: results.filter(item => item.scanned).length,
-    chains: [...new Set(results.filter(item => item.canonical).map(item => item.chainId))],
-    partialFailures: results.filter(item => item.error || item.rpcUnavailable).length,
-  };
-  const stats = await statsFromLedger(wallet, coverage);
+  const policyRows = await db.query('SELECT chain_id,label,kind FROM rf26_networks');
+  const networkPolicies = new Map(policyRows.rows.map(row => [Number(row.chain_id), {
+    label: String(row.label || `Chain ${row.chain_id}`),
+    kind: row.kind === 'testnet' ? 'testnet' : 'production',
+  }]));
+  const coverage = scopedCoverage(rows, results, networkPolicies, 'production');
+  const testnetCoverage = scopedCoverage(rows, results, networkPolicies, 'testnet');
+  const productionStats = await statsFromLedger(wallet, coverage, 'production');
+  const testnetStats = await statsFromLedger(wallet, testnetCoverage, 'testnet');
+  const stats = { ...productionStats, testnet: testnetStats };
+
   await db.query(
     `UPDATE reliquary_profiles
      SET stats_cache=$2::jsonb,stats_refreshed_at=now(),updated_at=now()
      WHERE wallet=$1`,
     [wallet, JSON.stringify(stats)]
   );
-  return { stats, coverage, scans: results };
+  return { stats, coverage, testnetCoverage, scans: results };
+}
+
+export async function scopedCachedStats(walletInput, existing = null) {
+  const wallet = norm(walletInput);
+  const cached = existing && typeof existing === 'object' ? existing : null;
+  if (cached?.schema === 'reliquary-stats@2' && cached?.testnet?.schema === 'reliquary-stats@2') return cached;
+
+  const productionStats = await statsFromLedger(wallet, null, 'production');
+  const testnetStats = await statsFromLedger(wallet, null, 'testnet');
+  const stats = { ...productionStats, testnet: testnetStats };
+  await db.query(
+    `UPDATE reliquary_profiles SET stats_cache=$2::jsonb,updated_at=now() WHERE wallet=$1`,
+    [wallet, JSON.stringify(stats)]
+  );
+  return stats;
 }
 
 function safeMedia(value) {
@@ -530,9 +572,10 @@ export async function walletOwnsCanonicalToken(walletInput, chainIdInput, contra
   }
 }
 
-export async function listReliquaryNfts(walletInput, { mode = 'owned', limit = 48 } = {}) {
+export async function listReliquaryNfts(walletInput, { mode = 'owned', limit = 48, networkKind = 'production' } = {}) {
   const wallet = norm(walletInput);
   const take = Math.min(100, Math.max(1, Number(limit || 48)));
+  const kind = networkKind === 'testnet' ? 'testnet' : 'production';
   let rows;
 
   if (mode === 'minted') {
@@ -551,12 +594,15 @@ export async function listReliquaryNfts(walletInput, { mode = 'owned', limit = 4
          ORDER BY chain_id,contract_address,token_id,block_number DESC,log_index DESC
        )
        SELECT m.chain_id,m.contract_address,m.token_id,m.minted_at,
-              (l.to_wallet=$1) AS owned,l.block_time AS acquired_at
+              (l.to_wallet=$1) AS owned,l.block_time AS acquired_at,
+              n.label AS network_label,n.kind AS network_kind
        FROM minted m
        LEFT JOIN latest l USING(chain_id,contract_address,token_id)
+       JOIN rf26_networks n ON n.chain_id=m.chain_id
+       WHERE n.kind=$4
        ORDER BY m.minted_at DESC NULLS LAST
        LIMIT $3`,
-      [wallet, ZERO, take]
+      [wallet, ZERO, take, kind]
     );
     rows = result.rows;
   } else {
@@ -578,12 +624,13 @@ export async function listReliquaryNfts(walletInput, { mode = 'owned', limit = 4
                   AND m.from_wallet=$2
                   AND m.to_wallet=$1
               ) AS minted_by_wallet,
-              true AS owned
+              true AS owned,n.label AS network_label,n.kind AS network_kind
        FROM latest l
-       WHERE l.to_wallet=$1
+       JOIN rf26_networks n ON n.chain_id=l.chain_id
+       WHERE l.to_wallet=$1 AND n.kind=$4
        ORDER BY l.block_time DESC NULLS LAST
        LIMIT $3`,
-      [wallet, ZERO, take]
+      [wallet, ZERO, take, kind]
     );
     rows = result.rows;
   }
@@ -602,6 +649,11 @@ export async function listReliquaryNfts(walletInput, { mode = 'owned', limit = 4
       mintedAt: row.minted_at || null,
       acquiredAt: row.acquired_at || null,
       metadata,
+      network: {
+        label: String(row.network_label || `Chain ${row.chain_id}`),
+        kind: row.network_kind === 'testnet' ? 'testnet' : 'production',
+        testnet: row.network_kind === 'testnet',
+      },
     };
   });
 }

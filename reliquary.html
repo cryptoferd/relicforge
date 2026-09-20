@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="./rc47b.css?v=reliquary1" />
   <link rel="stylesheet" href="./rc47c.css?v=reliquary1" />
   <link rel="stylesheet" href="./rc47d.css?v=reliquary1" />
-  <link rel="stylesheet" href="./reliquary.css?v=reliquary1" />
+  <link rel="stylesheet" href="./reliquary.css?v=network-separation-r1_9" />
   <link rel="stylesheet" href="./relicforge-product.css?v=button-feedback-r1_8"/>
   <link rel="stylesheet" href="./relicforge-runtime-banner.css?v=founder-ops-r1"/>
   <link rel="stylesheet" href="./relicforge-contact-footer.css?v=contact-footer-r1" />
@@ -44,7 +44,13 @@
     <section class="reliquary-stat-section">
       <div class="reliquary-section-head">
         <div><span>ONCHAIN ACTIVITY</span><h2>Platform History</h2></div>
-        <small id="reliquaryCoverage">Stats are reconstructed from verified Relic Forge collection activity.</small>
+        <div class="reliquary-head-tools">
+          <small id="reliquaryCoverage">Production stats are reconstructed from verified Relic Forge collection activity.</small>
+          <label class="reliquary-testnet-toggle">
+            <input id="reliquaryShowTestnets" type="checkbox" />
+            <span>Show testnet activity</span>
+          </label>
+        </div>
       </div>
       <div class="reliquary-stats" id="reliquaryStats">
         <div class="reliquary-stat"><span>NFTs Minted</span><strong data-stat="totalMints">—</strong></div>
@@ -63,12 +69,42 @@
       </div>
     </section>
 
+    <section class="reliquary-stat-section reliquary-testnet-section hidden" id="reliquaryTestnetStatsSection">
+      <div class="reliquary-section-head">
+        <div><span>TESTNET ACTIVITY</span><h2>Testnet History</h2></div>
+        <small id="reliquaryTestnetCoverage">Testnet activity is tabulated separately and is never included in production totals.</small>
+      </div>
+      <div class="reliquary-stats" id="reliquaryTestnetStats">
+        <div class="reliquary-stat"><span>NFTs Minted</span><strong data-testnet-stat="totalMints">—</strong></div>
+        <div class="reliquary-stat"><span>Collections Minted</span><strong data-testnet-stat="collectionsMinted">—</strong></div>
+        <div class="reliquary-stat"><span>Mint Transactions</span><strong data-testnet-stat="mintTransactions">—</strong></div>
+        <div class="reliquary-stat"><span>Relics Held</span><strong data-testnet-stat="nftsHeld">—</strong></div>
+        <div class="reliquary-stat"><span>Testnet Chains Used</span><strong data-testnet-stat="chainsUsed">—</strong></div>
+        <div class="reliquary-stat"><span>First Mint</span><strong data-testnet-stat="firstMintAt">—</strong></div>
+        <div class="reliquary-stat"><span>Test ETH Spent</span><strong data-testnet-stat="nativeValueSpentWei">—</strong></div>
+        <div class="reliquary-stat"><span>Sponsored Mints</span><strong data-testnet-stat="sponsoredMints">—</strong></div>
+        <div class="reliquary-stat"><span>Minter-Supported Mints</span><strong data-testnet-stat="minterSupportedMints">—</strong></div>
+        <div class="reliquary-stat"><span>Collections Created</span><strong data-testnet-stat="collectionsCreated">—</strong></div>
+        <div class="reliquary-stat"><span>Mints Across Test Collections</span><strong data-testnet-stat="creatorCollectionMints">—</strong></div>
+        <div class="reliquary-stat"><span>Longest Current Hold</span><strong data-testnet-stat="longestCurrentHoldDays">—</strong></div>
+        <div class="reliquary-stat"><span>Average Current Hold</span><strong data-testnet-stat="averageCurrentHoldDays">—</strong></div>
+      </div>
+    </section>
+
     <section class="reliquary-showcase">
       <div class="reliquary-section-head">
         <div><span>THE RELIQUARY</span><h2>Minted Relics</h2></div>
-        <small>NFTs this wallet minted through registered Relic Forge collections. Ownership is shown separately.</small>
+        <small>Production-network NFTs this wallet minted through registered Relic Forge collections. Testnet NFTs are excluded here.</small>
       </div>
       <div class="reliquary-grid" id="reliquaryNftGrid"><div class="reliquary-empty">Connect a wallet or open a public Reliquary profile.</div></div>
+    </section>
+
+    <section class="reliquary-showcase reliquary-testnet-section hidden" id="reliquaryTestnetShowcase">
+      <div class="reliquary-section-head">
+        <div><span>TESTNET RELICS</span><h2>Testnet Minted Relics</h2></div>
+        <small>Testnet NFTs are isolated from the production Reliquary and do not affect production statistics.</small>
+      </div>
+      <div class="reliquary-grid" id="reliquaryTestnetNftGrid"><div class="reliquary-empty">Enable testnet activity to load testnet Relics.</div></div>
     </section>
   </main>
 
@@ -99,7 +135,11 @@
 
       <section class="reliquary-edit-section">
         <div class="reliquary-edit-copy"><strong>Profile NFT</strong><small>Choose any Relic Forge NFT from a registered collection that is currently owned by this wallet. If you later transfer it away, it will no longer be shown as a valid PFP.</small></div>
-        <div class="reliquary-pfp-grid" id="reliquaryPfpGrid"><div class="reliquary-empty">Refresh your onchain stats to load owned Relic Forge NFTs.</div></div>
+        <div class="reliquary-pfp-grid" id="reliquaryPfpGrid"><div class="reliquary-empty">Refresh your onchain stats to load owned production Relic Forge NFTs.</div></div>
+        <div class="reliquary-testnet-pfp hidden" id="reliquaryTestnetPfpWrap">
+          <div class="reliquary-edit-copy reliquary-testnet-pfp-head"><strong>Testnet Profile NFTs</strong><small>Visible only while testnet activity is enabled. Testnet profile NFTs remain excluded from production statistics.</small></div>
+          <div class="reliquary-pfp-grid" id="reliquaryTestnetPfpGrid"><div class="reliquary-empty">Loading owned testnet Relics…</div></div>
+        </div>
       </section>
 
       <div class="reliquary-modal-actions">
@@ -114,7 +154,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=save-reliability5" defer></script>
-  <script src="./reliquary.js?v=reliquary1" defer></script>
+  <script src="./reliquary.js?v=network-separation-r1_9" defer></script>
   <script src="./studio-shell.js?v=reliquary1" defer></script>
   <script src="./relicforge-v2-addresses.js?v=r26-p2a1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>

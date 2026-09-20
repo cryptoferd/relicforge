@@ -8,6 +8,9 @@
     publicUsername: new URLSearchParams(location.search).get('u') || null,
     selectedPfp: undefined,
     owned: [],
+    ownedTestnet: [],
+    showTestnets: false,
+    ownProfile: false,
     usernameTimer: null,
   };
 
@@ -69,20 +72,46 @@
     return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
+  function networkInfo(value) {
+    const chainId = Number(value?.chainId || 0);
+    const supplied = value?.network;
+    if (supplied?.label) {
+      return {
+        chainId,
+        label: String(supplied.label),
+        kind: supplied.kind === 'testnet' ? 'testnet' : 'production',
+        testnet: Boolean(supplied.testnet || supplied.kind === 'testnet'),
+      };
+    }
+    try {
+      const meta = window.RelicForgeNetworks?.metadata?.(chainId);
+      if (meta) return {
+        chainId,
+        label: meta.name || meta.shortName || `Chain ${chainId}`,
+        kind: meta.testnet ? 'testnet' : 'production',
+        testnet: Boolean(meta.testnet),
+      };
+    } catch {}
+    return { chainId, label: chainId ? `Chain ${chainId}` : 'Unknown network', kind: 'production', testnet: false };
+  }
+
   function imageFor(nft) {
     return nft?.metadata?.image || './relic-forge-logo.svg';
+  }
+
+  function formatStatValue(key, value) {
+    if (key === 'firstMintAt') return fmtDate(value);
+    if (key === 'nativeValueSpentWei' || key === 'platformFeesGeneratedWei') return fmtNative(value);
+    if (key === 'longestCurrentHoldDays' || key === 'averageCurrentHoldDays') return `${Number(value || 0).toLocaleString()} days`;
+    if (value == null) return '0';
+    if (typeof value === 'number') return value.toLocaleString();
+    return String(value);
   }
 
   function renderStats(stats = {}) {
     document.querySelectorAll('[data-stat]').forEach(node => {
       const key = node.dataset.stat;
-      let value = stats[key];
-      if (key === 'firstMintAt') value = fmtDate(value);
-      else if (key === 'nativeValueSpentWei' || key === 'platformFeesGeneratedWei') value = fmtNative(value);
-      else if (key === 'longestCurrentHoldDays' || key === 'averageCurrentHoldDays') value = `${Number(value || 0).toLocaleString()} days`;
-      else if (value == null) value = 0;
-      else if (typeof value === 'number') value = value.toLocaleString();
-      node.textContent = String(value);
+      node.textContent = formatStatValue(key, stats[key]);
     });
 
     const coverage = stats.coverage;
@@ -97,9 +126,36 @@
     }
   }
 
+  function renderTestnetStats(stats = {}) {
+    document.querySelectorAll('[data-testnet-stat]').forEach(node => {
+      const key = node.dataset.testnetStat;
+      node.textContent = formatStatValue(key, stats[key]);
+    });
+    const coverage = stats.coverage;
+    if ($('reliquaryTestnetCoverage')) {
+      if (coverage) {
+        const chains = Array.isArray(coverage.chains) ? coverage.chains.length : 0;
+        $('reliquaryTestnetCoverage').textContent =
+          `Testnet coverage: ${Number(coverage.canonicalCollections || 0)} canonical collections across ${chains} testnet chain${chains === 1 ? '' : 's'}${coverage.partialFailures ? ` · ${coverage.partialFailures} source${coverage.partialFailures === 1 ? '' : 's'} temporarily unavailable` : ''}. Excluded from production totals.`;
+      } else {
+        $('reliquaryTestnetCoverage').textContent = 'Testnet activity is tabulated separately and is never included in production totals.';
+      }
+    }
+  }
+
+  function syncTestnetVisibility() {
+    $('reliquaryTestnetStatsSection')?.classList.toggle('hidden', !state.showTestnets);
+    $('reliquaryTestnetShowcase')?.classList.toggle('hidden', !state.showTestnets);
+    const modalOpen = !$('reliquaryModal')?.classList.contains('hidden');
+    $('reliquaryTestnetPfpWrap')?.classList.toggle('hidden', !state.showTestnets || !modalOpen);
+  }
+
   function renderProfile(profile, { own = false } = {}) {
     state.profile = profile;
-    const pfpImage = profile?.pfp?.valid && profile.pfp.metadata?.image
+    state.ownProfile = own;
+    const pfpNetwork = profile?.pfp?.valid ? networkInfo(profile.pfp) : null;
+    const allowPfp = profile?.pfp?.valid && (!pfpNetwork?.testnet || state.showTestnets);
+    const pfpImage = allowPfp && profile.pfp.metadata?.image
       ? profile.pfp.metadata.image
       : './relic-forge-logo.svg';
     const pfp = $('reliquaryPfp');
@@ -112,6 +168,8 @@
       : 'This wallet has not added a bio yet.');
 
     renderStats(profile?.stats || {});
+    renderTestnetStats(profile?.stats?.testnet || {});
+    syncTestnetVisibility();
     $('reliquaryEditBtn')?.classList.toggle('hidden', !own);
     $('reliquaryRefreshBtn')?.classList.toggle('hidden', !own);
     $('reliquaryShareBtn')?.classList.toggle('hidden', !profile?.username);
@@ -131,8 +189,11 @@
       String(state.selectedPfp.contract).toLowerCase() === String(nft.contract).toLowerCase() &&
       String(state.selectedPfp.tokenId) === String(nft.tokenId);
     const tag = selectable ? 'button' : 'article';
+    const network = networkInfo(nft);
+    const networkLabel = network.testnet ? `${network.label} · Testnet` : network.label;
     return `<${tag} class="reliquary-token${selected ? ' selected' : ''}"${selectable ? ` type="button" data-pfp="${nft.chainId}:${nft.contract}:${nft.tokenId}"` : ''}>
       <div class="reliquary-token-badge${nft.owned ? '' : ' not-owned'}">${ownedLabel}</div>
+      <div class="reliquary-token-network${network.testnet ? ' testnet' : ''}">${escapeHtml(networkLabel)}</div>
       <div class="reliquary-token-media"><img src="${imageFor(nft)}" alt="" /></div>
       <div class="reliquary-token-copy"><strong>${escapeHtml(meta.name || `Token #${nft.tokenId}`)}</strong><small>${escapeHtml(meta.collectionName || short(nft.contract))}</small></div>
     </${tag}>`;
@@ -148,12 +209,29 @@
     grid.innerHTML = '<div class="reliquary-empty">Loading minted Relics…</div>';
     try {
       const response = own
-        ? await authJson('/api/reliquary/me/nfts?mode=minted&limit=48')
-        : await publicJson(`/api/reliquary/u/${encodeURIComponent(state.publicUsername)}/nfts?mode=minted&limit=48`);
+        ? await authJson('/api/reliquary/me/nfts?mode=minted&network=production&limit=48')
+        : await publicJson(`/api/reliquary/u/${encodeURIComponent(state.publicUsername)}/nfts?mode=minted&network=production&limit=48`);
       const nfts = response.nfts || [];
       grid.innerHTML = nfts.length
         ? nfts.map(nft => nftCard(nft, false)).join('')
         : '<div class="reliquary-empty">No indexed Relic Forge mints yet. Refresh the onchain history after minting to populate this showcase.</div>';
+    } catch (error) {
+      grid.innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function loadTestnetShowcase({ own = state.ownProfile } = {}) {
+    const grid = $('reliquaryTestnetNftGrid');
+    if (!grid || !state.showTestnets) return;
+    grid.innerHTML = '<div class="reliquary-empty">Loading testnet Relics…</div>';
+    try {
+      const response = own
+        ? await authJson('/api/reliquary/me/nfts?mode=minted&network=testnet&limit=48')
+        : await publicJson(`/api/reliquary/u/${encodeURIComponent(state.publicUsername)}/nfts?mode=minted&network=testnet&limit=48`);
+      const nfts = response.nfts || [];
+      grid.innerHTML = nfts.length
+        ? nfts.map(nft => nftCard(nft, false)).join('')
+        : '<div class="reliquary-empty">No indexed testnet Relic Forge mints for this wallet.</div>';
     } catch (error) {
       grid.innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
     }
@@ -175,7 +253,9 @@
     renderProfile(payload.profile, { own: true });
     await loadShowcase({ own: true });
     const refreshedAt = payload.profile?.statsRefreshedAt ? new Date(payload.profile.statsRefreshedAt).getTime() : 0;
-    if (!refreshedAt || Date.now() - refreshedAt > 15 * 60_000) {
+    const scopedStatsReady = payload.profile?.stats?.schema === 'reliquary-stats@2' &&
+      payload.profile?.stats?.testnet?.schema === 'reliquary-stats@2';
+    if (!scopedStatsReady || !refreshedAt || Date.now() - refreshedAt > 15 * 60_000) {
       setStatus('Reliquary opened. Refreshing verified onchain activity…');
       refreshStats().catch(error => setStatus(`Profile loaded, but onchain refresh could not finish: ${error.message}`, 'bad'));
     } else {
@@ -202,6 +282,7 @@
       const current = await authJson('/api/reliquary/me');
       renderProfile(current.profile, { own: true });
       await loadShowcase({ own: true });
+      if (state.showTestnets) await loadTestnetShowcase({ own: true });
       const failureText = Number(payload.partialFailures || 0)
         ? ` · ${payload.partialFailures} source${payload.partialFailures === 1 ? '' : 's'} temporarily unavailable`
         : '';
@@ -214,11 +295,24 @@
   async function loadOwnedForPfp() {
     const grid = $('reliquaryPfpGrid');
     grid.innerHTML = '<div class="reliquary-empty">Loading NFTs currently owned by this wallet…</div>';
-    const response = await authJson('/api/reliquary/me/nfts?mode=owned&limit=80');
+    const response = await authJson('/api/reliquary/me/nfts?mode=owned&network=production&limit=80');
     state.owned = response.nfts || [];
     grid.innerHTML = state.owned.length
       ? state.owned.map(nft => nftCard(nft, true)).join('')
       : '<div class="reliquary-empty">No currently owned canonical Relic Forge NFTs are indexed yet. Refresh onchain stats first.</div>';
+  }
+
+  async function loadOwnedTestnetForPfp() {
+    const wrap = $('reliquaryTestnetPfpWrap');
+    const grid = $('reliquaryTestnetPfpGrid');
+    if (!wrap || !grid || !state.showTestnets) return;
+    wrap.classList.remove('hidden');
+    grid.innerHTML = '<div class="reliquary-empty">Loading owned testnet Relics…</div>';
+    const response = await authJson('/api/reliquary/me/nfts?mode=owned&network=testnet&limit=80');
+    state.ownedTestnet = response.nfts || [];
+    grid.innerHTML = state.ownedTestnet.length
+      ? state.ownedTestnet.map(nft => nftCard(nft, true)).join('')
+      : '<div class="reliquary-empty">No currently owned testnet Relic Forge NFTs are indexed.</div>';
   }
 
   function openEditor() {
@@ -247,6 +341,12 @@
     loadOwnedForPfp().catch(error => {
       $('reliquaryPfpGrid').innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
     });
+    if (state.showTestnets) {
+      loadOwnedTestnetForPfp().catch(error => {
+        $('reliquaryTestnetPfpGrid').innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
+      });
+    }
+    syncTestnetVisibility();
   }
 
   function closeEditor() {
@@ -311,16 +411,31 @@
     $('reliquarySaveProfileBtn')?.addEventListener('click', () => saveProfile().catch(error => setEditStatus(error.message, 'bad')));
     $('reliquaryClearPfpBtn')?.addEventListener('click', () => {
       state.selectedPfp = null;
-      document.querySelectorAll('#reliquaryPfpGrid .reliquary-token').forEach(node => node.classList.remove('selected'));
+      document.querySelectorAll('#reliquaryPfpGrid .reliquary-token,#reliquaryTestnetPfpGrid .reliquary-token').forEach(node => node.classList.remove('selected'));
       setEditStatus('Relic Forge mark selected. Save Profile to apply.');
     });
-    $('reliquaryPfpGrid')?.addEventListener('click', event => {
+    const selectPfp = event => {
       const card = event.target.closest('[data-pfp]');
       if (!card) return;
       const [chainId, contract, tokenId] = card.dataset.pfp.split(':');
       state.selectedPfp = { chainId: Number(chainId), contract, tokenId };
-      document.querySelectorAll('#reliquaryPfpGrid .reliquary-token').forEach(node => node.classList.toggle('selected', node === card));
+      document.querySelectorAll('#reliquaryPfpGrid .reliquary-token,#reliquaryTestnetPfpGrid .reliquary-token')
+        .forEach(node => node.classList.toggle('selected', node === card));
       setEditStatus('PFP selected. Save Profile to apply.');
+    };
+    $('reliquaryPfpGrid')?.addEventListener('click', selectPfp);
+    $('reliquaryTestnetPfpGrid')?.addEventListener('click', selectPfp);
+    $('reliquaryShowTestnets')?.addEventListener('change', async event => {
+      state.showTestnets = Boolean(event.target.checked);
+      syncTestnetVisibility();
+      if (state.profile) renderProfile(state.profile, { own: state.ownProfile });
+      if (!state.showTestnets) return;
+      await loadTestnetShowcase({ own: state.ownProfile });
+      if (!$('reliquaryModal')?.classList.contains('hidden') && state.wallet) {
+        await loadOwnedTestnetForPfp().catch(error => {
+          $('reliquaryTestnetPfpGrid').innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
+        });
+      }
     });
     $('reliquaryShareBtn')?.addEventListener('click', async () => {
       if (!state.profile?.username) return;
