@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="./rc47b.css?v=reliquary1" />
   <link rel="stylesheet" href="./rc47c.css?v=reliquary1" />
   <link rel="stylesheet" href="./rc47d.css?v=reliquary1" />
-  <link rel="stylesheet" href="./reliquary.css?v=network-separation-r1_9" />
+  <link rel="stylesheet" href="./reliquary.css?v=public-privacy-r1_10" />
   <link rel="stylesheet" href="./relicforge-product.css?v=button-feedback-r1_8"/>
   <link rel="stylesheet" href="./relicforge-runtime-banner.css?v=founder-ops-r1"/>
   <link rel="stylesheet" href="./relicforge-contact-footer.css?v=contact-footer-r1" />
@@ -41,12 +41,12 @@
       <div class="reliquary-status" id="reliquaryStatus">Connect your wallet to open My Reliquary.</div>
     </section>
 
-    <section class="reliquary-stat-section">
+    <section class="reliquary-stat-section" id="reliquaryProductionStatsSection">
       <div class="reliquary-section-head">
         <div><span>ONCHAIN ACTIVITY</span><h2>Platform History</h2></div>
         <div class="reliquary-head-tools">
           <small id="reliquaryCoverage">Production stats are reconstructed from verified Relic Forge collection activity.</small>
-          <label class="reliquary-testnet-toggle">
+          <label class="reliquary-testnet-toggle" id="reliquaryTestnetToggleWrap">
             <input id="reliquaryShowTestnets" type="checkbox" />
             <span>Show testnet activity</span>
           </label>
@@ -91,7 +91,7 @@
       </div>
     </section>
 
-    <section class="reliquary-showcase">
+    <section class="reliquary-showcase" id="reliquaryProductionShowcase">
       <div class="reliquary-section-head">
         <div><span>THE RELIQUARY</span><h2>Minted Relics</h2></div>
         <small>Production-network NFTs this wallet minted through registered Relic Forge collections. Testnet NFTs are excluded here.</small>
@@ -142,6 +142,22 @@
         </div>
       </section>
 
+      <section class="reliquary-edit-section">
+        <div class="reliquary-edit-copy">
+          <strong>Public Profile Visibility</strong>
+          <small>Choose what Relic Forge displays on your public Reliquary. Your username remains public. Hiding blockchain-derived information here does not make public onchain activity private outside Relic Forge.</small>
+        </div>
+        <div class="reliquary-privacy-grid">
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicWallet" type="checkbox" /><span><strong>Wallet Address</strong><small>Show your full wallet address on the public profile.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicBio" type="checkbox" /><span><strong>Bio</strong><small>Show your profile bio publicly.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicPfp" type="checkbox" /><span><strong>Profile NFT</strong><small>Show your selected Relic as the public profile image.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicStats" type="checkbox" /><span><strong>Platform History</strong><small>Show your production activity statistics.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicSpend" type="checkbox" /><span><strong>Mint Value Spent</strong><small>Show ETH spent inside your visible activity statistics.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicNfts" type="checkbox" /><span><strong>Minted Relics</strong><small>Show your public production Relic gallery.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicTestnet" type="checkbox" /><span><strong>Testnet Activity</strong><small>Allow visitors to reveal your separately tabulated testnet statistics and Relics.</small></span></label>
+        </div>
+      </section>
+
       <div class="reliquary-modal-actions">
         <button class="rc47b-btn" id="reliquaryClearPfpBtn" type="button">Use Relic Forge Mark</button>
         <button class="rc47b-btn primary" id="reliquarySaveProfileBtn" type="button">Save Profile</button>
@@ -154,7 +170,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=save-reliability5" defer></script>
-  <script src="./reliquary.js?v=auto-refresh-r1_9_4" defer></script>
+  <script src="./reliquary.js?v=public-privacy-r1_10" defer></script>
   <script src="./studio-shell.js?v=reliquary1" defer></script>
   <script src="./relicforge-v2-addresses.js?v=r26-p2a1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>

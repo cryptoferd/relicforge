@@ -101,6 +101,15 @@ button.reliquary-token:hover,button.reliquary-token.selected { border-color:#777
 .reliquary-locked-username strong { display:block; font-size:13px; }
 .reliquary-locked-username small { display:block; margin-top:4px; color:#777; font-size:9px; }
 .reliquary-bio-counter { margin-top:6px; color:#666; text-align:right; font-size:9px; }
+.reliquary-privacy-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.reliquary-privacy-option {
+  display:flex; align-items:flex-start; gap:9px; min-width:0; border:1px solid #303030; border-radius:10px;
+  padding:11px; background:#090909; cursor:pointer;
+}
+.reliquary-privacy-option input { margin-top:2px; accent-color:#aaa; flex:0 0 auto; }
+.reliquary-privacy-option > span { min-width:0; }
+.reliquary-privacy-option strong { display:block; color:#d7d7d7; font-size:9px; }
+.reliquary-privacy-option small { display:block; margin-top:4px; color:#6f6f6f; font-size:8px; line-height:1.4; }
 .reliquary-pfp-grid { grid-template-columns:repeat(5,minmax(0,1fr)); max-height:360px; overflow:auto; padding-right:3px; }
 .reliquary-modal-actions { display:flex; justify-content:flex-end; gap:8px; padding:18px 22px 4px; }
 .reliquary-modal-actions + .reliquary-field-status { padding:0 22px 18px; }
@@ -118,6 +127,7 @@ button.reliquary-token:hover,button.reliquary-token.selected { border-color:#777
   .reliquary-head-tools { align-items:flex-start; width:100%; }
   .reliquary-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .reliquary-grid,.reliquary-pfp-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .reliquary-privacy-grid { grid-template-columns:1fr; }
 }
 @media(max-width:480px) {
   .reliquary-identity { display:grid; grid-template-columns:74px 1fr; gap:15px; }

@@ -18,6 +18,64 @@ const RESERVED = new Set([
   'relic','relicforge','reliquary','root','staff','studio','support','system','treasury',
 ]);
 
+const PUBLIC_REFRESH_STALE_MS = 5 * 60_000;
+const RELIQUARY_REFRESHES = new Map();
+const DEFAULT_PUBLIC_VISIBILITY = Object.freeze({
+  showWallet: true,
+  showBio: true,
+  showPfp: true,
+  showStats: true,
+  showMintSpend: true,
+  showNfts: true,
+  showTestnet: false,
+});
+
+function normalizePublicVisibility(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const normalized = {};
+  for (const [key, fallback] of Object.entries(DEFAULT_PUBLIC_VISIBILITY)) {
+    normalized[key] = Object.prototype.hasOwnProperty.call(source, key)
+      ? Boolean(source[key])
+      : fallback;
+  }
+  return normalized;
+}
+
+function filterPublicStats(stats, visibility) {
+  if (!stats || typeof stats !== 'object') return null;
+  const filtered = { ...stats };
+  if (!visibility.showMintSpend) delete filtered.nativeValueSpentWei;
+  if (!visibility.showTestnet) {
+    delete filtered.testnet;
+  } else if (filtered.testnet && typeof filtered.testnet === 'object') {
+    filtered.testnet = { ...filtered.testnet };
+    if (!visibility.showMintSpend) delete filtered.testnet.nativeValueSpentWei;
+  }
+  return filtered;
+}
+
+function publicChainDataVisible(visibility) {
+  return Boolean(visibility.showStats || visibility.showNfts);
+}
+
+function refreshIsStale(row) {
+  const refreshed = row?.stats_refreshed_at ? new Date(row.stats_refreshed_at).getTime() : 0;
+  return !refreshed || Date.now() - refreshed >= PUBLIC_REFRESH_STALE_MS;
+}
+
+function refreshSingleFlight(walletInput) {
+  const wallet = norm(walletInput);
+  const active = RELIQUARY_REFRESHES.get(wallet);
+  if (active) return active;
+
+  const promise = refreshReliquary(wallet)
+    .finally(() => {
+      if (RELIQUARY_REFRESHES.get(wallet) === promise) RELIQUARY_REFRESHES.delete(wallet);
+    });
+  RELIQUARY_REFRESHES.set(wallet, promise);
+  return promise;
+}
+
 function norm(value) {
   return getAddress(String(value || '')).toLowerCase();
 }
@@ -72,15 +130,28 @@ async function livePfp(row) {
   };
 }
 
-async function profilePayload(row, { includeWallet = true } = {}) {
+async function profilePayload(row, { includeWallet = true, publicView = false } = {}) {
   if (!row) return null;
+  const publicVisibility = normalizePublicVisibility(row.public_settings);
+  const exposeWallet = includeWallet && (!publicView || publicVisibility.showWallet);
+  const exposeBio = !publicView || publicVisibility.showBio;
+  const exposePfp = !publicView || publicVisibility.showPfp;
+  const exposeStats = !publicView || publicVisibility.showStats;
+
+  let stats = null;
+  if (exposeStats) {
+    stats = await scopedCachedStats(row.wallet, row.stats_cache || {});
+    if (publicView) stats = filterPublicStats(stats, publicVisibility);
+  }
+
   return {
-    wallet: includeWallet ? row.wallet : undefined,
+    wallet: exposeWallet ? row.wallet : undefined,
     username: row.username,
-    bio: row.bio || '',
-    pfp: await livePfp(row),
-    stats: await scopedCachedStats(row.wallet, row.stats_cache || {}),
+    bio: exposeBio ? (row.bio || '') : undefined,
+    pfp: exposePfp ? await livePfp(row) : null,
+    stats,
     statsRefreshedAt: row.stats_refreshed_at || null,
+    publicVisibility,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -138,6 +209,7 @@ export default async function reliquaryRoutes(app) {
     let pfpChain = current.pfp_chain_id;
     let pfpContract = current.pfp_contract_address;
     let pfpToken = current.pfp_token_id;
+    let publicVisibility = normalizePublicVisibility(current.public_settings);
 
     if (Object.prototype.hasOwnProperty.call(request.body || {}, 'pfp')) {
       const pfp = request.body.pfp;
@@ -167,12 +239,21 @@ export default async function reliquaryRoutes(app) {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(request.body || {}, 'publicVisibility')) {
+      const incoming = request.body.publicVisibility;
+      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+        return reply.code(400).send({ error: 'Invalid Reliquary public-visibility settings.' });
+      }
+      publicVisibility = normalizePublicVisibility({ ...publicVisibility, ...incoming });
+    }
+
     const row = await one(
       `UPDATE reliquary_profiles
-       SET bio=$2,pfp_chain_id=$3,pfp_contract_address=$4,pfp_token_id=$5,updated_at=now()
+       SET bio=$2,pfp_chain_id=$3,pfp_contract_address=$4,pfp_token_id=$5,
+           public_settings=$6::jsonb,updated_at=now()
        WHERE wallet=$1
        RETURNING *`,
-      [wallet, bio, pfpChain, pfpContract, pfpToken]
+      [wallet, bio, pfpChain, pfpContract, pfpToken, JSON.stringify(publicVisibility)]
     );
     return { profile: await profilePayload(row) };
   });
@@ -188,7 +269,7 @@ export default async function reliquaryRoutes(app) {
       const cached = await cachedStats(wallet);
       return { ...cached, throttled: true };
     }
-    const result = await refreshReliquary(wallet);
+    const result = await refreshSingleFlight(wallet);
     return {
       stats: result.stats,
       coverage: result.coverage,
@@ -208,17 +289,50 @@ export default async function reliquaryRoutes(app) {
     const candidate = username(request.params.username);
     const row = await one('SELECT * FROM reliquary_profiles WHERE lower(username)=lower($1)', [candidate]);
     if (!row?.username) return reply.code(404).send({ error: 'Reliquary profile not found.' });
-    return { profile: await profilePayload(row) };
+
+    const visibility = normalizePublicVisibility(row.public_settings);
+    const stale = publicChainDataVisible(visibility) && refreshIsStale(row);
+    let refreshQueued = false;
+    if (stale && String(request.query?.refresh ?? '1') !== '0') {
+      refreshQueued = true;
+      refreshSingleFlight(row.wallet).catch(error => {
+        app.log.warn({ err: error, wallet: row.wallet }, 'Public Reliquary background refresh failed');
+      });
+    }
+
+    reply.header('Cache-Control', 'no-store');
+    return {
+      profile: await profilePayload(row, { publicView: true }),
+      refresh: {
+        stale,
+        refreshing: refreshQueued || RELIQUARY_REFRESHES.has(norm(row.wallet)),
+        staleAfterSeconds: Math.floor(PUBLIC_REFRESH_STALE_MS / 1000),
+      },
+    };
   });
 
   app.get('/api/reliquary/u/:username/nfts', async (request, reply) => {
     const candidate = username(request.params.username);
-    const row = await one('SELECT wallet,username FROM reliquary_profiles WHERE lower(username)=lower($1)', [candidate]);
+    const row = await one(
+      'SELECT wallet,username,public_settings FROM reliquary_profiles WHERE lower(username)=lower($1)',
+      [candidate]
+    );
     if (!row?.username) return reply.code(404).send({ error: 'Reliquary profile not found.' });
+
     const mode = request.query?.mode === 'owned' ? 'owned' : 'minted';
     const limit = Math.min(100, Math.max(1, Number(request.query?.limit || 48)));
     const networkKind = request.query?.network === 'testnet' ? 'testnet' : 'production';
-    return { mode, networkKind, nfts: await listReliquaryNfts(row.wallet, { mode, limit, networkKind }) };
+    const visibility = normalizePublicVisibility(row.public_settings);
+    const hidden = !visibility.showNfts || (networkKind === 'testnet' && !visibility.showTestnet);
+
+    reply.header('Cache-Control', 'no-store');
+    if (hidden) return { mode, networkKind, hidden: true, nfts: [] };
+    return {
+      mode,
+      networkKind,
+      hidden: false,
+      nfts: await listReliquaryNfts(row.wallet, { mode, limit, networkKind }),
+    };
   });
 
   app.get('/api/reliquary/nft/:chainId/:contract/:tokenId', async (request, reply) => {

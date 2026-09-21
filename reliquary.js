@@ -14,6 +14,18 @@
     usernameTimer: null,
   };
 
+  const PUBLIC_VISIBILITY_DEFAULTS = Object.freeze({
+    showWallet: true,
+    showBio: true,
+    showPfp: true,
+    showStats: true,
+    showMintSpend: true,
+    showNfts: true,
+    showTestnet: false,
+  });
+  const PUBLIC_REFRESH_POLL_MS = 1500;
+  const PUBLIC_REFRESH_MAX_POLLS = 24;
+
   const apiBase = () => String(window.RELICFORGE_CONFIG?.apiBase || '').replace(/\/$/, '');
   const short = value => {
     const s = String(value || '');
@@ -95,6 +107,10 @@
     return { chainId, label: chainId ? `Chain ${chainId}` : 'Unknown network', kind: 'production', testnet: false };
   }
 
+  function profileVisibility(profile = state.profile) {
+    return { ...PUBLIC_VISIBILITY_DEFAULTS, ...(profile?.publicVisibility || {}) };
+  }
+
   function imageFor(nft) {
     return nft?.metadata?.image || './relic-forge-logo.svg';
   }
@@ -144,17 +160,37 @@
   }
 
   function syncTestnetVisibility() {
-    $('reliquaryTestnetStatsSection')?.classList.toggle('hidden', !state.showTestnets);
-    $('reliquaryTestnetShowcase')?.classList.toggle('hidden', !state.showTestnets);
+    const visibility = profileVisibility();
+    const publicTestnetAllowed = state.ownProfile || visibility.showTestnet;
+    const statsAllowed = state.ownProfile || visibility.showStats;
+    const nftsAllowed = state.ownProfile || visibility.showNfts;
+
+    if (!publicTestnetAllowed) {
+      state.showTestnets = false;
+      if ($('reliquaryShowTestnets')) $('reliquaryShowTestnets').checked = false;
+    }
+
+    $('reliquaryTestnetToggleWrap')?.classList.toggle('hidden', !state.ownProfile && !visibility.showTestnet);
+    $('reliquaryTestnetStatsSection')?.classList.toggle(
+      'hidden',
+      !state.showTestnets || !publicTestnetAllowed || !statsAllowed
+    );
+    $('reliquaryTestnetShowcase')?.classList.toggle(
+      'hidden',
+      !state.showTestnets || !publicTestnetAllowed || !nftsAllowed
+    );
     const modalOpen = !$('reliquaryModal')?.classList.contains('hidden');
-    $('reliquaryTestnetPfpWrap')?.classList.toggle('hidden', !state.showTestnets || !modalOpen);
+    $('reliquaryTestnetPfpWrap')?.classList.toggle('hidden', !state.showTestnets || !state.ownProfile || !modalOpen);
   }
 
   function renderProfile(profile, { own = false } = {}) {
     state.profile = profile;
     state.ownProfile = own;
+    const visibility = profileVisibility(profile);
     const pfpNetwork = profile?.pfp?.valid ? networkInfo(profile.pfp) : null;
-    const allowPfp = profile?.pfp?.valid && (!pfpNetwork?.testnet || state.showTestnets);
+    const publicPfpAllowed = own || visibility.showPfp;
+    const testnetPfpAllowed = own || !pfpNetwork?.testnet || state.showTestnets;
+    const allowPfp = profile?.pfp?.valid && publicPfpAllowed && testnetPfpAllowed;
     const pfpImage = allowPfp && profile.pfp.metadata?.image
       ? profile.pfp.metadata.image
       : './relic-forge-logo.svg';
@@ -163,12 +199,19 @@
 
     $('reliquaryUsername').textContent = profile?.username ? `@${profile.username}` : (own ? 'Claim your Reliquary' : 'Unnamed Reliquary');
     $('reliquaryWallet').textContent = profile?.wallet ? `${short(profile.wallet)} · ${profile.wallet}` : '';
+    $('reliquaryWallet')?.classList.toggle('hidden', !own && !visibility.showWallet);
     $('reliquaryBio').textContent = profile?.bio || (own
       ? 'Claim a permanent username, choose a Relic Forge NFT as your PFP, and tell the ecosystem a little about yourself.'
-      : 'This wallet has not added a bio yet.');
+      : '');
+    $('reliquaryBio')?.classList.toggle('hidden', !own && !visibility.showBio);
 
     renderStats(profile?.stats || {});
     renderTestnetStats(profile?.stats?.testnet || {});
+    $('reliquaryProductionStatsSection')?.classList.toggle('hidden', !own && !visibility.showStats);
+    $('reliquaryProductionShowcase')?.classList.toggle('hidden', !own && !visibility.showNfts);
+    document.querySelectorAll('[data-stat="nativeValueSpentWei"],[data-testnet-stat="nativeValueSpentWei"]').forEach(node => {
+      node.closest('.reliquary-stat')?.classList.toggle('hidden', !own && !visibility.showMintSpend);
+    });
     syncTestnetVisibility();
     $('reliquaryEditBtn')?.classList.toggle('hidden', !own);
     $('reliquaryRefreshBtn')?.classList.toggle('hidden', !own);
@@ -211,6 +254,10 @@
   async function loadShowcase({ own = false } = {}) {
     const grid = $('reliquaryNftGrid');
     if (!grid) return;
+    if (!own && !profileVisibility().showNfts) {
+      grid.innerHTML = '';
+      return;
+    }
     grid.innerHTML = '<div class="reliquary-empty">Loading minted Relics…</div>';
     try {
       const response = own
@@ -227,7 +274,12 @@
 
   async function loadTestnetShowcase({ own = state.ownProfile } = {}) {
     const grid = $('reliquaryTestnetNftGrid');
+    const visibility = profileVisibility();
     if (!grid || !state.showTestnets) return;
+    if (!own && (!visibility.showTestnet || !visibility.showNfts)) {
+      grid.innerHTML = '';
+      return;
+    }
     grid.innerHTML = '<div class="reliquary-empty">Loading testnet Relics…</div>';
     try {
       const response = own
@@ -275,13 +327,56 @@
     }
   }
 
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function pollPublicRefresh(username, baselineRefreshedAt) {
+    for (let attempt = 0; attempt < PUBLIC_REFRESH_MAX_POLLS; attempt += 1) {
+      await wait(PUBLIC_REFRESH_POLL_MS);
+      if (state.ownProfile || state.publicUsername !== username) return;
+
+      const payload = await publicJson(
+        `/api/reliquary/u/${encodeURIComponent(username)}?refresh=0&_=${Date.now()}`
+      );
+      const nextRefreshedAt = payload.profile?.statsRefreshedAt || null;
+      const changed = String(nextRefreshedAt || '') !== String(baselineRefreshedAt || '');
+
+      if (changed || !payload.refresh?.refreshing) {
+        renderProfile(payload.profile, { own: false });
+        await loadShowcase({ own: false });
+        if (state.showTestnets) await loadTestnetShowcase({ own: false });
+        setStatus(
+          changed
+            ? `Public Reliquary updated · @${payload.profile.username}`
+            : `Public Reliquary · @${payload.profile.username}`,
+          'good'
+        );
+        return;
+      }
+    }
+
+    if (!state.ownProfile && state.publicUsername === username) {
+      setStatus('Public Reliquary loaded. Verified activity is still updating in the background.');
+    }
+  }
+
   async function loadPublic(username) {
     state.publicUsername = username;
     setStatus(`Opening @${username}…`);
     const payload = await publicJson(`/api/reliquary/u/${encodeURIComponent(username)}`);
     renderProfile(payload.profile, { own: false });
     await loadShowcase({ own: false });
-    setStatus(`Public Reliquary · @${payload.profile.username}`, 'good');
+
+    if (payload.refresh?.refreshing) {
+      setStatus(`Public Reliquary · @${payload.profile.username} · updating verified onchain activity…`);
+      pollPublicRefresh(username, payload.profile?.statsRefreshedAt || null)
+        .catch(error => {
+          if (!state.ownProfile && state.publicUsername === username) {
+            setStatus(`Public Reliquary loaded from indexed data: ${error.message}`);
+          }
+        });
+    } else {
+      setStatus(`Public Reliquary · @${payload.profile.username}`, 'good');
+    }
   }
 
   async function refreshStats() {
@@ -330,6 +425,7 @@
   function openEditor() {
     if (!state.profile) return;
     const profile = state.profile;
+    const visibility = profileVisibility(profile);
     $('reliquaryBioInput').value = profile.bio || '';
     $('reliquaryBioCount').textContent = String((profile.bio || '').length);
     setEditStatus('');
@@ -349,6 +445,19 @@
     state.selectedPfp = profile?.pfp?.valid
       ? { chainId: profile.pfp.chainId, contract: profile.pfp.contract, tokenId: profile.pfp.tokenId }
       : null;
+
+    const visibilityInputs = {
+      reliquaryPublicWallet: 'showWallet',
+      reliquaryPublicBio: 'showBio',
+      reliquaryPublicPfp: 'showPfp',
+      reliquaryPublicStats: 'showStats',
+      reliquaryPublicSpend: 'showMintSpend',
+      reliquaryPublicNfts: 'showNfts',
+      reliquaryPublicTestnet: 'showTestnet',
+    };
+    for (const [id, key] of Object.entries(visibilityInputs)) {
+      if ($(id)) $(id).checked = Boolean(visibility[key]);
+    }
     $('reliquaryModal').classList.remove('hidden');
     loadOwnedForPfp().catch(error => {
       $('reliquaryPfpGrid').innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
@@ -399,9 +508,18 @@
 
   async function saveProfile() {
     const bio = $('reliquaryBioInput').value;
+    const publicVisibility = {
+      showWallet: Boolean($('reliquaryPublicWallet')?.checked),
+      showBio: Boolean($('reliquaryPublicBio')?.checked),
+      showPfp: Boolean($('reliquaryPublicPfp')?.checked),
+      showStats: Boolean($('reliquaryPublicStats')?.checked),
+      showMintSpend: Boolean($('reliquaryPublicSpend')?.checked),
+      showNfts: Boolean($('reliquaryPublicNfts')?.checked),
+      showTestnet: Boolean($('reliquaryPublicTestnet')?.checked),
+    };
     const payload = await authJson('/api/reliquary/me', {
       method: 'PATCH',
-      body: JSON.stringify({ bio, pfp: state.selectedPfp ?? null }),
+      body: JSON.stringify({ bio, pfp: state.selectedPfp ?? null, publicVisibility }),
     });
     renderProfile(payload.profile, { own: true });
     setEditStatus('Profile saved.', 'good');
@@ -484,20 +602,29 @@
   async function init() {
     bind();
     if (state.publicUsername) {
-      try {
-        await loadPublic(state.publicUsername);
-        const session = window.RelicForgeCloud?.loadSession?.();
-        if (session?.wallet && session.wallet.toLowerCase() === String(state.profile?.wallet || '').toLowerCase()) {
-          state.wallet = session.wallet;
-          if (window.RelicForgeCloud?.sessionIsUsable?.(session, session.wallet)) {
-            // This is the signed-in user's own public URL. Re-enter the
-            // authenticated load path so automatic onchain refresh runs.
+      const requestedUsername = state.publicUsername;
+      const session = window.RelicForgeCloud?.loadSession?.();
+
+      // Resolve an already-signed-in owner's own public URL through the private
+      // profile endpoint before loading public data. This continues to work even
+      // when the owner has chosen to hide their wallet address publicly.
+      if (session?.wallet && window.RelicForgeCloud?.sessionIsUsable?.(session, session.wallet)) {
+        state.wallet = session.wallet;
+        try {
+          const ownPayload = await authJson('/api/reliquary/me');
+          if (
+            ownPayload.profile?.username &&
+            String(ownPayload.profile.username).toLowerCase() === String(requestedUsername).toLowerCase()
+          ) {
             await loadMe();
-          } else {
-            renderProfile(state.profile, { own: true });
-            setStatus('Your Reliquary is open from cached public data. Reconnect your wallet to refresh verified onchain activity.');
+            return;
           }
-        }
+        } catch {}
+        state.wallet = null;
+      }
+
+      try {
+        await loadPublic(requestedUsername);
       } catch (error) {
         setStatus(error.message, 'bad');
       }
