@@ -31,23 +31,70 @@ export async function createChallenge(walletInput) {
   const expires = new Date(issued.getTime() + 10 * 60_000);
   const domain = process.env.AUTH_DOMAIN || 'RelicForge';
   const uri = process.env.AUTH_URI || 'https://relicforge.xyz';
-  const message = `${domain} Cloud Sign-In\n\nSign this message to access your private RelicForge projects. This does not submit a transaction or cost gas.\n\nWallet: ${getAddress(wallet)}\nURI: ${uri}\nNonce: ${nonce}\nIssued At: ${issued.toISOString()}\nExpiration Time: ${expires.toISOString()}`;
+  const message = `${domain} Cloud Sign-In\\n\\nSign this message to access your private RelicForge projects. This does not submit a transaction or cost gas.\\n\\nWallet: ${getAddress(wallet)}\\nURI: ${uri}\\nNonce: ${nonce}\\nIssued At: ${issued.toISOString()}\\nExpiration Time: ${expires.toISOString()}`;
+
+  // Keep multiple active challenges for the same wallet. A wallet-primary-keyed
+  // nonce row allows one tab/page to invalidate another tab/page's challenge.
+  await db.query('DELETE FROM auth_challenges_v2 WHERE expires_at < now()');
   await db.query(
-    `INSERT INTO auth_nonces(wallet, nonce, message, expires_at) VALUES($1,$2,$3,$4)
-     ON CONFLICT(wallet) DO UPDATE SET nonce=EXCLUDED.nonce,message=EXCLUDED.message,expires_at=EXCLUDED.expires_at,created_at=now()`,
+    `INSERT INTO auth_challenges_v2(wallet, nonce, message, expires_at)
+     VALUES($1,$2,$3,$4)`,
     [wallet, nonce, message, expires]
   );
+
+  // Bound storage and verification work if a client repeatedly asks for challenges
+  // without completing sign-in.
+  await db.query(
+    `DELETE FROM auth_challenges_v2
+     WHERE wallet=$1
+       AND nonce NOT IN (
+         SELECT nonce
+         FROM auth_challenges_v2
+         WHERE wallet=$1 AND expires_at >= now()
+         ORDER BY created_at DESC
+         LIMIT 8
+       )`,
+    [wallet]
+  );
+
   return { wallet: getAddress(wallet), nonce, message, expiresAt: expires.toISOString() };
 }
 
 export async function verifyChallenge(walletInput, signature) {
   const wallet = normalizeWallet(walletInput);
-  const row = await one('SELECT message, expires_at FROM auth_nonces WHERE wallet=$1', [wallet]);
-  if (!row) throw new Error('No active sign-in challenge.');
-  if (new Date(row.expires_at).getTime() < Date.now()) throw new Error('Sign-in challenge expired.');
-  const recovered = normalizeWallet(verifyMessage(row.message, signature));
-  if (recovered !== wallet) throw new Error('Signature does not match the requested wallet.');
-  await db.query('DELETE FROM auth_nonces WHERE wallet=$1', [wallet]);
+  await db.query('DELETE FROM auth_challenges_v2 WHERE expires_at < now()');
+
+  const { rows } = await db.query(
+    `SELECT nonce,message,expires_at
+     FROM auth_challenges_v2
+     WHERE wallet=$1 AND expires_at >= now()
+     ORDER BY created_at DESC
+     LIMIT 8`,
+    [wallet]
+  );
+
+  if (!rows.length) throw new Error('No active sign-in challenge.');
+
+  let matched = null;
+  for (const row of rows) {
+    try {
+      const recovered = normalizeWallet(verifyMessage(row.message, signature));
+      if (recovered === wallet) {
+        matched = row;
+        break;
+      }
+    } catch {}
+  }
+
+  if (!matched) throw new Error('Signature does not match the requested wallet.');
+
+  // Consume only the challenge that produced this signature. Other tabs keep
+  // their own independent active challenges.
+  await db.query(
+    'DELETE FROM auth_challenges_v2 WHERE wallet=$1 AND nonce=$2',
+    [wallet, matched.nonce]
+  );
+
   const token = await new SignJWT({ wallet })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(issuer)
