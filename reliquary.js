@@ -111,6 +111,35 @@
     return { ...PUBLIC_VISIBILITY_DEFAULTS, ...(profile?.publicVisibility || {}) };
   }
 
+  const PUBLIC_VISIBILITY_INPUTS = Object.freeze({
+    reliquaryPublicWallet: 'showWallet',
+    reliquaryPublicBio: 'showBio',
+    reliquaryPublicPfp: 'showPfp',
+    reliquaryPublicStats: 'showStats',
+    reliquaryPublicSpend: 'showMintSpend',
+    reliquaryPublicNfts: 'showNfts',
+    reliquaryPublicTestnet: 'showTestnet',
+  });
+
+  function visibilityFromEditor(profile = state.profile) {
+    const visibility = profileVisibility(profile);
+    for (const [id, key] of Object.entries(PUBLIC_VISIBILITY_INPUTS)) {
+      const input = $(id);
+      if (input) visibility[key] = Boolean(input.checked);
+    }
+    return visibility;
+  }
+
+  function setProductionProfileVisibleInEditor() {
+    const keys = ['showWallet', 'showBio', 'showPfp', 'showStats', 'showMintSpend', 'showNfts'];
+    for (const [id, key] of Object.entries(PUBLIC_VISIBILITY_INPUTS)) {
+      if (!keys.includes(key)) continue;
+      const input = $(id);
+      if (input) input.checked = true;
+    }
+    setEditStatus('Production profile visibility enabled. Click Save Profile to apply.', 'good');
+  }
+
   function imageFor(nft) {
     return nft?.metadata?.image || './relic-forge-logo.svg';
   }
@@ -187,10 +216,11 @@
     state.profile = profile;
     state.ownProfile = own;
     const visibility = profileVisibility(profile);
-    const pfpNetwork = profile?.pfp?.valid ? networkInfo(profile.pfp) : null;
     const publicPfpAllowed = own || visibility.showPfp;
-    const testnetPfpAllowed = own || !pfpNetwork?.testnet || state.showTestnets;
-    const allowPfp = profile?.pfp?.valid && publicPfpAllowed && testnetPfpAllowed;
+    // The explicit Profile NFT visibility preference owns public PFP display.
+    // Testnet activity can remain hidden without suppressing a deliberately
+    // selected profile image.
+    const allowPfp = profile?.pfp?.valid && publicPfpAllowed;
     const pfpImage = allowPfp && profile.pfp.metadata?.image
       ? profile.pfp.metadata.image
       : './relic-forge-logo.svg';
@@ -446,16 +476,7 @@
       ? { chainId: profile.pfp.chainId, contract: profile.pfp.contract, tokenId: profile.pfp.tokenId }
       : null;
 
-    const visibilityInputs = {
-      reliquaryPublicWallet: 'showWallet',
-      reliquaryPublicBio: 'showBio',
-      reliquaryPublicPfp: 'showPfp',
-      reliquaryPublicStats: 'showStats',
-      reliquaryPublicSpend: 'showMintSpend',
-      reliquaryPublicNfts: 'showNfts',
-      reliquaryPublicTestnet: 'showTestnet',
-    };
-    for (const [id, key] of Object.entries(visibilityInputs)) {
+    for (const [id, key] of Object.entries(PUBLIC_VISIBILITY_INPUTS)) {
       if ($(id)) $(id).checked = Boolean(visibility[key]);
     }
     $('reliquaryModal').classList.remove('hidden');
@@ -508,15 +529,9 @@
 
   async function saveProfile() {
     const bio = $('reliquaryBioInput').value;
-    const publicVisibility = {
-      showWallet: Boolean($('reliquaryPublicWallet')?.checked),
-      showBio: Boolean($('reliquaryPublicBio')?.checked),
-      showPfp: Boolean($('reliquaryPublicPfp')?.checked),
-      showStats: Boolean($('reliquaryPublicStats')?.checked),
-      showMintSpend: Boolean($('reliquaryPublicSpend')?.checked),
-      showNfts: Boolean($('reliquaryPublicNfts')?.checked),
-      showTestnet: Boolean($('reliquaryPublicTestnet')?.checked),
-    };
+    // Start from the current server-backed values. Missing controls in a stale
+    // cached document must never silently become false.
+    const publicVisibility = visibilityFromEditor(state.profile);
     const payload = await authJson('/api/reliquary/me', {
       method: 'PATCH',
       body: JSON.stringify({ bio, pfp: state.selectedPfp ?? null, publicVisibility }),
@@ -539,6 +554,7 @@
     });
     $('reliquaryClaimUsernameBtn')?.addEventListener('click', () => claimUsername().catch(error => setEditStatus(error.message, 'bad')));
     $('reliquarySaveProfileBtn')?.addEventListener('click', () => saveProfile().catch(error => setEditStatus(error.message, 'bad')));
+    $('reliquaryPublicProductionBtn')?.addEventListener('click', setProductionProfileVisibleInEditor);
     $('reliquaryClearPfpBtn')?.addEventListener('click', () => {
       state.selectedPfp = null;
       document.querySelectorAll('#reliquaryPfpGrid .reliquary-token,#reliquaryTestnetPfpGrid .reliquary-token').forEach(node => node.classList.remove('selected'));
