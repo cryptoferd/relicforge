@@ -330,15 +330,14 @@
   }
 
   async function tokenInfo(row) {
-    let meta=null, owner=null, recipientUsername=null;
+    let meta=null, owner=null, ownerUsername=null;
     try {
-      const [uri,currentOwner,publicUsername]=await Promise.all([
+      const [uri,currentOwner]=await Promise.all([
         state.collection.tokenURI(row.tokenId).catch(()=>null),
-        state.collection.ownerOf(row.tokenId).catch(()=>null),
-        reliquaryUsername(row.to)
+        state.collection.ownerOf(row.tokenId).catch(()=>null)
       ]);
       owner=currentOwner && window.ethers.isAddress(currentOwner) ? window.ethers.getAddress(currentOwner) : null;
-      recipientUsername=publicUsername;
+      if(owner) ownerUsername=await reliquaryUsername(owner);
       if(uri) {
         meta=decodeDataJson(uri);
         if(!meta && /^https?:\/\//i.test(uri)) {
@@ -349,10 +348,10 @@
         }
       }
     } catch(_) {}
-    return {...row,meta,owner,recipientUsername};
+    return {...row,meta,owner,ownerUsername};
   }
 
-  function tokenCard(row,{showRecipient=false,showOwnerState=false}={}) {
+  function tokenCard(row,{showHolder=false,showOwnerState=false}={}) {
     const image=row.meta?.image || '';
     const title=row.meta?.name || `Token #${row.tokenId}`;
     const txUrl=`${explorerBase()}/tx/${encodeURIComponent(row.transactionHash)}`;
@@ -361,7 +360,7 @@
       <div class="minted-token-thumb">${image?`<img src="${esc(image)}" alt="${esc(title)}"/>`:'<div class="minted-thumb-empty">Artwork loading…</div>'}</div>
       <div class="minted-token-info">
         <div><strong>${esc(title)}</strong><span>#${row.tokenId}</span></div>
-        ${showRecipient?`<small>Minted to ${reliquaryWalletMarkup(row.to,row.recipientUsername)}</small>`:''}
+        ${showHolder&&row.owner?`<small>Held by ${reliquaryWalletMarkup(row.owner,row.ownerUsername)}</small>`:''}
         ${showOwnerState?`<small class="v2-live-owner-state ${held?'held':'moved'}">${held?'Still in your wallet':'Minted by you · since transferred'}</small>`:''}
         <div class="v2-live-meta"><span>Block ${row.blockNumber.toLocaleString()}</span><a href="${txUrl}" target="_blank" rel="noreferrer">Transaction ↗</a></div>
       </div>
@@ -376,7 +375,7 @@
       return;
     }
     const rows=await Promise.all(state.recent.map(tokenInfo));
-    grid.innerHTML=rows.map(row=>tokenCard(row,{showRecipient:true})).join('');
+    grid.innerHTML=rows.map(row=>tokenCard(row,{showHolder:true})).join('');
     if($('v2RecentStatus')) $('v2RecentStatus').textContent=`Showing the ${rows.length} most recent mint${rows.length===1?'':'s'} · live refresh every 4 seconds`;
   }
 
@@ -394,7 +393,7 @@
       return;
     }
     const rows=await Promise.all(state.mine.map(tokenInfo));
-    grid.innerHTML=rows.map(row=>tokenCard(row,{showOwnerState:true})).join('');
+    grid.innerHTML=rows.map(row=>tokenCard(row,{showHolder:true,showOwnerState:true})).join('');
     if($('myNftsSummary')) $('myNftsSummary').textContent=`${rows.length} recent NFT${rows.length===1?'':'s'} minted directly to ${short(state.wallet)}.`;
   }
 

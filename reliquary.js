@@ -290,7 +290,9 @@
 
   function nftCard(nft, selectable = false) {
     const meta = nft.metadata || {};
-    const ownedLabel = nft.owned ? 'Owned' : 'Minted · transferred';
+    const ownedLabel = nft.owned
+      ? (nft.mintedByWallet ? 'Minted · Held' : 'Acquired · Held')
+      : 'Not currently held';
     const selected = state.selectedPfp &&
       Number(state.selectedPfp.chainId) === Number(nft.chainId) &&
       String(state.selectedPfp.contract).toLowerCase() === String(nft.contract).toLowerCase() &&
@@ -317,15 +319,15 @@
       grid.innerHTML = '';
       return;
     }
-    grid.innerHTML = '<div class="reliquary-empty">Loading minted Relics…</div>';
+    grid.innerHTML = '<div class="reliquary-empty">Loading currently held Relics…</div>';
     try {
       const response = own
-        ? await authJson('/api/reliquary/me/nfts?mode=minted&network=production&limit=48')
-        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=minted&network=production&limit=48`);
+        ? await authJson('/api/reliquary/me/nfts?mode=owned&network=production&limit=48')
+        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=owned&network=production&limit=48`);
       const nfts = response.nfts || [];
       grid.innerHTML = nfts.length
         ? nfts.map(nft => nftCard(nft, false)).join('')
-        : '<div class="reliquary-empty">No indexed Relic Forge mints yet. Refresh the onchain history after minting to populate this showcase.</div>';
+        : '<div class="reliquary-empty">No canonical Relic Forge NFTs are currently held by this wallet. Refresh the onchain history after a mint or transfer to update holdings.</div>';
     } catch (error) {
       grid.innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
     }
@@ -339,15 +341,15 @@
       grid.innerHTML = '';
       return;
     }
-    grid.innerHTML = '<div class="reliquary-empty">Loading testnet Relics…</div>';
+    grid.innerHTML = '<div class="reliquary-empty">Loading currently held testnet Relics…</div>';
     try {
       const response = own
-        ? await authJson('/api/reliquary/me/nfts?mode=minted&network=testnet&limit=48')
-        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=minted&network=testnet&limit=48`);
+        ? await authJson('/api/reliquary/me/nfts?mode=owned&network=testnet&limit=48')
+        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=owned&network=testnet&limit=48`);
       const nfts = response.nfts || [];
       grid.innerHTML = nfts.length
         ? nfts.map(nft => nftCard(nft, false)).join('')
-        : '<div class="reliquary-empty">No indexed testnet Relic Forge mints for this wallet.</div>';
+        : '<div class="reliquary-empty">No canonical testnet Relic Forge NFTs are currently held by this wallet.</div>';
     } catch (error) {
       grid.innerHTML = `<div class="reliquary-empty">${escapeHtml(error.message)}</div>`;
     }

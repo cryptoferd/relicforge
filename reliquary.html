@@ -93,16 +93,16 @@
 
     <section class="reliquary-showcase" id="reliquaryProductionShowcase">
       <div class="reliquary-section-head">
-        <div><span>THE RELIQUARY</span><h2>Minted Relics</h2></div>
-        <small>Production-network NFTs this wallet minted through registered Relic Forge collections. Testnet NFTs are excluded here.</small>
+        <div><span>THE RELIQUARY</span><h2>Relics Held</h2></div>
+        <small>Production-network Relic Forge NFTs currently held by this wallet, whether minted here or acquired later. Testnet NFTs are excluded here.</small>
       </div>
       <div class="reliquary-grid" id="reliquaryNftGrid"><div class="reliquary-empty">Connect a wallet or open a public Reliquary profile.</div></div>
     </section>
 
     <section class="reliquary-showcase reliquary-testnet-section hidden" id="reliquaryTestnetShowcase">
       <div class="reliquary-section-head">
-        <div><span>TESTNET RELICS</span><h2>Testnet Minted Relics</h2></div>
-        <small>Testnet NFTs are isolated from the production Reliquary and do not affect production statistics.</small>
+        <div><span>TESTNET RELICS</span><h2>Testnet Relics Held</h2></div>
+        <small>Testnet Relic Forge NFTs currently held by this wallet. They remain isolated from production statistics.</small>
       </div>
       <div class="reliquary-grid" id="reliquaryTestnetNftGrid"><div class="reliquary-empty">Enable testnet activity to load testnet Relics.</div></div>
     </section>
@@ -156,7 +156,7 @@
           <label class="reliquary-privacy-option"><input id="reliquaryPublicPfp" type="checkbox" /><span><strong>Profile NFT</strong><small>Show your selected Relic as the public profile image.</small></span></label>
           <label class="reliquary-privacy-option"><input id="reliquaryPublicStats" type="checkbox" /><span><strong>Platform History</strong><small>Show your production activity statistics.</small></span></label>
           <label class="reliquary-privacy-option"><input id="reliquaryPublicSpend" type="checkbox" /><span><strong>Mint Value Spent</strong><small>Show ETH spent inside your visible activity statistics.</small></span></label>
-          <label class="reliquary-privacy-option"><input id="reliquaryPublicNfts" type="checkbox" /><span><strong>Minted Relics</strong><small>Show your public production Relic gallery.</small></span></label>
+          <label class="reliquary-privacy-option"><input id="reliquaryPublicNfts" type="checkbox" /><span><strong>Relics Held</strong><small>Show the canonical Relic Forge NFTs currently held by your wallet.</small></span></label>
           <label class="reliquary-privacy-option"><input id="reliquaryPublicTestnet" type="checkbox" /><span><strong>Testnet Activity</strong><small>Allow visitors to reveal your separately tabulated testnet statistics and Relics.</small></span></label>
         </div>
       </section>
@@ -173,7 +173,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.7/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="./wallet.js?v=11.1.6" defer></script>
   <script src="./cloud.js?v=save-reliability5" defer></script>
-  <script src="./reliquary.js?v=wallet-reliquaries-r1_11_1" defer></script>
+  <script src="./reliquary.js?v=held-relics-r1_12_1" defer></script>
   <script src="./studio-shell.js?v=reliquary1" defer></script>
   <script src="./relicforge-v2-addresses.js?v=r26-p2a1"></script>
   <script src="./relicforge-networks.js?v=r26-p2a1"></script>

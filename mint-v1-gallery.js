@@ -142,7 +142,7 @@
         <div class="minted-token-thumb">${imageMarkup(meta.image, meta.name)}</div>
         <div class="minted-token-info">
           <div><strong>${esc(meta.name || `Token #${tokenId}`)}</strong><span>#${tokenId}</span></div>
-          <small>${revealed ? 'Revealed' : 'Unrevealed'} · ${reliquaryWalletMarkup(owner, publicUsername)}</small>
+          <small>${revealed ? 'Revealed' : 'Unrevealed'} · Held by ${reliquaryWalletMarkup(owner, publicUsername)}</small>
         </div>
       </article>`;
       if (revealed) state.tokenCache.set(Number(tokenId), { revealed:true, html });
