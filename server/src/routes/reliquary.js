@@ -157,6 +157,25 @@ async function profilePayload(row, { includeWallet = true, publicView = false } 
   };
 }
 
+async function walletPublicPayload(row) {
+  const visibility = normalizePublicVisibility(row?.public_settings);
+  const profile = await profilePayload(row, { publicView: true });
+
+  // A wallet URL already identifies the wallet, but it must not become a
+  // backdoor for correlating a claimed profile whose owner hid Wallet Address.
+  if (row?.username && !visibility.showWallet) {
+    return {
+      ...profile,
+      wallet: row.wallet,
+      username: null,
+      bio: undefined,
+      pfp: null,
+    };
+  }
+
+  return { ...profile, wallet: row.wallet };
+}
+
 export default async function reliquaryRoutes(app) {
   app.get('/api/reliquary/wallet/:wallet/username', async (request, reply) => {
     let wallet;
@@ -174,6 +193,62 @@ export default async function reliquaryRoutes(app) {
 
     reply.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
     return { username: publicUsername };
+  });
+
+  app.get('/api/reliquary/wallet/:wallet', async (request, reply) => {
+    let wallet;
+    try { wallet = norm(request.params.wallet); }
+    catch { return reply.code(400).send({ error: 'Invalid wallet address.' }); }
+
+    let row = await one('SELECT * FROM reliquary_profiles WHERE wallet=$1', [wallet]);
+    if (!row) row = await ensureReliquaryProfile(wallet);
+
+    const visibility = normalizePublicVisibility(row.public_settings);
+    const stale = publicChainDataVisible(visibility) && refreshIsStale(row);
+    let refreshQueued = false;
+    if (stale && String(request.query?.refresh ?? '1') !== '0') {
+      refreshQueued = true;
+      refreshSingleFlight(wallet).catch(error => {
+        app.log.warn({ err: error, wallet }, 'Public wallet Reliquary background refresh failed');
+      });
+    }
+
+    reply.header('Cache-Control', 'no-store');
+    return {
+      profile: await walletPublicPayload(row),
+      refresh: {
+        stale,
+        refreshing: refreshQueued || RELIQUARY_REFRESHES.has(wallet),
+        staleAfterSeconds: Math.floor(PUBLIC_REFRESH_STALE_MS / 1000),
+      },
+    };
+  });
+
+  app.get('/api/reliquary/wallet/:wallet/nfts', async (request, reply) => {
+    let wallet;
+    try { wallet = norm(request.params.wallet); }
+    catch { return reply.code(400).send({ error: 'Invalid wallet address.' }); }
+
+    let row = await one(
+      'SELECT wallet,username,public_settings FROM reliquary_profiles WHERE wallet=$1',
+      [wallet]
+    );
+    if (!row) row = await ensureReliquaryProfile(wallet);
+
+    const mode = request.query?.mode === 'owned' ? 'owned' : 'minted';
+    const limit = Math.min(100, Math.max(1, Number(request.query?.limit || 48)));
+    const networkKind = request.query?.network === 'testnet' ? 'testnet' : 'production';
+    const visibility = normalizePublicVisibility(row.public_settings);
+    const hidden = !visibility.showNfts || (networkKind === 'testnet' && !visibility.showTestnet);
+
+    reply.header('Cache-Control', 'no-store');
+    if (hidden) return { mode, networkKind, hidden: true, nfts: [] };
+    return {
+      mode,
+      networkKind,
+      hidden: false,
+      nfts: await listReliquaryNfts(wallet, { mode, limit, networkKind }),
+    };
   });
 
   app.get('/api/reliquary/username/:username/available', async (request, reply) => {

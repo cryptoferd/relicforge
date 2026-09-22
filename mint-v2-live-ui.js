@@ -63,10 +63,13 @@
   }
 
   function reliquaryWalletMarkup(wallet, username) {
-    const label=esc(short(wallet));
-    if(!username) return label;
-    const href=`./reliquary.html?u=${encodeURIComponent(username)}`;
-    return `<a class="reliquary-wallet-link" href="${href}" title="View @${esc(username)} in the Reliquary">${label}</a>`;
+    const claimed=Boolean(username);
+    const label=claimed ? `@${esc(username)}` : esc(short(wallet));
+    const href=claimed
+      ? `./reliquary.html?u=${encodeURIComponent(username)}`
+      : `./reliquary.html?w=${encodeURIComponent(wallet)}`;
+    const title=claimed ? `View @${esc(username)} in the Reliquary` : `View ${esc(short(wallet))} in the Reliquary`;
+    return `<a class="reliquary-wallet-link" href="${href}" title="${title}">${label}</a>`;
   }
 
   function queryConfig() {

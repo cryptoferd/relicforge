@@ -6,6 +6,7 @@
     wallet: null,
     profile: null,
     publicUsername: new URLSearchParams(location.search).get('u') || null,
+    publicWallet: new URLSearchParams(location.search).get('w') || null,
     selectedPfp: undefined,
     owned: [],
     ownedTestnet: [],
@@ -109,6 +110,31 @@
 
   function profileVisibility(profile = state.profile) {
     return { ...PUBLIC_VISIBILITY_DEFAULTS, ...(profile?.publicVisibility || {}) };
+  }
+
+  function publicProfileApiPath({ nfts = false } = {}) {
+    const suffix = nfts ? '/nfts' : '';
+    if (state.publicUsername) {
+      return `/api/reliquary/u/${encodeURIComponent(state.publicUsername)}${suffix}`;
+    }
+    if (state.publicWallet) {
+      return `/api/reliquary/wallet/${encodeURIComponent(state.publicWallet)}${suffix}`;
+    }
+    throw new Error('No public Reliquary target is selected.');
+  }
+
+  function publicProfileKey() {
+    return state.publicUsername
+      ? `u:${String(state.publicUsername).toLowerCase()}`
+      : state.publicWallet
+        ? `w:${String(state.publicWallet).toLowerCase()}`
+        : '';
+  }
+
+  function publicProfileLabel(profile = state.profile) {
+    return profile?.username
+      ? `@${profile.username}`
+      : short(profile?.wallet || state.publicWallet || '');
   }
 
   const PUBLIC_VISIBILITY_INPUTS = Object.freeze({
@@ -227,7 +253,9 @@
     const pfp = $('reliquaryPfp');
     if (pfp) pfp.innerHTML = `<img src="${pfpImage}" alt="" />`;
 
-    $('reliquaryUsername').textContent = profile?.username ? `@${profile.username}` : (own ? 'Claim your Reliquary' : 'Unnamed Reliquary');
+    $('reliquaryUsername').textContent = profile?.username
+      ? `@${profile.username}`
+      : (own ? 'Claim your Reliquary' : 'Unclaimed Reliquary');
     $('reliquaryWallet').textContent = profile?.wallet ? `${short(profile.wallet)} · ${profile.wallet}` : '';
     $('reliquaryWallet')?.classList.toggle('hidden', !own && !visibility.showWallet);
     $('reliquaryBio').textContent = profile?.bio || (own
@@ -248,14 +276,15 @@
     $('reliquaryShareBtn')?.classList.toggle('hidden', !profile?.username);
     $('reliquaryConnectBtn')?.classList.toggle('hidden', own && Boolean(state.wallet));
 
-    if (own && profile?.username) {
+    if (own) {
       // Keep the signed-in Reliquary on its authenticated route. Public profile
-      // links still use ?u= via Copy Profile Link, but retaining ?u here causes
-      // reloads to enter the public-profile initialization path first.
+      // links may use ?u= or ?w=, but My Reliquary itself should stay private/authenticated.
       const ownUrl = new URL(location.href);
       ownUrl.searchParams.delete('u');
+      ownUrl.searchParams.delete('w');
       history.replaceState(null, '', ownUrl.pathname + ownUrl.search + ownUrl.hash);
-      state.publicUsername = profile.username;
+      state.publicUsername = profile?.username || null;
+      state.publicWallet = null;
     }
   }
 
@@ -292,7 +321,7 @@
     try {
       const response = own
         ? await authJson('/api/reliquary/me/nfts?mode=minted&network=production&limit=48')
-        : await publicJson(`/api/reliquary/u/${encodeURIComponent(state.publicUsername)}/nfts?mode=minted&network=production&limit=48`);
+        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=minted&network=production&limit=48`);
       const nfts = response.nfts || [];
       grid.innerHTML = nfts.length
         ? nfts.map(nft => nftCard(nft, false)).join('')
@@ -314,7 +343,7 @@
     try {
       const response = own
         ? await authJson('/api/reliquary/me/nfts?mode=minted&network=testnet&limit=48')
-        : await publicJson(`/api/reliquary/u/${encodeURIComponent(state.publicUsername)}/nfts?mode=minted&network=testnet&limit=48`);
+        : await publicJson(`${publicProfileApiPath({ nfts: true })}?mode=minted&network=testnet&limit=48`);
       const nfts = response.nfts || [];
       grid.innerHTML = nfts.length
         ? nfts.map(nft => nftCard(nft, false)).join('')
@@ -359,13 +388,13 @@
 
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-  async function pollPublicRefresh(username, baselineRefreshedAt) {
+  async function pollPublicRefresh(subjectKey, baselineRefreshedAt) {
     for (let attempt = 0; attempt < PUBLIC_REFRESH_MAX_POLLS; attempt += 1) {
       await wait(PUBLIC_REFRESH_POLL_MS);
-      if (state.ownProfile || state.publicUsername !== username) return;
+      if (state.ownProfile || publicProfileKey() !== subjectKey) return;
 
       const payload = await publicJson(
-        `/api/reliquary/u/${encodeURIComponent(username)}?refresh=0&_=${Date.now()}`
+        `${publicProfileApiPath()}?refresh=0&_=${Date.now()}`
       );
       const nextRefreshedAt = payload.profile?.statsRefreshedAt || null;
       const changed = String(nextRefreshedAt || '') !== String(baselineRefreshedAt || '');
@@ -376,36 +405,41 @@
         if (state.showTestnets) await loadTestnetShowcase({ own: false });
         setStatus(
           changed
-            ? `Public Reliquary updated · @${payload.profile.username}`
-            : `Public Reliquary · @${payload.profile.username}`,
+            ? `Public Reliquary updated · ${publicProfileLabel(payload.profile)}`
+            : `Public Reliquary · ${publicProfileLabel(payload.profile)}`,
           'good'
         );
         return;
       }
     }
 
-    if (!state.ownProfile && state.publicUsername === username) {
+    if (!state.ownProfile && publicProfileKey() === subjectKey) {
       setStatus('Public Reliquary loaded. Verified activity is still updating in the background.');
     }
   }
 
-  async function loadPublic(username) {
-    state.publicUsername = username;
-    setStatus(`Opening @${username}…`);
-    const payload = await publicJson(`/api/reliquary/u/${encodeURIComponent(username)}`);
+  async function loadPublic({ username = null, wallet = null } = {}) {
+    state.publicUsername = username || null;
+    state.publicWallet = wallet || null;
+    const subjectKey = publicProfileKey();
+    const openingLabel = username ? `@${username}` : short(wallet);
+    setStatus(`Opening ${openingLabel}…`);
+
+    const payload = await publicJson(publicProfileApiPath());
     renderProfile(payload.profile, { own: false });
     await loadShowcase({ own: false });
 
+    const label = publicProfileLabel(payload.profile);
     if (payload.refresh?.refreshing) {
-      setStatus(`Public Reliquary · @${payload.profile.username} · updating verified onchain activity…`);
-      pollPublicRefresh(username, payload.profile?.statsRefreshedAt || null)
+      setStatus(`Public Reliquary · ${label} · updating verified onchain activity…`);
+      pollPublicRefresh(subjectKey, payload.profile?.statsRefreshedAt || null)
         .catch(error => {
-          if (!state.ownProfile && state.publicUsername === username) {
+          if (!state.ownProfile && publicProfileKey() === subjectKey) {
             setStatus(`Public Reliquary loaded from indexed data: ${error.message}`);
           }
         });
     } else {
-      setStatus(`Public Reliquary · @${payload.profile.username}`, 'good');
+      setStatus(`Public Reliquary · ${label}`, 'good');
     }
   }
 
@@ -617,21 +651,24 @@
 
   async function init() {
     bind();
-    if (state.publicUsername) {
+    if (state.publicUsername || state.publicWallet) {
       const requestedUsername = state.publicUsername;
+      const requestedWallet = state.publicWallet;
       const session = window.RelicForgeCloud?.loadSession?.();
 
       // Resolve an already-signed-in owner's own public URL through the private
-      // profile endpoint before loading public data. This continues to work even
-      // when the owner has chosen to hide their wallet address publicly.
+      // profile endpoint. This supports both username and wallet public links.
       if (session?.wallet && window.RelicForgeCloud?.sessionIsUsable?.(session, session.wallet)) {
         state.wallet = session.wallet;
         try {
           const ownPayload = await authJson('/api/reliquary/me');
-          if (
+          const usernameMatches = requestedUsername &&
             ownPayload.profile?.username &&
-            String(ownPayload.profile.username).toLowerCase() === String(requestedUsername).toLowerCase()
-          ) {
+            String(ownPayload.profile.username).toLowerCase() === String(requestedUsername).toLowerCase();
+          const walletMatches = requestedWallet &&
+            String(session.wallet).toLowerCase() === String(requestedWallet).toLowerCase();
+
+          if (usernameMatches || walletMatches) {
             await loadMe();
             return;
           }
@@ -640,7 +677,7 @@
       }
 
       try {
-        await loadPublic(requestedUsername);
+        await loadPublic({ username: requestedUsername, wallet: requestedWallet });
       } catch (error) {
         setStatus(error.message, 'bad');
       }
