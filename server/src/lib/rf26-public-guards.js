@@ -122,24 +122,9 @@ export function installRf26PublicGuards(app){
         return {...response,mints:response.mints.filter(row=>allowedKeys.has(key(row.chainId,row.contract)))};
       };
     }
-    if(url==='/api/reliquary/u/:username'){
-      const original=options.handler;
-      options.handler=async function(request,reply){
-        const response=await original.call(this,request,reply);
-        if(reply.sent||!response?.profile)return response;
-        const profile=response.profile;
-        return {...response,profile:{...profile,pfp:await publicPfp(profile),stats:await publicStats(profile.wallet),
-          statsRefreshedAt:null}};
-      };
-    }
-    if(url==='/api/reliquary/u/:username/nfts'){
-      options.handler=async function(request,reply){
-        const row=await one('SELECT wallet,username FROM reliquary_profiles WHERE lower(username)=lower($1)',[request.params.username]);
-        if(!row?.username)return reply.code(404).send({error:'Reliquary profile not found.'});
-        const mode=request.query?.mode==='owned'?'owned':'minted';
-        return {mode,nfts:await publicNfts(row.wallet,mode,request.query?.limit)};
-      };
-    }
+    // Public Reliquary profile and NFT-list routes intentionally own their own
+    // owner-controlled visibility and stale-cache behavior. RF26 discovery is a
+    // separate concern and must not rewrite those responses.
     if(url==='/api/reliquary/nft/:chainId/:contract/:tokenId'){
       const original=options.handler;
       options.handler=async function(request,reply){
