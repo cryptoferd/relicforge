@@ -158,6 +158,24 @@ async function profilePayload(row, { includeWallet = true, publicView = false } 
 }
 
 export default async function reliquaryRoutes(app) {
+  app.get('/api/reliquary/wallet/:wallet/username', async (request, reply) => {
+    let wallet;
+    try { wallet = norm(request.params.wallet); }
+    catch { return reply.code(400).send({ error: 'Invalid wallet address.' }); }
+
+    const row = await one(
+      'SELECT username,public_settings FROM reliquary_profiles WHERE wallet=$1',
+      [wallet]
+    );
+    const visibility = normalizePublicVisibility(row?.public_settings);
+    const publicUsername = row?.username && visibility.showWallet
+      ? String(row.username)
+      : null;
+
+    reply.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+    return { username: publicUsername };
+  });
+
   app.get('/api/reliquary/username/:username/available', async (request, reply) => {
     let candidate;
     try { candidate = validateUsername(request.params.username); }

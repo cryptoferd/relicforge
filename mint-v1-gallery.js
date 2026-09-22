@@ -47,6 +47,34 @@
     const text = String(value || '');
     return text.length > 12 ? `${text.slice(0, 6)}…${text.slice(-4)}` : (text || '—');
   };
+  const reliquaryUsernameCache = new Map();
+
+  async function reliquaryUsername(wallet) {
+    if (!wallet || !window.ethers?.isAddress(wallet) || !API_BASE) return null;
+    const key = String(wallet).toLowerCase();
+    if (reliquaryUsernameCache.has(key)) return reliquaryUsernameCache.get(key);
+
+    const lookup = fetch(
+      api(`/api/reliquary/wallet/${encodeURIComponent(wallet)}/username`),
+      { headers: { accept: 'application/json' } }
+    )
+      .then(async response => {
+        if (!response.ok) return null;
+        const payload = await response.json().catch(() => ({}));
+        return payload?.username ? String(payload.username) : null;
+      })
+      .catch(() => null);
+
+    reliquaryUsernameCache.set(key, lookup);
+    return lookup;
+  }
+
+  function reliquaryWalletMarkup(wallet, username) {
+    const label = esc(short(wallet));
+    if (!username) return label;
+    const href = `./reliquary.html?u=${encodeURIComponent(username)}`;
+    return `<a class="reliquary-wallet-link" href="${href}" title="View @${esc(username)} in the Reliquary">${label}</a>`;
+  }
 
   function api(path) {
     return `${API_BASE}${path}`;
@@ -103,12 +131,15 @@
         state.contract.tokenURI(tokenId),
         state.contract.isRevealed(tokenId).catch(() => false),
       ]);
-      const meta = await metadataFor(uri);
+      const [meta, publicUsername] = await Promise.all([
+        metadataFor(uri),
+        reliquaryUsername(owner),
+      ]);
       const html = `<article class="minted-token-card" data-token-id="${tokenId}">
         <div class="minted-token-thumb">${imageMarkup(meta.image, meta.name)}</div>
         <div class="minted-token-info">
           <div><strong>${esc(meta.name || `Token #${tokenId}`)}</strong><span>#${tokenId}</span></div>
-          <small>${revealed ? 'Revealed' : 'Unrevealed'} · ${esc(short(owner))}</small>
+          <small>${revealed ? 'Revealed' : 'Unrevealed'} · ${reliquaryWalletMarkup(owner, publicUsername)}</small>
         </div>
       </article>`;
       if (revealed) state.tokenCache.set(Number(tokenId), { revealed:true, html });

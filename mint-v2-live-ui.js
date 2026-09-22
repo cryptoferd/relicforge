@@ -40,6 +40,34 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
+  const reliquaryUsernameCache = new Map();
+
+  async function reliquaryUsername(wallet) {
+    if(!wallet || !window.ethers?.isAddress(wallet) || !apiBase()) return null;
+    const key=String(wallet).toLowerCase();
+    if(reliquaryUsernameCache.has(key)) return reliquaryUsernameCache.get(key);
+
+    const lookup=fetch(
+      `${apiBase()}/api/reliquary/wallet/${encodeURIComponent(wallet)}/username`,
+      {headers:{accept:'application/json'}}
+    )
+      .then(async response => {
+        if(!response.ok) return null;
+        const payload=await response.json().catch(()=>({}));
+        return payload?.username ? String(payload.username) : null;
+      })
+      .catch(()=>null);
+
+    reliquaryUsernameCache.set(key,lookup);
+    return lookup;
+  }
+
+  function reliquaryWalletMarkup(wallet, username) {
+    const label=esc(short(wallet));
+    if(!username) return label;
+    const href=`./reliquary.html?u=${encodeURIComponent(username)}`;
+    return `<a class="reliquary-wallet-link" href="${href}" title="View @${esc(username)} in the Reliquary">${label}</a>`;
+  }
 
   function queryConfig() {
     const q=new URLSearchParams(location.search);
@@ -299,13 +327,15 @@
   }
 
   async function tokenInfo(row) {
-    let meta=null, owner=null;
+    let meta=null, owner=null, recipientUsername=null;
     try {
-      const [uri,currentOwner]=await Promise.all([
+      const [uri,currentOwner,publicUsername]=await Promise.all([
         state.collection.tokenURI(row.tokenId).catch(()=>null),
-        state.collection.ownerOf(row.tokenId).catch(()=>null)
+        state.collection.ownerOf(row.tokenId).catch(()=>null),
+        reliquaryUsername(row.to)
       ]);
       owner=currentOwner && window.ethers.isAddress(currentOwner) ? window.ethers.getAddress(currentOwner) : null;
+      recipientUsername=publicUsername;
       if(uri) {
         meta=decodeDataJson(uri);
         if(!meta && /^https?:\/\//i.test(uri)) {
@@ -316,7 +346,7 @@
         }
       }
     } catch(_) {}
-    return {...row,meta,owner};
+    return {...row,meta,owner,recipientUsername};
   }
 
   function tokenCard(row,{showRecipient=false,showOwnerState=false}={}) {
@@ -328,7 +358,7 @@
       <div class="minted-token-thumb">${image?`<img src="${esc(image)}" alt="${esc(title)}"/>`:'<div class="minted-thumb-empty">Artwork loading…</div>'}</div>
       <div class="minted-token-info">
         <div><strong>${esc(title)}</strong><span>#${row.tokenId}</span></div>
-        ${showRecipient?`<small>Minted to ${esc(short(row.to))}</small>`:''}
+        ${showRecipient?`<small>Minted to ${reliquaryWalletMarkup(row.to,row.recipientUsername)}</small>`:''}
         ${showOwnerState?`<small class="v2-live-owner-state ${held?'held':'moved'}">${held?'Still in your wallet':'Minted by you · since transferred'}</small>`:''}
         <div class="v2-live-meta"><span>Block ${row.blockNumber.toLocaleString()}</span><a href="${txUrl}" target="_blank" rel="noreferrer">Transaction ↗</a></div>
       </div>
